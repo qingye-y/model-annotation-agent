@@ -365,7 +365,7 @@ def api_set_cookie():
     if config:
         config.value = cookie
     else:
-        config = Config(key='IDATA_COOKIE', value=cookie)
+        config = SqlConfig(key='IDATA_COOKIE', value=cookie)
         db.session.add(config)
 
     db.session.commit()
@@ -767,7 +767,7 @@ def api_save_user_preference(key):
         config.value = value
         config.updated_at = datetime.utcnow()
     else:
-        config = Config(key=full_key, value=value)
+        config = SqlConfig(key=full_key, value=value)
         db.session.add(config)
 
     db.session.commit()

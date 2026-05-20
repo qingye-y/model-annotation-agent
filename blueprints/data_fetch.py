@@ -119,6 +119,24 @@ def api_data_fetch():
 
     for instance in final_instances:
         try:
+            # 清理该实例该日期范围内的旧 RawData（允许重复拉取覆盖）
+            existing_product_ids = set()
+            if start_date and end_date:
+                start_date_slash = f"{start_date[:4]}/{start_date[4:6]}/{start_date[6:8]}" if len(start_date) == 8 else start_date
+                end_date_slash = f"{end_date[:4]}/{end_date[4:6]}/{end_date[6:8]}" if len(end_date) == 8 else end_date
+
+                # 删除该实例该日期范围的旧 RawData（来源=本次拉取环境）
+                old_count = RawData.query.filter(
+                    RawData.created_date >= start_date_slash,
+                    RawData.created_date <= end_date_slash,
+                    RawData.instance_code == instance,
+                    RawData.source == 'fetch'
+                ).delete(synchronize_session='fetch')
+                if old_count > 0:
+                    print(f"[DEBUG 清理] {instance} 已删除 {old_count} 条旧 RawData（日期: {start_date_slash}~{end_date_slash}）")
+            
+            print(f"[DEBUG 去重] {instance} 旧数据已清理，准备写入新数据")
+
             # 判断是否使用自定义模板
             from models import SqlTemplate
             sql_template = None
@@ -130,40 +148,17 @@ def api_data_fetch():
                     instance_params = params.copy()
                     instance_params['instance'] = instance
                     instance_sql = replace_params(sql_template, instance_params)
+                    # 传入已抽取的审核ID列表，实现增量抽样
                     result = fetch_data_with_template(env, instance, instance_sql, sample_percent, start_date, end_date)
                 else:
                     result = fetch_data_from_idata(env, instance, start_date, end_date, sample_percent)
             else:
                 result = fetch_data_from_idata(env, instance, start_date, end_date, sample_percent)
 
-            # 去重：查询历史数据中相同日期和实例的 product_id
-            existing_product_ids = set()
-            if start_date and end_date:
-                start_date_slash = f"{start_date[:4]}/{start_date[4:6]}/{start_date[6:8]}" if len(start_date) == 8 else start_date
-                end_date_slash = f"{end_date[:4]}/{end_date[4:6]}/{end_date[6:8]}" if len(end_date) == 8 else end_date
-
-                existing_records = RawData.query.filter(
-                    RawData.created_date >= start_date_slash,
-                    RawData.created_date <= end_date_slash,
-                    RawData.instance_code == instance
-                ).all()
-                for rec in existing_records:
-                    if rec.product_id:
-                        existing_product_ids.add(rec.product_id)
-
-            # 过滤重复数据
-            unique_fetched_data = []
-            skipped_count = 0
-            for row in result.get('fetched_data', []):
-                product_id = str(row.get('商品id', ''))
-                if product_id and product_id in existing_product_ids:
-                    skipped_count += 1
-                    continue
-                unique_fetched_data.append(row)
-                existing_product_ids.add(product_id)
-
-            print(f"[DEBUG 审计] {instance} 去重: 拉取{len(result.get('fetched_data', []))}条, 跳重{skipped_count}条, 唯一{len(unique_fetched_data)}条")
-            total_skipped += skipped_count
+            # 直接使用拉取结果（旧数据已在拉取前清理）
+            unique_fetched_data = result.get('fetched_data', [])
+            skipped_count = result.get('excluded_count', 0)
+            print(f"[DEBUG 审计] {instance} 拉取{len(unique_fetched_data)}条, 写入{len(unique_fetched_data)}条")
 
             # 基于去重后数据统计
             unique_compliant = 0
@@ -734,7 +729,7 @@ def api_abort_batch(batch_id):
 # ========== 删除批次接口 ==========
 @data_fetch_bp.route('/api/task-batches/<batch_id>', methods=['DELETE'])
 def api_delete_batch(batch_id):
-    """删除指定批次"""
+    """删除指定批次及其关联数据"""
     log = FetchLog.query.filter_by(batch_id=batch_id).first()
     if not log:
         return jsonify({"success": False, "message": "批次不存在"}), 404
@@ -743,14 +738,24 @@ def api_delete_batch(batch_id):
         return jsonify({"success": False, "message": "正在执行的任务无法删除"}), 400
 
     try:
-        # 删除批次数据
-        RawData.query.filter_by(fetch_batch_id=batch_id).delete()
-        # 删除 DailyStats
-        DailyStats.query.filter_by(batch_id=batch_id).delete()
-        # 删除 FetchLog
+        # 1. 删除该批次下 RawData 对应的 Annotation
+        from models import Annotation
+        from sqlalchemy import select as sa_select
+        raw_ids = sa_select(RawData.id).where(RawData.fetch_batch_id == batch_id)
+        ann_count = Annotation.query.filter(Annotation.raw_data_id.in_(raw_ids)).delete(synchronize_session='fetch')
+        # 2. 删除 DailyStats
+        ds_count = DailyStats.query.filter_by(batch_id=batch_id).delete(synchronize_session='fetch')
+        # 3. 删除 RawData
+        rd_count = RawData.query.filter_by(fetch_batch_id=batch_id).delete(synchronize_session='fetch')
+        # 4. 删除 FetchLog
         db.session.delete(log)
         db.session.commit()
-        return jsonify({"success": True, "message": "批次已删除"})
+        return jsonify({
+            "success": True,
+            "message": "批次已删除",
+            "deleted": {"raw_data": rd_count, "daily_stats": ds_count,
+                        "annotations": ann_count, "fetch_log": 1}
+        })
     except Exception as e:
         db.session.rollback()
         return jsonify({"success": False, "message": f"删除失败: {str(e)}"}), 500
@@ -758,17 +763,24 @@ def api_delete_batch(batch_id):
 
 @data_fetch_bp.route('/api/task-batches/clear', methods=['DELETE'])
 def api_clear_all_batches():
-    """清空所有历史批次"""
+    """清空所有历史批次及关联数据"""
     running_task = FetchLog.query.filter_by(status='running').first()
     if running_task:
         return jsonify({"success": False, "message": "有任务正在执行中，无法清空"}), 400
 
     try:
-        db.session.query(RawData).delete()
-        db.session.query(FetchLog).delete()
-        db.session.query(DailyStats).delete()
+        from models import Annotation
+        ann_count = db.session.query(Annotation).delete(synchronize_session='fetch')
+        ds_count = db.session.query(DailyStats).delete(synchronize_session='fetch')
+        rd_count = db.session.query(RawData).delete(synchronize_session='fetch')
+        fl_count = db.session.query(FetchLog).delete(synchronize_session='fetch')
         db.session.commit()
-        return jsonify({"success": True, "message": "所有历史记录已清空"})
+        return jsonify({
+            "success": True,
+            "message": "所有历史记录已清空",
+            "deleted": {"raw_data": rd_count, "daily_stats": ds_count,
+                        "annotations": ann_count, "fetch_log": fl_count}
+        })
     except Exception as e:
         db.session.rollback()
         return jsonify({"success": False, "message": f"清空失败: {str(e)}"}), 500

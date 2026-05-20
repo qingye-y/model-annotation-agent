@@ -86,7 +86,7 @@ def build_sql(instance, start_date, end_date):
           `变更类别`,
           r.gmt_created_time as "创建时间"
         from dwd.dwd_itm_audit_app_ai_result_detail_inc_y r
-        left join dwd.dwd_itm_audit_reject_detail_y d on r.app_id = d.app_id
+        left join dwd.dwd_itm_audit_reject_detail_y d on r.app_id = d.app_id and d.pt = '{year}'
         LEFT JOIN (
           select
             instance_code,
@@ -113,7 +113,7 @@ def build_sql(instance, start_date, end_date):
           group by 1
         ) as new on new.item_id = r.goods_id
         where date_format(r.gmt_created_time,'%Y%m%d') between '{start_date}' and '{end_date}'
-        and r.pt = '{year}' and d.pt = '{year}'
+        and r.pt = '{year}'
         and r.instance_code = '{instance}'
         """
     else:
@@ -691,13 +691,22 @@ def ping_idata(env, instance):
         return False, str(e)
 
 
-def fetch_data_from_idata(env, instance, start_date, end_date, sample_percent):
-    """核心函数：从 iData 拉取数据，使用窗口函数翻页，随机抽样，返回结果"""
+def fetch_data_from_idata(env, instance, start_date, end_date, sample_percent, excluded_audit_ids=None):
+    """核心函数：从 iData 拉取数据，使用窗口函数翻页，随机抽样，返回结果
+    
+    Args:
+        excluded_audit_ids: 已抽取的审核ID集合，用于增量抽样（排除已抽取的数据）
+    """
     
     # ========== 探活：确认 Cookie 有效 ==========
     ping_ok, ping_msg = ping_idata(env, instance)
     if not ping_ok:
         raise RuntimeError(f"iData 认证失败：{ping_msg}。请检查 Cookie 是否过期。")
+    
+    # 增量抽样：格式化排除的ID集合
+    excluded_ids_set = set(excluded_audit_ids) if excluded_audit_ids else set()
+    excluded_ids_str = ','.join([f"'{aid}'" for aid in excluded_ids_set]) if excluded_ids_set else None
+    excluded_sql = f"AND `审核id` NOT IN ({excluded_ids_str})" if excluded_ids_str else ""
     
     # 格式化日期（去除连字符，转为 YYYYMMDD）
     # 格式化日期（去除连字符，转为 YYYYMMDD）
@@ -708,8 +717,11 @@ def fetch_data_from_idata(env, instance, start_date, end_date, sample_percent):
     # 因为 detail_sql 中的 LEFT JOIN dwd_itm_audit_reject_detail_y 会让同一 app_id
     # 产生多条记录（同一审核单有多条驳回详情），COUNT(*) 把重复行也计入。
     # 验证结论：COUNT(DISTINCT app_id) = 5,588，完全对齐 iData 基准。
+    # 增量抽样：排除已抽取的审核ID
     count_sql = f"""SELECT `AI审核结果`, COUNT(DISTINCT `审核id`) as cnt
-        FROM ({detail_sql}) t GROUP BY `AI审核结果`"""
+        FROM ({detail_sql}) t
+        WHERE 1=1 {excluded_sql}
+        GROUP BY `AI审核结果`"""
 
     total_count = 0
     original_compliant = 0
@@ -787,8 +799,18 @@ def fetch_data_from_idata(env, instance, start_date, end_date, sample_percent):
     # 复现：种子固定，同参数两次拉取审核id完全一致
     compliant_sample_count = max(1, int(original_compliant * sample_percent / 100)) if original_compliant > 0 else 0
     non_compliant_sample_count = max(1, int(original_non_compliant * sample_percent / 100)) if original_non_compliant > 0 else 0
-    sample_count = compliant_sample_count + non_compliant_sample_count
-    print(f"[DEBUG 审计] {instance} 分层抽样: 合规={original_compliant}→抽{compliant_sample_count}, 违规={original_non_compliant}→抽{non_compliant_sample_count}, 总计={sample_count}")
+    
+    # 补偿 LEFT JOIN 重复行导致的抽样损耗：拉取 1.5x，Python 端去重后截断
+    OVERSAMPLE = 1.5
+    compliant_pull_count = max(1, int(compliant_sample_count * OVERSAMPLE)) if compliant_sample_count > 0 else 0
+    non_compliant_pull_count = max(1, int(non_compliant_sample_count * OVERSAMPLE)) if non_compliant_sample_count > 0 else 0
+    # 拉取数不能超过线上总数
+    compliant_pull_count = min(compliant_pull_count, original_compliant) if original_compliant > 0 else 0
+    non_compliant_pull_count = min(non_compliant_pull_count, original_non_compliant) if original_non_compliant > 0 else 0
+    
+    target_count = compliant_sample_count + non_compliant_sample_count
+    sample_count = compliant_pull_count + non_compliant_pull_count
+    print(f"[DEBUG 审计] {instance} 分层抽样: 合规={original_compliant}→抽{compliant_sample_count}→拉{compliant_pull_count}, 违规={original_non_compliant}→抽{non_compliant_sample_count}→拉{non_compliant_pull_count}, 目标={target_count}, 拉取={sample_count}")
 
     # 种子1：合规抽样（MD5(instance + date_range + 'C')，固定可复现）
     seed_str_c = f"{instance}_{start_date}_{end_date}_C"
@@ -800,87 +822,114 @@ def fetch_data_from_idata(env, instance, start_date, end_date, sample_percent):
     sampled_data = []
 
     # ---------- 合规数据抽样 ----------
-    if compliant_sample_count > 0 and original_compliant > 0:
+    if compliant_pull_count > 0:
         random.seed(seed_c)
-        if compliant_sample_count >= original_compliant:
+        if compliant_pull_count >= original_compliant:
             compliant_positions = list(range(1, original_compliant + 1))
         else:
-            compliant_positions = sorted(random.sample(range(1, original_compliant + 1), compliant_sample_count))
+            compliant_positions = sorted(random.sample(range(1, original_compliant + 1), compliant_pull_count))
 
         positions_str_c = ','.join(map(str, compliant_positions))
-        compliant_sql = f"""SELECT * FROM (
-          SELECT t.*, ROW_NUMBER() OVER (ORDER BY MD5(t.`审核id`)) as rn
-          FROM (
-            {detail_sql}
-          ) t
-          WHERE t.`AI审核结果` = '合规'
-        ) tmp
-        WHERE tmp.rn IN ({positions_str_c})"""
+        # 分批查询（iData 限制单次返回约 500 行）
+        batch_size = 300
+        for i in range(0, len(compliant_positions), batch_size):
+            batch_positions = compliant_positions[i:i+batch_size]
+            batch_pos_str = ','.join(map(str, batch_positions))
+            compliant_sql = f"""SELECT * FROM (
+              SELECT t.*, ROW_NUMBER() OVER (ORDER BY MD5(t.`审核id`)) as rn
+              FROM (
+                {detail_sql}
+              ) t
+              WHERE 1=1 {excluded_sql}
+                AND t.`AI审核结果` = '合规'
+            ) tmp
+            WHERE tmp.rn IN ({batch_pos_str})"""
 
-        try:
-            rows_c = execute_sql_query(compliant_sql, instance, env)
-            if isinstance(rows_c, list):
-                sampled_data.extend(rows_c)
-                print(f"[DEBUG 审计] {instance} 合规抽样: 请求{len(compliant_positions)}行, 实际返回{len(rows_c)}行")
-            elif isinstance(rows_c, dict) and 'error' in rows_c:
-                print(f"[ERROR] {instance} 合规抽样SQL执行失败: {rows_c['error']}")
-            else:
-                print(f"[WARN] {instance} 合规抽样返回非list: {type(rows_c)}")
-        except Exception as e:
-            print(f"[ERROR] {instance} 合规抽样查询异常: {e}")
-            raise
+            try:
+                rows_c = execute_sql_query(compliant_sql, instance, env)
+                if isinstance(rows_c, list):
+                    sampled_data.extend(rows_c)
+                    print(f"[DEBUG 审计] {instance} 合规批次{i//batch_size+1}: 请求{len(batch_positions)}行, 返回{len(rows_c)}行")
+                elif isinstance(rows_c, dict) and 'error' in rows_c:
+                    print(f"[ERROR] {instance} 合规批次{i//batch_size+1}失败: {rows_c['error']}")
+            except Exception as e:
+                print(f"[ERROR] {instance} 合规批次{i//batch_size+1}异常: {e}")
+                raise
+        print(f"[DEBUG 审计] {instance} 合规抽检完成: 请求{len(compliant_positions)}行, 累计{len(sampled_data)}行")
 
     # ---------- 违规数据抽样 ----------
-    if non_compliant_sample_count > 0 and original_non_compliant > 0:
+    if non_compliant_pull_count > 0:
         random.seed(seed_n)
-        if non_compliant_sample_count >= original_non_compliant:
+        if non_compliant_pull_count >= original_non_compliant:
             non_compliant_positions = list(range(1, original_non_compliant + 1))
         else:
-            non_compliant_positions = sorted(random.sample(range(1, original_non_compliant + 1), non_compliant_sample_count))
+            non_compliant_positions = sorted(random.sample(range(1, original_non_compliant + 1), non_compliant_pull_count))
 
         positions_str_n = ','.join(map(str, non_compliant_positions))
-        non_compliant_sql = f"""SELECT * FROM (
-          SELECT t.*, ROW_NUMBER() OVER (ORDER BY MD5(t.`审核id`)) as rn
-          FROM (
-            {detail_sql}
-          ) t
-          WHERE t.`AI审核结果` = '违规'
-        ) tmp
-        WHERE tmp.rn IN ({positions_str_n})"""
+        batch_size = 300
+        for i in range(0, len(non_compliant_positions), batch_size):
+            batch_positions = non_compliant_positions[i:i+batch_size]
+            batch_pos_str = ','.join(map(str, batch_positions))
+            non_compliant_sql = f"""SELECT * FROM (
+              SELECT t.*, ROW_NUMBER() OVER (ORDER BY MD5(t.`审核id`)) as rn
+              FROM (
+                {detail_sql}
+              ) t
+              WHERE 1=1 {excluded_sql}
+                AND t.`AI审核结果` = '违规'
+            ) tmp
+            WHERE tmp.rn IN ({batch_pos_str})"""
 
-        try:
-            rows_n = execute_sql_query(non_compliant_sql, instance, env)
-            if isinstance(rows_n, list):
-                sampled_data.extend(rows_n)
-                print(f"[DEBUG 审计] {instance} 违规抽样: 请求{len(non_compliant_positions)}行, 实际返回{len(rows_n)}行")
-            elif isinstance(rows_n, dict) and 'error' in rows_n:
-                print(f"[ERROR] {instance} 违规抽样SQL执行失败: {rows_n['error']}")
-            else:
-                print(f"[WARN] {instance} 违规抽样返回非list: {type(rows_n)}")
-        except Exception as e:
-            print(f"[ERROR] {instance} 违规抽样查询异常: {e}")
-            raise
+            try:
+                rows_n = execute_sql_query(non_compliant_sql, instance, env)
+                if isinstance(rows_n, list):
+                    sampled_data.extend(rows_n)
+                    print(f"[DEBUG 审计] {instance} 违规批次{i//batch_size+1}: 请求{len(batch_positions)}行, 返回{len(rows_n)}行")
+                elif isinstance(rows_n, dict) and 'error' in rows_n:
+                    print(f"[ERROR] {instance} 违规批次{i//batch_size+1}失败: {rows_n['error']}")
+            except Exception as e:
+                print(f"[ERROR] {instance} 违规批次{i//batch_size+1}异常: {e}")
+                raise
+        print(f"[DEBUG 审计] {instance} 违规抽检完成: 请求{len(non_compliant_positions)}行, 累计{len(sampled_data)}行")
 
-    print(f"[DEBUG 审计] {instance} 分层抽样完成: 目标{sample_count}行, 实际{len(sampled_data)}行")
+    print(f"[DEBUG 审计] {instance} 分层抽样完成: 拉取{len(sampled_data)}行, 目标{target_count}行")
 
-    compliant_count = 0
-    violation_count = 0
+    # 按审核id去重 + 按合规/违规分组截断（补偿 LEFT JOIN 重复行损耗）
+    seen_ids = set()
+    deduped = []
+    cmpl_count = 0
+    viol_count = 0
     for d in sampled_data:
-        val = d.get('AI审核结果', d.get('ai_result', ''))
-        if val == '合规':
-            compliant_count += 1
-        elif val == '违规':
-            violation_count += 1
+        aid = str(d.get('审核id', d.get('audit_id', ''))) if isinstance(d, dict) else ''
+        if not aid or aid in seen_ids:
+            continue
+        seen_ids.add(aid)
+        val = str(d.get('AI审核结果', d.get('ai_result', ''))) if isinstance(d, dict) else ''
+        if val == '合规' and cmpl_count < compliant_sample_count:
+            deduped.append(d)
+            cmpl_count += 1
+        elif val == '违规' and viol_count < non_compliant_sample_count:
+            deduped.append(d)
+            viol_count += 1
+        # 如果合规和违规都已凑齐，停止
+        if cmpl_count >= compliant_sample_count and viol_count >= non_compliant_sample_count:
+            break
+    
+    print(f"[DEBUG 审计] {instance} 去重截断: {len(sampled_data)}→{len(deduped)} (合规{cmpl_count}, 违规{viol_count})")
+    if len(deduped) < target_count:
+        print(f"[WARN] {instance} 抽样不足: 期望{target_count}, 实际{len(deduped)}, 差{target_count-len(deduped)}")
 
     return {
-        "fetched_data": sampled_data,
-        "total_fetched": len(sampled_data),
-        "compliant_count": compliant_count,
-        "non_compliant_count": violation_count,
+        "fetched_data": deduped,
+        "total_fetched": len(deduped),
+        "compliant_count": cmpl_count,
+        "non_compliant_count": viol_count,
         "original_total": total_count,
         "original_compliant": original_compliant,
         "original_non_compliant": original_non_compliant,
-        "error_reasons": error_reasons
+        "error_reasons": error_reasons,
+        "excluded_count": len(excluded_ids_set),  # 增量抽样：排除的ID数量
+        "is_incremental": len(excluded_ids_set) > 0  # 是否为增量抽样
     }
 
 
@@ -1030,8 +1079,12 @@ ORDER BY `创建日期`, cnt DESC"""
     return {'by_date': error_reasons_by_date, 'global': error_reasons_global}
 
 
-def fetch_data_with_template(env, instance, sql_template, sample_percent, start_date=None, end_date=None):
-    """使用自定义SQL模板拉取数据，使用窗口函数翻页"""
+def fetch_data_with_template(env, instance, sql_template, sample_percent, start_date=None, end_date=None, excluded_audit_ids=None):
+    """使用自定义SQL模板拉取数据，使用窗口函数翻页
+    
+    Args:
+        excluded_audit_ids: 已抽取的审核ID集合，用于增量抽样（排除已抽取的数据）
+    """
     
     # ========== 探活：确认 Cookie 有效 ==========
     ping_ok, ping_msg = ping_idata(env, instance)
@@ -1051,8 +1104,14 @@ def fetch_data_with_template(env, instance, sql_template, sample_percent, start_
         if match:
             audit_id_field = match.group(1)
     
+    # 增量抽样：格式化排除的ID集合（在识别 audit_id_field 之后）
+    excluded_ids_set = set(excluded_audit_ids) if excluded_audit_ids else set()
+    excluded_ids_str = ','.join([f"'{aid}'" for aid in excluded_ids_set]) if excluded_ids_set else None
+    excluded_sql = f"AND `{audit_id_field}` NOT IN ({excluded_ids_str})" if excluded_ids_str else ""
+    
     # 重要修复：COUNT 必须用 DISTINCT，避免 LEFT JOIN 行倍增
-    count_sql = f"SELECT `{ai_result_field}`, COUNT(DISTINCT `{audit_id_field}`) as count FROM ({sql_template}) t GROUP BY `{ai_result_field}`"
+    # 增量抽样：排除已抽取的审核ID
+    count_sql = f"SELECT `{ai_result_field}`, COUNT(DISTINCT `{audit_id_field}`) as count FROM ({sql_template}) t WHERE 1=1 {excluded_sql} GROUP BY `{ai_result_field}`"
 
     total_count = 0
     original_compliant = 0
@@ -1144,7 +1203,7 @@ def fetch_data_with_template(env, instance, sql_template, sample_percent, start_
     sampled_data = []
 
     # ---------- 合规数据抽样 ----------
-    if compliant_sample_count > 0 and original_compliant > 0:
+    if compliant_sample_count > 0:
         random.seed(seed_c)
         if compliant_sample_count >= original_compliant:
             compliant_positions = list(range(1, original_compliant + 1))
@@ -1157,7 +1216,8 @@ def fetch_data_with_template(env, instance, sql_template, sample_percent, start_
           FROM (
             {sql_template}
           ) t
-          WHERE t.`{ai_result_field}` = '合规'
+          WHERE 1=1 {excluded_sql}
+            AND t.`{ai_result_field}` = '合规'
         ) tmp
         WHERE tmp.rn IN ({positions_str_c})"""
 
@@ -1188,7 +1248,8 @@ def fetch_data_with_template(env, instance, sql_template, sample_percent, start_
           FROM (
             {sql_template}
           ) t
-          WHERE t.`{ai_result_field}` = '违规'
+          WHERE 1=1 {excluded_sql}
+            AND t.`{ai_result_field}` = '违规'
         ) tmp
         WHERE tmp.rn IN ({positions_str_n})"""
 
@@ -1224,5 +1285,7 @@ def fetch_data_with_template(env, instance, sql_template, sample_percent, start_
         "non_compliant_count": violation_count,
         "original_total": total_count,
         "original_compliant": original_compliant,
-        "original_non_compliant": original_non_compliant
+        "original_non_compliant": original_non_compliant,
+        "excluded_count": len(excluded_ids_set),  # 增量抽样：排除的ID数量
+        "is_incremental": len(excluded_ids_set) > 0  # 是否为增量抽样
     }

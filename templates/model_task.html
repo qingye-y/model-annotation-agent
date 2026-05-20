@@ -248,17 +248,7 @@
     <div class="card">
       <div class="table-wrapper" style="overflow-x: auto;">
         <table class="batch-table" style="min-width: 900px;">
-          <thead><tr><th style="min-width:80px;max-width:100px;">批次号</th><th style="text-align:center;">来源</th><th style="text-align:center;">环境</th><th style="width:65px;max-width:80px;text-align:center;">实例</th><th style="width:40px;"><div class="th-with-tip">抽样<span class="th-tip-btn">?<div class="th-tip-popup"><strong>什么是分层抽样？</strong>
-
-假设线上有 10000 条数据，其中违规 2000 条（违规率 20%）。
-
-如果抽样 10%，系统会：
-• 从 8000 条合规里抽 800 条
-• 从 2000 条违规里抽 200 条
-
-最终本地样本的违规率 ≈ 20%，与线上完全一致。
-
-（每次用相同参数拉取，结果完全相同）</div></span></div></th><th style="width:60px;text-align:center;">审核总数</th><th style="width:50px;text-align:center;">合规</th><th style="width:50px;text-align:center;">违规</th><th style="width:50px;text-align:center;">抽样数</th><th style="width:70px;">数据日期</th><th style="width:85px;">拉取时间</th><th style="text-align:center;">状态</th><th style="width:55px;text-align:center;">互检进度</th><th style="width:85px;">操作</th></tr></thead>
+          <thead><tr><th style="min-width:80px;max-width:100px;">批次号</th><th style="text-align:center;">来源</th><th style="text-align:center;">环境</th><th style="width:65px;max-width:80px;text-align:center;">实例</th><th style="width:40px;"><div class="th-with-tip">抽样<span class="th-tip-btn">?<div class="th-tip-popup"><strong>怎么抽的？</strong><br><br>系统采用分层随机抽样：合规数据按此比例随机抽取，违规数据也按此比例随机抽取，保证本地样本的违规率与线上一致，不会出现「运气不好抽不到违规」的情况。<br><br>第二次拉取时，系统自动排除已抽取的数据，从剩余池继续抽样，实现增量覆盖。</div></span></div></th><th style="width:60px;text-align:center;">审核总数</th><th style="width:50px;text-align:center;">合规</th><th style="width:50px;text-align:center;">违规</th><th style="width:50px;text-align:center;">抽样数</th><th style="width:70px;">数据日期</th><th style="width:85px;">拉取时间</th><th style="text-align:center;">状态</th><th style="width:55px;text-align:center;">互检进度</th><th style="width:85px;">操作</th></tr></thead>
           <tbody id="batchTableBody"></tbody>
         </table>
       </div>
@@ -374,9 +364,7 @@
         </div>
         <!-- 抽样比例 -->
         <div class="modal-form-group">
-          <label class="modal-form-label"><div class="th-with-tip" style="display:inline-flex;align-items:center;gap:4px;">抽样比例 (%)<span class="th-tip-btn" style="position:static;width:14px;height:14px;font-size:10px;cursor:pointer;">?<div class="th-tip-popup tip-right" style="left:calc(100% + 10px);top:50%;transform:translateY(-50%);right:auto;bottom:auto;"><strong>怎么抽的？</strong>
-
-系统采用分层随机抽样：合规数据按此比例随机抽取，违规数据也按此比例随机抽取，保证本地样本的违规率与线上一致，不会出现"运气不好抽不到违规"的情况。使用固定随机种子，相同查询条件下多次抽样结果可复现。</div></span></div><span class="required">*</span></label>
+          <label class="modal-form-label"><div class="th-with-tip" style="display:inline-flex;align-items:center;gap:4px;">抽样比例 (%)<span class="th-tip-btn" style="position:static;width:14px;height:14px;font-size:10px;cursor:pointer;">?<div class="th-tip-popup tip-right" style="left:calc(100% + 10px);top:50%;transform:translateY(-50%);right:auto;bottom:auto;"><strong>怎么抽的？</strong><br><br>系统采用分层随机抽样：合规数据按此比例随机抽取，违规数据也按此比例随机抽取，保证本地样本的违规率与线上一致，不会出现「运气不好抽不到违规」的情况。<br><br>第二次拉取时，系统自动排除已抽取的数据，从剩余池继续抽样，实现增量覆盖。</div></span></div><span class="required">*</span></label>
           <div style="display: flex; align-items: center; gap: 8px;">
             <input type="number" class="modal-form-input" id="samplePercent" value="20" min="1" max="100" style="width: 100px;">
             <span style="color: var(--text-secondary);">%</span>
@@ -1856,10 +1844,11 @@
         .then(function(data) {
           if (data.success) {
             showToast('批次已删除');
-            // 从列表中移除
-            var idx = allBatches.findIndex(function(b) { return b.id === batchId; });
+            // 从 allBatches 中移除该批次（注意：后端返回的是 batch_id 字段）
+            var idx = allBatches.findIndex(function(b) { return b.batch_id === batchId; });
             if (idx !== -1) { allBatches.splice(idx, 1); }
-            applyFilter();
+            // 重新加载批次列表，确保 RawData 数据同步更新
+            loadBatches();
           } else {
             showToast(data.message || '删除失败', true);
           }
