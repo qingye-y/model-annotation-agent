@@ -1,0 +1,843 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>审核规则与实例配置</title>
+  <link rel="stylesheet" href="/static/common.css">
+  <style>
+    .page-container {
+      padding: 20px 24px;
+      max-width: 1400px;
+    }
+
+    .page-title {
+      font-size: 18px;
+      font-weight: 600;
+      color: var(--text-primary);
+      margin-bottom: 4px;
+    }
+
+    .page-subtitle {
+      font-size: 13px;
+      color: var(--text-secondary);
+      margin-bottom: 20px;
+    }
+
+    .config-card {
+      background: var(--white);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow);
+      padding: 20px;
+      margin-bottom: 20px;
+    }
+
+    .config-card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 16px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--border-light);
+    }
+
+    .config-card-title {
+      font-size: 15px;
+      font-weight: 600;
+    }
+
+    .config-desc {
+      font-size: 13px;
+      color: var(--text-secondary);
+      margin-bottom: 16px;
+      line-height: 1.6;
+    }
+
+    .rule-list-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 16px;
+    }
+
+    .rule-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+
+    .rule-table thead th {
+      background: #fafbfc;
+      color: var(--text-secondary);
+      font-weight: 500;
+      text-align: left;
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .rule-table tbody td {
+      padding: 12px;
+      border-bottom: 1px solid var(--border-light);
+    }
+
+    .rule-table tbody tr:hover {
+      background: #f8f9ff;
+    }
+
+    .rule-table .cell-actions {
+      display: flex;
+      gap: 8px;
+    }
+
+    .rule-table .btn-sm {
+      padding: 4px 10px;
+      font-size: 12px;
+    }
+
+    /* 模态框 */
+    .modal-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.45);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+      opacity: 0;
+      visibility: hidden;
+      transition: opacity 0.25s, visibility 0.25s;
+    }
+
+    .modal-overlay.active {
+      opacity: 1;
+      visibility: visible;
+    }
+
+    .modal {
+      background: var(--white);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow-lg);
+      width: 90%;
+      max-width: 600px;
+      max-height: 85vh;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      transform: translateY(-20px);
+      transition: transform 0.25s;
+    }
+
+    .modal-overlay.active .modal {
+      transform: translateY(0);
+    }
+
+    .modal-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--border-light);
+    }
+
+    .modal-title {
+      font-size: 15px;
+      font-weight: 600;
+    }
+
+    .modal-close {
+      background: none;
+      border: none;
+      font-size: 20px;
+      color: var(--text-muted);
+      cursor: pointer;
+      line-height: 1;
+      padding: 0;
+      width: 28px;
+      height: 28px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: var(--radius);
+    }
+
+    .modal-close:hover {
+      background: var(--border-light);
+      color: var(--text-primary);
+    }
+
+    .modal-body {
+      padding: 20px;
+      overflow-y: auto;
+      flex: 1;
+    }
+
+    .modal-footer {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 8px;
+      padding: 12px 20px;
+      border-top: 1px solid var(--border-light);
+      background: #fafbfc;
+    }
+
+    /* 表单 */
+    .form-group {
+      margin-bottom: 16px;
+    }
+
+    .form-group label {
+      display: block;
+      font-size: 13px;
+      font-weight: 500;
+      margin-bottom: 6px;
+      color: var(--text-primary);
+    }
+
+    .form-group .form-input {
+      width: 100%;
+      padding: 8px 12px;
+      font-size: 13px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--white);
+    }
+
+    .form-group .form-input:focus {
+      outline: none;
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(79, 110, 247, 0.1);
+    }
+
+    .form-group .form-textarea {
+      width: 100%;
+      min-height: 250px;
+      padding: 8px 12px;
+      font-size: 13px;
+      font-family: var(--font-mono);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--white);
+      resize: vertical;
+    }
+
+    .form-group .form-textarea:focus {
+      outline: none;
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(79, 110, 247, 0.1);
+    }
+
+    .form-group .form-select {
+      width: 100%;
+      padding: 8px 12px;
+      font-size: 13px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--white);
+    }
+
+    .form-group .form-select:focus {
+      outline: none;
+      border-color: var(--primary);
+    }
+
+    .instance-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+
+    .instance-table thead th {
+      background: #fafbfc;
+      color: var(--text-secondary);
+      font-weight: 500;
+      text-align: left;
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .instance-table tbody td {
+      padding: 12px;
+      border-bottom: 1px solid var(--border-light);
+    }
+
+    .instance-table tbody tr:hover {
+      background: #f8f9ff;
+    }
+
+    .toast {
+      position: fixed;
+      top: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      padding: 12px 24px;
+      background: var(--success);
+      color: #fff;
+      font-size: 13px;
+      border-radius: var(--radius);
+      box-shadow: 0 4px 12px rgba(46, 204, 113, 0.3);
+      z-index: 2000;
+      opacity: 0;
+      visibility: hidden;
+      transition: all 0.3s;
+    }
+
+    .toast.show {
+      opacity: 1;
+      visibility: visible;
+    }
+
+    .toast.error {
+      background: var(--danger);
+      box-shadow: 0 4px 12px rgba(231, 76, 60, 0.3);
+    }
+
+    .text-muted { color: var(--text-muted); }
+    .loading { text-align: center; padding: 40px; color: var(--text-muted); }
+  </style>
+</head>
+<body>
+  <div class="page-container">
+    <div class="page-title">&#128203; 提示词规则管理</div>
+    <div class="page-subtitle">基于文件系统管理提示词规则文件</div>
+
+    <div class="toast" id="toast"></div>
+
+    <!-- 提示词规则管理 -->
+    <div class="config-card">
+      <div class="config-card-header">
+        <span class="config-card-title">提示词规则文件</span>
+        <button class="btn btn-primary btn-sm" onclick="showNewRuleModal()">+ 新建规则</button>
+      </div>
+      <div class="config-desc">
+        规则文件存储在 prompt_rules/ 目录下，支持 .txt 和 .md 格式。所有规则可被实例关联引用。
+      </div>
+      <table class="rule-table">
+        <thead>
+          <tr>
+            <th>规则名称</th>
+            <th>文件���</th>
+            <th>大小</th>
+            <th>修改时间</th>
+            <th>操作</th>
+          </tr>
+        </thead>
+        <tbody id="ruleTableBody">
+          <tr><td colspan="5" class="loading">加载中...</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- 规则关联配置 -->
+    <div class="config-card">
+      <div class="config-card-header">
+        <span class="config-card-title">实例与规则关联</span>
+      </div>
+      <div class="config-desc">
+        配置每个实例使用哪套提示词规则进行模型B审核。规则下拉选项从规则文件列表获取。
+      </div>
+      <table class="instance-table">
+        <thead>
+          <tr>
+            <th>实例编码</th>
+            <th>实例名称</th>
+            <th>所属环境</th>
+            <th>关联提示词规则</th>
+            <th>操作</th>
+          </tr>
+        </thead>
+        <tbody id="instanceTableBody">
+          <tr><td colspan="5" class="loading">加载中...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- 模态框：新建规则 -->
+  <div class="modal-overlay" id="newRuleModal">
+    <div class="modal">
+      <div class="modal-header">
+        <span class="modal-title">新建规则</span>
+        <button class="modal-close" onclick="closeModal('newRuleModal')">×</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label>规则名称 <span style="color: var(--danger);">*</span></label>
+          <input type="text" class="form-input" id="newRuleName" placeholder="请输入规则名称，如：浙江网超审核规则（.md后缀自动添加）">
+        </div>
+        <div class="form-group">
+          <label>提示词内容（支持 Markdown 格式，可选）</label>
+          <textarea class="form-textarea" id="newRuleContent" placeholder="请输入提示词内容，留空可在创建后编辑...&#10;&#10;# 开头的内容会被识别为章节标题&#10;- 开头的内容会被识别为要点"></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-default" onclick="closeModal('newRuleModal')">取消</button>
+        <button class="btn btn-primary" onclick="createNewRule()">创建</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 模态框：编辑规则 -->
+  <div class="modal-overlay" id="editRuleModal">
+    <div class="modal" style="max-width: 800px;">
+      <div class="modal-header">
+        <span class="modal-title">编辑提示词内容</span>
+        <button class="modal-close" onclick="closeModal('editRuleModal')">×</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label>规则名称</label>
+          <input type="text" class="form-input" id="editRuleName" readonly style="background: var(--bg);">
+        </div>
+        <div class="form-group">
+          <label>提示词内容（Markdown 格式）</label>
+          <textarea class="form-textarea" id="editRuleContent" style="min-height: 300px;" placeholder="请输入提示词内容...&#10;&#10;# 标题&#10;- 列表项"></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-default" onclick="closeModal('editRuleModal')">取消</button>
+        <button class="btn btn-primary" onclick="saveEditedRule()">保存</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 模态框：重命名规则 -->
+  <div class="modal-overlay" id="renameRuleModal">
+    <div class="modal">
+      <div class="modal-header">
+        <span class="modal-title">重命名规则</span>
+        <button class="modal-close" onclick="closeModal('renameRuleModal')">×</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label>原名称</label>
+          <input type="text" class="form-input" id="oldRuleName" readonly style="background: var(--bg);">
+        </div>
+        <div class="form-group">
+          <label>新名称 <span style="color: var(--danger);">*</span></label>
+          <input type="text" class="form-input" id="newRuleNameInput" placeholder="请输入新名称">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-default" onclick="closeModal('renameRuleModal')">取消</button>
+        <button class="btn btn-primary" onclick="submitRenameRule()">确定</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 模态框：编辑实例关联 -->
+  <div class="modal-overlay" id="editInstanceModal">
+    <div class="modal">
+      <div class="modal-header">
+        <span class="modal-title">编辑实例关联</span>
+        <button class="modal-close" onclick="closeModal('editInstanceModal')">×</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label>实例名称</label>
+          <input type="text" class="form-input" id="editInstanceName" readonly style="background: var(--bg);">
+        </div>
+        <div class="form-group">
+          <label>实例编码</label>
+          <input type="text" class="form-input" id="editInstanceCode" readonly style="background: var(--bg);">
+        </div>
+        <div class="form-group">
+          <label>所属环境 <span style="color: var(--danger);">*</span></label>
+          <select class="form-select" id="editInstanceEnv">
+            <option value="生产环境">生产环境</option>
+            <option value="预发环境">预发环境</option>
+            <option value="测试环境">测试环境</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>关联提示词规则 <span style="color: var(--danger);">*</span></label>
+          <select class="form-select" id="editInstanceRule"></select>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-default" onclick="closeModal('editInstanceModal')">取消</button>
+        <button class="btn btn-primary" onclick="saveEditedInstance()">保存</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ========== 存储键名 ==========
+    const STORAGE_KEYS = {
+      INSTANCE_MAPPINGS: 'instance_mappings'
+    };
+
+    // ========== 实例数据（本地存储） ==========
+    // 实例配置（从后端 API 读取）
+    const INSTANCE_CONFIG = {
+      'ZJWC': { name: '浙江网超', env: '云环境' },
+      'HWCS': { name: '浙江乐采网超', env: '云环境' },
+      'HNLCWC': { name: '湖南乐采网超', env: '云环境' },
+      'YNLCY': { name: '云南乐采云', env: '乐采云环境' },
+      'GXLCY': { name: '广西乐采云', env: '乐采云环境' }
+    };
+
+    function getDefaultInstanceMappings() {
+      // 不再使用本地默认，返回空对象，由后端 API 获取
+      return {};
+    }
+
+    let instanceRuleMapping = {};  // 从后端获取的实例规则映射
+
+    async function loadInstanceRuleMapping() {
+      try {
+        const data = await apiCall('/api/config/instance-rule-mapping');
+        instanceRuleMapping = data.mapping || {};
+        saveInstanceMappingCache(instanceRuleMapping);
+      } catch (e) {
+        // 尝试从缓存读取
+        const cached = localStorage.getItem('INSTANCE_RULE_MAPPING_CACHE');
+        instanceRuleMapping = cached ? JSON.parse(cached) : {};
+      }
+    }
+
+    function saveInstanceMappingCache(mapping) {
+      localStorage.setItem('INSTANCE_RULE_MAPPING_CACHE', JSON.stringify(mapping));
+    }
+
+    function getInstanceMappings() {
+      // 返回实例列表，用于渲染表格
+      return Object.entries(INSTANCE_CONFIG).map(function(_ref) {
+        var code = _ref[0], config = _ref[1];
+        return {
+          code: code,
+          name: config.name,
+          env: config.env,
+          rule: instanceRuleMapping[code] || ''
+        };
+      });
+    }
+
+    function saveInstanceMappings(mappings) {
+      // 构建新的映射对象
+      var newMapping = {};
+      mappings.forEach(function(inst) {
+        if (inst.rule) {
+          newMapping[inst.code] = inst.rule;
+        }
+      });
+      instanceRuleMapping = newMapping;
+    }
+
+    // ========== API 调用 ==========
+    async function apiCall(url, options = {}) {
+      const token = localStorage.getItem('token');
+      const headers = {
+        'Content-Type': 'application/json',
+        ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+        ...(options.headers || {})
+      };
+
+      const response = await fetch(url, {
+        ...options,
+        headers
+      });
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({ error: '请求失败' }));
+        throw new Error(error.error || error.message || '请求失败');
+      }
+
+      return response.json();
+    }
+
+    // ========== 规则文件操作 ==========
+    let currentRules = [];
+    let currentEditFile = null;
+
+    async function loadRules() {
+      try {
+        currentRules = await apiCall('/api/prompt-rules');
+        renderRules();
+      } catch (e) {
+        showToast(e.message, true);
+        renderRules();
+      }
+    }
+
+    function renderRules() {
+      const tbody = document.getElementById('ruleTableBody');
+      if (!currentRules || currentRules.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" class="text-muted" style="padding: 20px; text-align: center;">暂无规则，请点击"新建规则"创建</td></tr>';
+        return;
+      }
+      tbody.innerHTML = currentRules.map(function(rule) {
+        return '<tr>' +
+          '<td style="font-weight: 500;">' + escapeHtml(rule.name) + '</td>' +
+          '<td>' + escapeHtml(rule.file) + '</td>' +
+          '<td>' + formatSize(rule.size) + '</td>' +
+          '<td>' + escapeHtml(rule.modified) + '</td>' +
+          '<td class="cell-actions">' +
+            '<button class="btn btn-sm btn-default" onclick="showEditRuleModal(\'' + escapeHtml(rule.file) + '\')">编辑</button>' +
+            '<button class="btn btn-sm btn-default" onclick="showRenameRuleModal(\'' + escapeHtml(rule.file) + '\', \'' + escapeHtml(rule.name) + '\')">重命名</button>' +
+            '<button class="btn btn-sm btn-danger" onclick="deleteRule(\'' + escapeHtml(rule.file) + '\')">删除</button>' +
+          '</td>' +
+        '</tr>';
+      }).join('');
+    }
+
+    function formatSize(bytes) {
+      if (bytes < 1024) return bytes + ' B';
+      if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+      return (bytes / 1024 / 1024).toFixed(1) + ' MB';
+    }
+
+    // ========== 实例关联操作（从后端 API 读取）==========
+    async function renderInstanceMappings() {
+      // 确保规则和映射都已加载
+      if (currentRules.length === 0) {
+        await loadRules();
+      }
+      await loadInstanceRuleMapping();
+
+      const mappings = getInstanceMappings();
+      const tbody = document.getElementById('instanceTableBody');
+
+      if (!instanceRuleMapping || Object.keys(instanceRuleMapping).length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" class="text-muted" style="padding: 20px; text-align: center;">暂无配置</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = Object.entries(INSTANCE_CONFIG).map(function(_ref2) {
+        var code = _ref2[0], config = _ref2[1];
+        var ruleName = instanceRuleMapping[code] || '';
+        // 查找匹配的规则显示名称
+        var displayRule = ruleName;
+        if (ruleName) {
+          var rule = currentRules.find(function(r) { return r.name === ruleName; });
+          if (rule) displayRule = rule.name;
+        }
+        return '<tr>' +
+          '<td>' + escapeHtml(code) + '</td>' +
+          '<td>' + escapeHtml(config.name) + '</td>' +
+          '<td>' + escapeHtml(config.env) + '</td>' +
+          '<td>' + (displayRule ? escapeHtml(displayRule) : '<span class="text-muted">未关联</span>') + '</td>' +
+          '<td class="cell-actions">' +
+            '<button class="btn btn-sm btn-default" onclick="showInstanceEditModal(\'' + code + '\')">编辑</button>' +
+          '</td>' +
+        '</tr>';
+      }).join('');
+    }
+
+    let currentEditInstanceId = null;
+
+    function showInstanceEditModal(instanceCode) {
+      currentEditInstanceId = instanceCode;
+      var config = INSTANCE_CONFIG[instanceCode];
+      if (!config) return;
+
+      document.getElementById('editInstanceName').value = config.name;
+      document.getElementById('editInstanceCode').value = instanceCode;
+      document.getElementById('editInstanceEnv').value = config.env;
+
+      // 填充规则下拉框
+      var ruleSelect = document.getElementById('editInstanceRule');
+      var currentRule = instanceRuleMapping[instanceCode] || '';
+      ruleSelect.innerHTML = '<option value="">未关联</option>';
+      ruleSelect.innerHTML += currentRules.map(function(r) {
+        return '<option value="' + escapeHtml(r.name) + '"' +
+          (r.name === currentRule ? ' selected' : '') + '>' +
+          escapeHtml(r.name) + '</option>';
+      }).join('');
+
+      document.getElementById('editInstanceModal').classList.add('active');
+    }
+
+    async function saveEditedInstance() {
+      const env = document.getElementById('editInstanceEnv').value;
+      const rule = document.getElementById('editInstanceRule').value;
+
+      if (!env) {
+        showToast('请选择所属环境', true);
+        return;
+      }
+
+      // 更新映射
+      if (rule) {
+        instanceRuleMapping[currentEditInstanceId] = rule;
+      } else {
+        delete instanceRuleMapping[currentEditInstanceId];
+      }
+
+      // 保存到后端 API
+      try {
+        await apiCall('/api/config/instance-rule-mapping', {
+          method: 'PUT',
+          body: JSON.stringify({ mapping: instanceRuleMapping })
+        });
+        saveInstanceMappingCache(instanceRuleMapping);
+        await renderInstanceMappings();
+      } catch (e) {
+        showToast(e.message, true);
+        return;
+      }
+
+      closeModal('editInstanceModal');
+      showToast('关联关系已更新');
+      showToast('关联更新成功');
+    }
+
+    // ========== 模态框操作 ==========
+    function showNewRuleModal() {
+      document.getElementById('newRuleName').value = '';
+      document.getElementById('newRuleContent').value = '';
+      document.getElementById('newRuleModal').classList.add('active');
+    }
+
+    async function createNewRule() {
+      let name = document.getElementById('newRuleName').value.trim();
+      if (!name) {
+        showToast('请输入规则名称', true);
+        return;
+      }
+
+      // 自动添加 .md 后缀（如果不包含扩展名）
+      if (!name.includes('.')) {
+        name = name + '.md';
+      }
+
+      const content = document.getElementById('newRuleContent').value;
+
+      try {
+        // 传递不带扩展名的名称给后端，让后端处理扩展名
+        const nameWithoutExt = name.replace(/\.(md|txt)$/i, '');
+        await apiCall('/api/prompt-rules', {
+          method: 'POST',
+          body: JSON.stringify({ name: nameWithoutExt, content: content })
+        });
+        closeModal('newRuleModal');
+        await loadRules();
+        showToast('规则创建成功');
+      } catch (e) {
+        showToast(e.message, true);
+      }
+    }
+
+    async function showEditRuleModal(filename) {
+      try {
+        const data = await apiCall('/api/prompt-rules/' + encodeURIComponent(filename));
+        currentEditFile = filename;
+        document.getElementById('editRuleName').value = data.name;
+        document.getElementById('editRuleContent').value = data.content || '';
+        document.getElementById('editRuleModal').classList.add('active');
+      } catch (e) {
+        showToast(e.message, true);
+      }
+    }
+
+    async function saveEditedRule() {
+      const content = document.getElementById('editRuleContent').value;
+      if (!currentEditFile) return;
+
+      try {
+        await apiCall('/api/prompt-rules/' + encodeURIComponent(currentEditFile), {
+          method: 'PUT',
+          body: JSON.stringify({ content: content })
+        });
+        closeModal('editRuleModal');
+        await loadRules();
+        showToast('规则更新成功');
+      } catch (e) {
+        showToast(e.message, true);
+      }
+    }
+
+    function showRenameRuleModal(filename, name) {
+      currentEditFile = filename;
+      document.getElementById('oldRuleName').value = name;
+      document.getElementById('newRuleNameInput').value = '';
+      document.getElementById('renameRuleModal').classList.add('active');
+    }
+
+    async function submitRenameRule() {
+      const newName = document.getElementById('newRuleNameInput').value.trim();
+      if (!newName) {
+        showToast('请输入新名称', true);
+        return;
+      }
+
+      try {
+        await apiCall('/api/prompt-rules/' + encodeURIComponent(currentEditFile) + '/rename', {
+          method: 'PUT',
+          body: JSON.stringify({ new_name: newName })
+        });
+        closeModal('renameRuleModal');
+        await loadRules();
+        showToast('规则重命名成功');
+      } catch (e) {
+        showToast(e.message, true);
+      }
+    }
+
+    async function deleteRule(filename) {
+      if (!confirm('确认删除规则 "' + filename + '"？此操作不可恢复。')) {
+        return;
+      }
+
+      try {
+        await apiCall('/api/prompt-rules/' + encodeURIComponent(filename), {
+          method: 'DELETE'
+        });
+        await loadRules();
+        showToast('规则已删除');
+      } catch (e) {
+        showToast(e.message, true);
+      }
+    }
+
+    function closeModal(modalId) {
+      document.getElementById(modalId).classList.remove('active');
+    }
+
+    // ========== 通用函数 ==========
+    function getCurrentTime() {
+      const now = new Date();
+      const year = now.getFullYear();
+      const month = String(now.getMonth() + 1).padStart(2, '0');
+      const day = String(now.getDate()).padStart(2, '0');
+      const hour = String(now.getHours()).padStart(2, '0');
+      const minute = String(now.getMinutes()).padStart(2, '0');
+      const second = String(now.getSeconds()).padStart(2, '0');
+      return year + '-' + month + '-' + day + ' ' + hour + ':' + minute + ':' + second;
+    }
+
+    function showToast(message, isError) {
+      const toast = document.getElementById('toast');
+      toast.textContent = message;
+      toast.className = 'toast' + (isError ? ' error' : '') + ' show';
+      setTimeout(function() {
+        toast.classList.remove('show');
+      }, 3000);
+    }
+
+    function escapeHtml(text) {
+      if (!text) return '';
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    // 点击遮罩关闭模态框
+    document.querySelectorAll('.modal-overlay').forEach(function(overlay) {
+      overlay.addEventListener('click', function(e) {
+        if (e.target === this) {
+          this.classList.remove('active');
+        }
+      });
+    });
+
+    // ========== 初始化 ==========
+    loadRules().then(function() {
+      renderInstanceMappings();
+    });
+  </script>
+</body>
+</html>

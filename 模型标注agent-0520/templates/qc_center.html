@@ -1,0 +1,1188 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>质检修正中心</title>
+  <link rel="stylesheet" href="/static/common.css">
+  <script src="/static/config.js"></script>
+  <style>
+    body { background: var(--bg); min-height: 100vh; }
+    .page-container { padding: 20px 24px; max-width: 1400px; }
+    .page-header { margin-bottom: 20px; }
+    .page-title { font-size: 20px; font-weight: 600; color: var(--text-primary); }
+    .page-subtitle { font-size: 14px; color: var(--text-secondary); margin-top: 4px; }
+
+    /* 卡片 */
+    .card { background: var(--white); border-radius: var(--radius-lg); box-shadow: var(--shadow); padding: 16px; margin-bottom: 16px; }
+    .card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid var(--border-light); }
+    .card-title { font-size: 15px; font-weight: 600; }
+
+    /* 统计卡片 - 顶部 */
+    .overview-cards { display: grid; grid-template-columns: repeat(5, 1fr); gap: 16px; margin-bottom: 20px; }
+    .overview-card { background: var(--white); border-radius: var(--radius-lg); box-shadow: var(--shadow); padding: 16px 20px; }
+    .overview-card-label { font-size: 13px; color: var(--text-secondary); margin-bottom: 4px; }
+    .overview-card-value { font-size: 24px; font-weight: 700; color: var(--primary); }
+    .overview-card-value.warning { color: var(--warning); }
+    .overview-card-value.success { color: var(--success); }
+
+    /* 配置区 - 全宽卡片紧凑布局 */
+    .config-section { display: block; }
+    .config-panel { padding: 16px 20px; }
+    .config-row { display: flex; gap: 16px; margin-bottom: 12px; flex-wrap: wrap; align-items: center; }
+    .config-row:last-child { margin-bottom: 0; }
+    .config-item { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .config-label { font-size: 13px; color: var(--text-secondary); white-space: nowrap; }
+    .config-value { display: flex; gap: 8px; }
+    .config-tip { font-size: 12px; color: var(--text-muted); margin-top: 8px; }
+
+    /* 第一行配置 */
+    .config-row-first { display: flex; gap: 20px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
+    .config-row-first .config-item { display: flex; align-items: center; gap: 8px; }
+
+    /* 第二行配置 */
+    .config-row-second { display: flex; gap: 20px; align-items: center; flex-wrap: wrap; }
+    
+    /* 按钮组 */
+    .btn-group { display: flex; gap: 4px; }
+    .btn-group .btn { padding: 6px 12px; font-size: 12px; }
+    .btn-group .btn.active { background: var(--primary); color: #fff; border-color: var(--primary); }
+    
+    .btn-group-lg { display: flex; gap: 8px; }
+    .btn-group-lg .btn { padding: 8px 16px; font-size: 13px; }
+    .btn-group-lg .btn.active { background: var(--primary); color: #fff; border-color: var(--primary); }
+
+    /* 输入框 */
+    .config-input { width: 80px; padding: 6px 10px; font-size: 13px; border: 1px solid var(--border); border-radius: var(--radius); }
+    .config-input:focus { outline: none; border-color: var(--primary); }
+
+    /* 自定义配置区 */
+    .custom-config { display: none; padding: 12px; background: var(--bg); border-radius: var(--radius); margin-bottom: 16px; }
+    .custom-config.show { display: block; }
+    .custom-row { display: flex; gap: 24px; align-items: center; margin-bottom: 8px; }
+    .custom-row:last-child { margin-bottom: 0; }
+
+    /* Tab切换 */
+    .qc-tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); margin-bottom: 16px; }
+    .qc-tab { padding: 10px 20px; font-size: 14px; color: var(--text-secondary); cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+    .qc-tab:hover { color: var(--primary); }
+    .qc-tab.active { color: var(--primary); border-bottom-color: var(--primary); font-weight: 500; }
+    .qc-tab-content { display: none; }
+    .qc-tab-content.active { display: block; }
+
+    /* 数据表格 */
+    .data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .data-table thead th { background: #fafbfc; color: var(--text-secondary); font-weight: 500; text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+    .data-table tbody td { padding: 10px 12px; border-bottom: 1px solid var(--border-light); }
+    .data-table tbody tr:hover { background: #f8f9ff; }
+    
+    /* 标签 */
+    .tag-correct { background: var(--success-light); color: var(--success); padding: 2px 8px; border-radius: 3px; font-size: 12px; }
+    .tag-error { background: var(--danger-light); color: var(--danger); padding: 2px 8px; border-radius: 3px; font-size: 12px; }
+    .tag-ignore { background: var(--warning-light); color: var(--warning); padding: 2px 8px; border-radius: 3px; font-size: 12px; }
+    .tag-pending { background: #f3f4f6; color: var(--text-muted); padding: 2px 8px; border-radius: 3px; font-size: 12px; }
+    .tag-passed { background: var(--success-light); color: var(--success); padding: 2px 8px; border-radius: 3px; font-size: 12px; }
+    .tag-fixed { background: var(--warning-light); color: var(--warning); padding: 2px 8px; border-radius: 3px; font-size: 12px; }
+    .tag-yes { background: var(--success-light); color: var(--success); padding: 2px 8px; border-radius: 3px; font-size: 12px; }
+    .tag-no { background: #f3f4f6; color: var(--text-muted); padding: 2px 8px; border-radius: 3px; font-size: 12px; }
+    .tag-archived { background: var(--success-light); color: var(--success); padding: 2px 8px; border-radius: 3px; font-size: 12px; }
+    .tag-unarchived { background: #f3f4f6; color: var(--text-muted); padding: 2px 8px; border-radius: 3px; font-size: 12px; }
+
+    /* 模态框 */
+    .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.45); display: flex; align-items: center; justify-content: center; z-index: 1000; opacity: 0; visibility: hidden; transition: all 0.25s; }
+    .modal-overlay.active { opacity: 1; visibility: visible; }
+    .modal { background: var(--white); border-radius: var(--radius-lg); box-shadow: var(--shadow-lg); width: 90%; max-width: 900px; max-height: 90vh; overflow: hidden; display: flex; flex-direction: column; }
+    .modal-header { display: flex; align-items: center; justify-content: space-between; padding: 16px 20px; border-bottom: 1px solid var(--border-light); }
+    .modal-title { font-size: 15px; font-weight: 600; }
+    .modal-close { background: none; border: none; font-size: 20px; color: var(--text-muted); cursor: pointer; padding: 0; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; border-radius: var(--radius); }
+    .modal-close:hover { background: var(--border-light); }
+    .modal-body { padding: 20px; overflow-y: auto; flex: 1; display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+    .modal-footer { display: flex; align-items: center; justify-content: space-between; padding: 12px 20px; border-top: 1px solid var(--border-light); background: #fafbfc; }
+
+    /* 质检弹窗左侧 */
+    .qc-left { border-right: 1px solid var(--border-light); padding-right: 20px; }
+    .qc-product-title { font-size: 16px; font-weight: 600; margin-bottom: 12px; }
+    .qc-product-meta { font-size: 13px; color: var(--text-secondary); margin-bottom: 16px; }
+    .qc-product-meta div { margin-bottom: 4px; }
+
+    /* 质检弹窗左侧 - 紧凑图片布局 */
+    .qc-images { margin-top: 12px; overflow-y: auto; max-height: 400px; padding-right: 8px; }
+    .qc-images::-webkit-scrollbar { width: 6px; }
+    .qc-images::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 3px; }
+
+    .qc-thumbnail-row { margin-bottom: 12px; }
+    .qc-thumbnail-label { font-size: 12px; font-weight: 600; color: var(--text-primary); margin-bottom: 6px; }
+    .qc-thumbnail-wrapper { display: flex; flex-wrap: wrap; gap: 8px; }
+    .qc-thumbnail-img { width: 120px; height: 90px; object-fit: cover; border-radius: var(--radius); cursor: pointer; transition: transform 0.2s, box-shadow 0.2s; border: 1px solid var(--border-light); }
+    .qc-thumbnail-img:hover { transform: scale(1.05); box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15); }
+
+    /* 质检弹窗右侧 */
+    .qc-right { padding-left: 0; }
+    .qc-section { margin-bottom: 20px; }
+    .qc-section-title { font-size: 14px; font-weight: 600; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid var(--border-light); }
+    .qc-info-row { display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 13px; }
+    .qc-info-label { color: var(--text-secondary); }
+    .qc-info-value { font-weight: 500; }
+    
+    /* 修正按钮组 */
+    .qc-annotation-btns { display: flex; gap: 8px; margin-bottom: 12px; }
+    .qc-annotation-btn { flex: 1; padding: 10px; font-size: 13px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--white); cursor: pointer; transition: all 0.2s; }
+    .qc-annotation-btn:hover { border-color: var(--primary); }
+    .qc-annotation-btn.active { background: var(--primary); color: #fff; border-color: var(--primary); }
+    .qc-annotation-btn.correct.active { background: var(--success); border-color: var(--success); }
+    .qc-annotation-btn.error.active { background: var(--danger); border-color: var(--danger); }
+    .qc-annotation-btn.ignore.active { background: var(--warning); border-color: var(--warning); }
+
+    .qc-form-group { margin-bottom: 12px; }
+    .qc-form-group label { display: block; font-size: 13px; margin-bottom: 6px; color: var(--text-secondary); }
+    .qc-form-group select, .qc-form-group input { width: 100%; padding: 8px; font-size: 13px; border: 1px solid var(--border); border-radius: var(--radius); }
+    .qc-form-group textarea { width: 100%; padding: 8px; font-size: 13px; border: 1px solid var(--border); border-radius: var(--radius); min-height: 60px; resize: vertical; }
+    
+    .qc-checkbox { display: flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer; }
+
+    /* 翻页按钮 */
+    .qc-nav-btns { display: flex; gap: 8px; }
+    .qc-nav-btn { padding: 6px 12px; font-size: 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--white); cursor: pointer; }
+    .qc-nav-btn:hover:not(:disabled) { border-color: var(--primary); color: var(--primary); }
+    .qc-nav-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    /* 底部操作区 */
+    .footer-actions { display: flex; gap: 12px; justify-content: center; margin-top: 20px; }
+    .btn-export { background: var(--primary); color: #fff; border: 1px solid var(--primary); }
+    .btn-export:hover { background: #3b82f6; border-color: #3b82f6; }
+    .btn-archive { background: var(--white); color: var(--text-primary); border: 1px solid var(--border); }
+    .btn-archive:hover { border-color: var(--primary); color: var(--primary); }
+
+    /* 历史记录展开详情 */
+    .history-detail { display: none; padding: 16px; background: #fafbfc; border-top: 1px solid var(--border-light); }
+    .history-detail.show { display: block; }
+    .history-detail-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+    .history-detail-title { font-size: 14px; font-weight: 600; }
+    .history-detail-actions { display: flex; gap: 8px; align-items: center; }
+    .history-detail-table { margin-top: 12px; }
+
+    /* 提示 */
+    .toast { position: fixed; top: 20px; left: 50%; transform: translateX(-50%); padding: 12px 24px; background: var(--success); color: #fff; font-size: 13px; border-radius: var(--radius); z-index: 2000; opacity: 0; visibility: hidden; transition: all 0.3s; }
+    .toast.show { opacity: 1; visibility: visible; }
+
+    .empty-state { text-align: center; padding: 40px; color: var(--text-muted); }
+  </style>
+</head>
+<body>
+  <div class="page-container">
+    <div class="page-header">
+      <div>
+        <h1 class="page-title">✅ 质检修正中心</h1>
+        <p class="page-subtitle">抽取已标注任务进行质量检查，支持直接修正并反馈给标注员</p>
+      </div>
+    </div>
+
+    <div class="toast" id="toast"></div>
+
+    <!-- 顶部统计卡片 -->
+    <div class="overview-cards">
+      <div class="overview-card">
+        <div class="overview-card-label">本次抽取总数</div>
+        <div class="overview-card-value" id="statTotal">-</div>
+      </div>
+      <div class="overview-card">
+        <div class="overview-card-label">已质检数</div>
+        <div class="overview-card-value" id="statChecked">0</div>
+      </div>
+      <div class="overview-card">
+        <div class="overview-card-label">通过数</div>
+        <div class="overview-card-value success" id="statPassed">0</div>
+      </div>
+      <div class="overview-card">
+        <div class="overview-card-label">修正数</div>
+        <div class="overview-card-value warning" id="statFixed">0</div>
+      </div>
+      <div class="overview-card">
+        <div class="overview-card-label">修正率</div>
+        <div class="overview-card-value" id="statRate">0%</div>
+      </div>
+    </div>
+
+    <!-- 配置区 -->
+    <div class="card config-panel" style="margin-bottom: 20px;">
+      <div class="card-header">
+        <span class="card-title">质检抽取规则</span>
+      </div>
+
+      <!-- 第一行 -->
+      <div class="config-row-first">
+        <div class="config-item">
+          <span class="config-label">抽取方式：</span>
+          <div class="btn-group-lg">
+            <button class="btn btn-default active" id="btnRatio" onclick="setExtractType('ratio')">按比例</button>
+            <button class="btn btn-default" id="btnCount" onclick="setExtractType('count')">按数量</button>
+            <button class="btn btn-default" id="btnCustom" onclick="setExtractType('custom')">自定义</button>
+          </div>
+        </div>
+        <div class="config-item" id="extractValueRow">
+          <span class="config-label" id="extractValueLabel">抽取值：</span>
+          <input type="number" class="config-input" id="extractValue" value="20" min="1" max="100">
+          <span class="config-label" id="extractUnit">%</span>
+        </div>
+        <div class="config-item">
+          <span class="config-label">实例筛选：</span>
+          <div class="btn-group" id="instanceBtns">
+            <button class="btn btn-default active" data-instance="" onclick="selectInstance('')">全部</button>
+            <button class="btn btn-default" data-instance="实例01" onclick="selectInstance('实例01')">实例01</button>
+            <button class="btn btn-default" data-instance="实例02" onclick="selectInstance('实例02')">实例02</button>
+            <button class="btn btn-default" data-instance="实例03" onclick="selectInstance('实例03')">实例03</button>
+            <button class="btn btn-default" data-instance="实例04" onclick="selectInstance('实例04')">实例04</button>
+            <button class="btn btn-default" data-instance="实例05" onclick="selectInstance('实例05')">实例05</button>
+          </div>
+        </div>
+        <button class="btn btn-primary" onclick="startQC()">开始质检</button>
+      </div>
+
+      <!-- 自定义配置区 -->
+      <div class="custom-config" id="customConfig">
+        <div class="custom-row">
+          <div class="config-item">
+            <span class="config-label">错误数据抽取值：</span>
+            <input type="number" class="config-input" id="errorRate" value="100" min="0" max="100">
+            <span class="config-label">%</span>
+          </div>
+          <div class="config-item">
+            <span class="config-label">正确数据抽取值：</span>
+            <input type="number" class="config-input" id="correctRate" value="10" min="0" max="100">
+            <span class="config-label">%</span>
+          </div>
+        </div>
+        <div class="config-tip">将对已标注为"错误"和"正确"的数据分别按比例随机抽取</div>
+      </div>
+
+      <!-- 第二行 -->
+      <div class="config-row-second">
+        <div class="config-item">
+          <span class="config-label">标注员：</span>
+          <div class="btn-group" id="annotatorBtns">
+            <button class="btn btn-default active" data-annotator="" onclick="selectAnnotator('')">全部标注员</button>
+            <button class="btn btn-default" data-annotator="张三" onclick="selectAnnotator('张三')">张三</button>
+            <button class="btn btn-default" data-annotator="李四" onclick="selectAnnotator('李四')">李四</button>
+            <button class="btn btn-default" data-annotator="王五" onclick="selectAnnotator('王五')">王五</button>
+            <button class="btn btn-default" data-annotator="赵六" onclick="selectAnnotator('赵六')">赵六</button>
+            <button class="btn btn-default" data-annotator="钱七" onclick="selectAnnotator('钱七')">钱七</button>
+            <button class="btn btn-default" data-annotator="孙八" onclick="selectAnnotator('孙八')">孙八</button>
+            <button class="btn btn-default" data-annotator="周九" onclick="selectAnnotator('周九')">周九</button>
+            <button class="btn btn-default" data-annotator="吴十" onclick="selectAnnotator('吴十')">吴十</button>
+          </div>
+        </div>
+        <div class="config-item">
+          <span class="config-label">日期范围：</span>
+          <input type="date" class="form-input" id="dateStart" style="width: 120px;">
+          <span class="config-label">至</span>
+          <input type="date" class="form-input" id="dateEnd" style="width: 120px;">
+        </div>
+      </div>
+    </div>
+
+    <!-- Tab切换 -->
+    <div class="card" id="qcListCard" style="display: none;">
+      <div class="qc-tabs">
+        <div class="qc-tab active" data-tab="tabCurrent" onclick="switchQCTab('tabCurrent')">当前质检任务</div>
+        <div class="qc-tab" data-tab="tabHistory" onclick="switchQCTab('tabHistory')">历史质检记录</div>
+      </div>
+
+      <!-- 当前质检任务 -->
+      <div class="qc-tab-content active" id="tabCurrent">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>商品ID</th>
+              <th>商品名称</th>
+              <th>类目</th>
+              <th>AI审核</th>
+              <th>标注员</th>
+              <th>标注结果</th>
+              <th>标注备注</th>
+              <th>质检状态</th>
+              <th>归档状态</th>
+              <th>已推送</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody id="qcTableBody"></tbody>
+        </table>
+      </div>
+
+      <!-- 历史质检记录 -->
+      <div class="qc-tab-content" id="tabHistory">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>批次号</th>
+              <th>质检时间</th>
+              <th>抽取方式</th>
+              <th>抽取数量</th>
+              <th>通过数</th>
+              <th>修正数</th>
+              <th>修正率</th>
+              <th>归档状态</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody id="historyTableBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  </div>
+
+  <!-- 质检详情弹窗 -->
+  <div class="modal-overlay" id="qcModal">
+    <div class="modal">
+      <div class="modal-header">
+        <span class="modal-title">质检详情</span>
+        <button class="modal-close" onclick="closeQCModal()">×</button>
+      </div>
+      <div class="modal-body">
+        <!-- 左侧 -->
+        <div class="qc-left">
+          <div class="qc-product-title" id="qcProductTitle">商品名称</div>
+          <div class="qc-product-meta">
+            <div>类目：<span id="qcCategory">-</span></div>
+            <div>店铺：<span id="qcShop">-</span></div>
+            <div>商品ID：<span id="qcProductId">-</span></div>
+          </div>
+          <div class="qc-images" id="qcImages"></div>
+        </div>
+
+        <!-- 右侧 -->
+        <div class="qc-right">
+          <div class="qc-section">
+            <div class="qc-section-title">原始标注信息</div>
+            <div class="qc-info-row">
+              <span class="qc-info-label">标注员：</span>
+              <span class="qc-info-value" id="qcAnnotator">-</span>
+            </div>
+            <div class="qc-info-row">
+              <span class="qc-info-label">原标注结果：</span>
+              <span class="qc-info-value" id="qcOriginalResult">-</span>
+            </div>
+            <div class="qc-info-row">
+              <span class="qc-info-label">原标注备注：</span>
+              <span class="qc-info-value" id="qcOriginalNote">-</span>
+            </div>
+            <div class="qc-info-row">
+              <span class="qc-info-label">AI审核结果：</span>
+              <span class="qc-info-value" id="qcAiResult">-</span>
+            </div>
+            <div class="qc-info-row">
+              <span class="qc-info-label">AI拒绝原因：</span>
+              <span class="qc-info-value" id="qcAiReason">-</span>
+            </div>
+          </div>
+
+          <div class="qc-section">
+            <div class="qc-section-title">修正标注结果</div>
+            <div class="qc-annotation-btns">
+              <button class="qc-annotation-btn correct" onclick="selectQCResult('correct')">✓ 正确</button>
+              <button class="qc-annotation-btn error" onclick="selectQCResult('error')">✗ 错误</button>
+              <button class="qc-annotation-btn ignore" onclick="selectQCResult('ignore')">⊘ 忽略</button>
+            </div>
+            <div id="qcNoteArea" style="display: none;">
+              <div class="qc-form-group">
+                <label>标注备注 <span style="color:var(--danger)">*</span></label>
+                <select id="qcNoteSelect">
+                  <option value="">请选择</option>
+                </select>
+              </div>
+              <div class="qc-form-group">
+                <label>补充说明</label>
+                <input type="text" id="qcCommentInput" placeholder="选填">
+              </div>
+            </div>
+            <div class="qc-form-group">
+              <label>解决方案（推送给标注员）</label>
+              <textarea id="qcSolutionInput" placeholder="填写微调建议，将通知原标注员"></textarea>
+            </div>
+            <label class="qc-checkbox">
+              <input type="checkbox" id="qcNotifyCheck" checked>
+              推送给标注员
+            </label>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <div class="qc-nav-btns">
+          <button class="qc-nav-btn" id="qcPrevBtn" onclick="prevQC()">← 上一条</button>
+          <button class="qc-nav-btn" id="qcNextBtn" onclick="nextQC()">下一条 →</button>
+        </div>
+        <div style="display: flex; gap: 8px;">
+          <button class="btn btn-default" onclick="skipQC()">跳过</button>
+          <button class="btn btn-primary" onclick="submitQC(false)">✅ 提交质检</button>
+          <button class="btn btn-primary" onclick="submitQC(true)">✅ 提交并推送</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ========== Mock 数据 ==========
+    const mockAnnotators = ['张三', '李四', '王五', '赵六', '钱七', '孙八'];
+    const mockCategories = ['健身器材', '文具', '玩具', '手机配件', '服装鞋帽', '家电', '美妆', '数码'];
+    const instances = ['实例01', '实例02', '实例03', '实例04', '实例05'];
+
+    // Mock 质检数据池
+    const qcDataPool = [
+      { id: 'PD10001', name: '健身器材套装 家用多功能仰卧起坐板', category: '健身器材', aiResult: '违规', aiReason: '主图检测到违禁内容', annotator: '张三', annotation: '正确', note: '', shop: '运动旗舰店', instance: '实例01' },
+      { id: 'PD10002', name: '得力订书机省力型迷你', category: '文具', aiResult: '合规', aiReason: '', annotator: '李四', annotation: '正确', note: '', shop: '得力文房旗舰店', instance: '实例01' },
+      { id: 'PD10003', name: '儿童lego积木拼装玩具', category: '玩具', aiResult: '违规', aiReason: '标题检测到违禁词', annotator: '王五', annotation: '错误', note: '类目判断错误', shop: '乐童玩具专营店', instance: '实例02' },
+      { id: 'PD10004', name: '手机支架车载重力感应', category: '手机配件', aiResult: '合规', aiReason: '', annotator: '赵六', annotation: '正确', note: '', shop: '数码配件专营店', instance: '实例02' },
+      { id: 'PD10005', name: 'Nike运动鞋男款跑步鞋', category: '服装鞋帽', aiResult: '合规', aiReason: '', annotator: '钱七', annotation: '正确', note: '', shop: 'Nike官方旗舰店', instance: '实例03' },
+      { id: 'PD10006', name: '美的挂烫机家用蒸汽熨斗', category: '家电', aiResult: '违规', aiReason: '检测到敏感标识', annotator: '孙八', annotation: '错误', note: '主图主体识别错误', shop: '美的官方旗舰店', instance: '实例03' },
+      { id: 'PD10007', name: '小米手环6智能穿戴', category: '数码', aiResult: '合规', aiReason: '', annotator: '张三', annotation: '忽略', note: '无关信息误判违规', shop: '小米官方旗舰店', instance: '实例04' },
+      { id: 'PD10008', name: 'AirPods Pro无线耳机', category: '数码', aiResult: '合规', aiReason: '', annotator: '李四', annotation: '正确', note: '', shop: 'Apple京东自营店', instance: '实例04' },
+      { id: 'PD10009', name: '美的电饭锅智能版', category: '家电', aiResult: '违规', aiReason: '检测到夸大宣传', annotator: '王五', annotation: '错误', note: '引流信息识别错误', shop: '美的厨卫旗舰店', instance: '实例05' },
+      { id: 'PD10010', name: '联想ThinkPad笔记本', category: '数码', aiResult: '合规', aiReason: '', annotator: '赵六', annotation: '正确', note: '', shop: '联想京东自营店', instance: '实例05' },
+      { id: 'PD10011', name: 'Apple iPhone 14手机壳', category: '手机配件', aiResult: '合规', aiReason: '', annotator: '钱七', annotation: '错误', note: '类目判断错误', shop: 'Apple配件专营店', instance: '实例01' },
+      { id: 'PD10012', name: '农夫山泉矿泉水整箱', category: '食品', aiResult: '合规', aiReason: '', annotator: '孙八', annotation: '正确', note: '', shop: '农夫山泉旗舰店', instance: '实例02' },
+      { id: 'PD10013', name: '戴森吸尘器V12', category: '家电', aiResult: '违规', aiReason: '检测到品牌logo', annotator: '张三', annotation: '忽略', note: '旗舰店识别错误', shop: '戴森官方旗舰店', instance: '实例03' },
+      { id: 'PD10014', name: '乐高积木城市系列', category: '玩具', aiResult: '合规', aiReason: '', annotator: '李四', annotation: '正确', note: '', shop: '乐高玩具旗舰店', instance: '实例04' },
+      { id: 'PD10015', name: '海澜之家男士衬衫', category: '服装鞋帽', aiResult: '违规', aiReason: '检测到敏感标识', annotator: '王五', annotation: '错误', note: '销售属性错误', shop: '海澜之家旗舰店', instance: '实例05' },
+      { id: 'PD10016', name: 'SK-II神仙水精华液', category: '美妆', aiResult: '合规', aiReason: '', annotator: '赵六', annotation: '正确', note: '', shop: 'SK-II官方旗舰店', instance: '实例01' },
+      { id: 'PD10017', name: '九阳破壁机家用', category: '家电', aiResult: '违规', aiReason: '标题检测到违禁词', annotator: '钱七', annotation: '错误', note: '引流信息识别错误', shop: '九阳小家电旗舰店', instance: '实例02' },
+      { id: 'PD10018', name: 'Adidas运动T恤', category: '服装鞋帽', aiResult: '合规', aiReason: '', annotator: '孙八', annotation: '正确', note: '', shop: 'Adidas官方旗舰��', instance: '实例03' }
+    ];
+
+    // 历史质检记录
+    const qcHistory = [
+      { batchId: 'QC20260508001', time: '2026-05-08 09:30', extractType: '按比例', extractValue: '20%', total: 4, passed: 3, fixed: 1, rate: '25%', isArchived: true },
+      { batchId: 'QC20260507002', time: '2026-05-07 14:20', extractType: '按数量', extractValue: '10条', total: 10, passed: 8, fixed: 2, rate: '20%', isArchived: true },
+      { batchId: 'QC20260506003', time: '2026-05-06 10:15', extractType: '自定义', extractValue: '错误100%,正确10%', total: 6, passed: 4, fixed: 2, rate: '33%', isArchived: true },
+      { batchId: 'QC20260505004', time: '2026-05-05 16:40', extractType: '按比例', extractValue: '15%', total: 3, passed: 2, fixed: 1, rate: '33%', isArchived: false },
+      { batchId: 'QC20260504005', time: '2026-05-04 11:00', extractType: '按数量', extractValue: '8条', total: 8, passed: 6, fixed: 2, rate: '25%', isArchived: true }
+    ];
+
+    // ========== 状态变量 ==========
+    let extractType = 'ratio';
+    let selectedInstances = ['']; // 选中的实例数组，空字符串代表"全部"
+    let selectedAnnotators = ['']; // 选中的标注员数组，空字符串代表"全部标注员"
+    let qcList = [];
+    let currentQCIndex = 0;
+    let selectedQCResult = '';
+
+    // ========== 初始化 ==========
+    function init() {
+      // 设置日期默认最近7天到当天
+      const today = new Date('2026-05-08');
+      const weekAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
+      document.getElementById('dateEnd').value = formatDate(today);
+      document.getElementById('dateStart').value = formatDate(weekAgo);
+
+      // 加载标注员下拉
+      loadAnnotators();
+
+      // 加载实例按钮
+      loadInstanceButtons();
+
+      // 加载备注选项
+      loadNoteOptions();
+
+      // 渲染历史记录
+      renderHistory();
+    }
+
+    function formatDate(date) {
+      return date.toISOString().split('T')[0];
+    }
+
+    function loadAnnotators() {
+      const select = document.getElementById('annotatorSelect');
+      mockAnnotators.forEach(name => {
+        select.innerHTML += `<option value="${name}">${name}</option>`;
+      });
+    }
+
+    function loadInstanceButtons() {
+      const container = document.getElementById('instanceBtns');
+      instances.forEach(inst => {
+        container.innerHTML += `<button class="btn btn-default" data-instance="${inst}" onclick="selectInstance('${inst}')">${inst}</button>`;
+      });
+    }
+
+    function loadNoteOptions() {
+      const select = document.getElementById('qcNoteSelect');
+      const labels = window.APP_CONFIG ? window.APP_CONFIG.getLabels() : ['特殊资质缺失', '水印', '马赛克', '盗图', '类目错放', '图文不一致', '销售属性错误', 'SKU图不一致', '关键属性不一致', '站外引流', '无关信息', '多主体', '商品清单', '品类词堆砌', '禁售商品', '标题无关词', 'AI生成', '书籍版权页', '其他'];
+      let html = '<option value="">请选择</option>';
+      labels.forEach(label => {
+        html += `<option value="${label}">${label}</option>`;
+      });
+      select.innerHTML = html;
+    }
+
+    // ========== 抽取方式切换 ==========
+    window.setExtractType = function(type) {
+      extractType = type;
+      document.getElementById('btnRatio').classList.toggle('active', type === 'ratio');
+      document.getElementById('btnCount').classList.toggle('active', type === 'count');
+      document.getElementById('btnCustom').classList.toggle('active', type === 'custom');
+      
+      const valueInput = document.getElementById('extractValue');
+      const unitLabel = document.getElementById('extractUnit');
+      const valueLabel = document.getElementById('extractValueLabel');
+      const extractRow = document.getElementById('extractValueRow');
+      const customConfig = document.getElementById('customConfig');
+      
+      if (type === 'ratio') {
+        valueInput.value = 20;
+        valueInput.max = 100;
+        unitLabel.textContent = '%';
+        valueLabel.textContent = '抽取值：';
+        extractRow.style.display = 'flex';
+        customConfig.classList.remove('show');
+      } else if (type === 'count') {
+        valueInput.value = 50;
+        valueInput.max = 200;
+        unitLabel.textContent = '条';
+        valueLabel.textContent = '抽取值：';
+        extractRow.style.display = 'flex';
+        customConfig.classList.remove('show');
+      } else {
+        extractRow.style.display = 'none';
+        customConfig.classList.add('show');
+      }
+    };
+
+    // ========== 实例筛选（多选+互斥逻辑）==========
+    window.selectInstance = function(instance) {
+      // 点击"全部"时，取消其他所有选中
+      if (instance === '') {
+        selectedInstances = [''];
+        document.querySelectorAll('#instanceBtns .btn').forEach(btn => {
+          btn.classList.toggle('active', btn.dataset.instance === '');
+        });
+      } else {
+        // 点击单个实例：先移除"全部"
+        selectedInstances = selectedInstances.filter(i => i !== '');
+        // 切换该实例的选中状态
+        const idx = selectedInstances.indexOf(instance);
+        if (idx >= 0) {
+          selectedInstances.splice(idx, 1);
+        } else {
+          selectedInstances.push(instance);
+        }
+        // 如果没有选任何实例，自动选"全部"
+        if (selectedInstances.length === 0) {
+          selectedInstances = [''];
+          document.querySelectorAll('#instanceBtns .btn').forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.instance === '');
+          });
+        } else {
+          // 更新按钮状态（移除"全部"的高亮）
+          document.querySelectorAll('#instanceBtns .btn').forEach(btn => {
+            if (btn.dataset.instance === '') {
+              btn.classList.remove('active');
+            } else {
+              btn.classList.toggle('active', selectedInstances.includes(btn.dataset.instance));
+            }
+          });
+        }
+      }
+    };
+
+    // ========== 标注员筛选（多选+互斥逻辑）==========
+    window.selectAnnotator = function(annotator) {
+      // 点击"全部标注员"时，取消其他所有选中
+      if (annotator === '') {
+        selectedAnnotators = [''];
+        document.querySelectorAll('#annotatorBtns .btn').forEach(btn => {
+          btn.classList.toggle('active', btn.dataset.annotator === '');
+        });
+      } else {
+        // 点击单个标注员：先移除"全部标注员"
+        selectedAnnotators = selectedAnnotators.filter(a => a !== '');
+        // 切换该标注员的选中状态
+        const idx = selectedAnnotators.indexOf(annotator);
+        if (idx >= 0) {
+          selectedAnnotators.splice(idx, 1);
+        } else {
+          selectedAnnotators.push(annotator);
+        }
+        // 如果没有选任何标注员，自动选"全部标注员"
+        if (selectedAnnotators.length === 0) {
+          selectedAnnotators = [''];
+          document.querySelectorAll('#annotatorBtns .btn').forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.annotator === '');
+          });
+        } else {
+          // 更新按钮状态（移除"全部标注员"的高亮）
+          document.querySelectorAll('#annotatorBtns .btn').forEach(btn => {
+            if (btn.dataset.annotator === '') {
+              btn.classList.remove('active');
+            } else {
+              btn.classList.toggle('active', selectedAnnotators.includes(btn.dataset.annotator));
+            }
+          });
+        }
+      }
+    };
+
+    // ========== Tab切换 ==========
+    window.switchQCTab = function(tabId) {
+      document.querySelectorAll('.qc-tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.qc-tab-content').forEach(c => c.classList.remove('active'));
+      document.querySelector(`.qc-tab[data-tab="${tabId}"]`).classList.add('active');
+      document.getElementById(tabId).classList.add('active');
+    };
+
+    // ========== 开始质检 ==========
+    window.startQC = function() {
+      const value = parseInt(document.getElementById('extractValue').value) || 0;
+      let extractCount = 0;
+
+      // 【筛选条件】先排除"忽略"数据，只从"正确"和"错误"中抽取
+      let pool = qcDataPool.filter(d => d.annotation !== '忽略');
+
+      // 根据实例筛选条件过滤
+      if (!selectedInstances.includes('')) {
+        pool = pool.filter(d => selectedInstances.includes(d.instance || '实例01'));
+      }
+
+      // 根据标注员筛选条件过滤
+      if (!selectedAnnotators.includes('')) {
+        pool = pool.filter(d => selectedAnnotators.includes(d.annotator));
+      }
+
+      const validDataPool = pool;
+
+      if (extractType === 'ratio') {
+        extractCount = Math.ceil(validDataPool.length * value / 100);
+      } else if (extractType === 'count') {
+        extractCount = Math.min(value, validDataPool.length);
+      } else {
+        // 自定义：分别从错误和正确数据中抽取（已排除"忽略"）
+        const errorRate = parseInt(document.getElementById('errorRate').value) / 100;
+        const correctRate = parseInt(document.getElementById('correctRate').value) / 100;
+
+        const errorData = validDataPool.filter(d => d.annotation === '错误');
+        const correctData = validDataPool.filter(d => d.annotation === '正确');
+
+        const errorCount = Math.ceil(errorData.length * errorRate);
+        const correctCount = Math.ceil(correctData.length * correctRate);
+
+        // 随机抽取
+        const shuffledError = errorData.sort(() => Math.random() - 0.5);
+        const shuffledCorrect = correctData.sort(() => Math.random() - 0.5);
+
+        qcList = [
+          ...shuffledError.slice(0, errorCount),
+          ...shuffledCorrect.slice(0, correctCount)
+        ].map((item, idx) => ({
+          ...item,
+          qcStatus: '待质检',
+          qcArchived: false,
+          qcResult: '',
+          qcNote: '',
+          qcNotify: false,
+          qcIndex: idx
+        }));
+        
+        currentQCIndex = 0;
+        renderQCList();
+        updateStats();
+        
+        document.getElementById('qcListCard').style.display = 'block';
+        
+        // 添加到历史记录
+        const batchId = 'QC' + new Date().getTime().toString().slice(-8);
+        qcHistory.unshift({
+          batchId: batchId,
+          time: new Date().toLocaleString(),
+          extractType: '自定义',
+          extractValue: `错误${document.getElementById('errorRate').value}%,正确${document.getElementById('correctRate').value}%`,
+          total: qcList.length,
+          passed: 0,
+          fixed: 0,
+          rate: '0%',
+          isArchived: false
+        });
+        qcBatchData = {}; // 清空批次数据缓存
+        renderHistory();
+        return;
+      }
+
+      // 随机抽取（使用已过滤的有效数据）
+      const shuffled = [...validDataPool].sort(() => Math.random() - 0.5);
+      qcList = shuffled.slice(0, extractCount).map((item, idx) => ({
+        ...item,
+        qcStatus: '待质检',
+        qcArchived: false,
+        qcResult: '',
+        qcNote: '',
+        qcNotify: false,
+        qcIndex: idx
+      }));
+
+      currentQCIndex = 0;
+      renderQCList();
+      updateStats();
+
+      document.getElementById('qcListCard').style.display = 'block';
+
+      // 添加到历史记录
+      const batchId = 'QC' + new Date().getTime().toString().slice(-8);
+      qcHistory.unshift({
+        batchId: batchId,
+        time: new Date().toLocaleString(),
+        extractType: extractType === 'ratio' ? '按比例' : '按数量',
+        extractValue: extractType === 'ratio' ? value + '%' : value + '条',
+        total: qcList.length,
+        passed: 0,
+        fixed: 0,
+        rate: '0%',
+        isArchived: false
+      });
+      qcBatchData = {}; // 清空批次数据缓存
+      renderHistory();
+    };
+
+    // ========== 渲染质检列表 ==========
+    function renderQCList() {
+      const tbody = document.getElementById('qcTableBody');
+      const html = qcList.map((item, idx) => {
+        let annotationClass = '';
+        if (item.annotation === '正确') annotationClass = 'tag-correct';
+        else if (item.annotation === '错误') annotationClass = 'tag-error';
+        else if (item.annotation === '忽略') annotationClass = 'tag-ignore';
+
+        let statusClass = 'tag-pending';
+        let statusText = '待质检';
+        if (item.qcStatus === '已通过') { statusClass = 'tag-passed'; statusText = '已通过'; }
+        else if (item.qcStatus === '已修正') { statusClass = 'tag-fixed'; statusText = '已修正'; }
+
+        // 归档状态
+        const archiveClass = item.qcArchived ? 'tag-archived' : 'tag-unarchived';
+        const archiveText = item.qcArchived ? '已归档' : '未归档';
+
+        const notifyClass = item.qcNotify ? 'tag-yes' : 'tag-no';
+        const notifyText = item.qcNotify ? '是' : '否';
+
+        return `
+          <tr>
+            <td>${item.id}</td>
+            <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${item.name}</td>
+            <td>${item.category}</td>
+            <td>${item.aiResult}</td>
+            <td>${item.annotator}</td>
+            <td><span class="${annotationClass}">${item.annotation}</span></td>
+            <td>${item.note || '-'}</td>
+            <td><span class="${statusClass}">${statusText}</span></td>
+            <td><span class="${archiveClass}">${archiveText}</span></td>
+            <td><span class="${notifyClass}">${notifyText}</span></td>
+            <td><button class="btn btn-sm btn-primary" onclick="openQCModal(${idx})" ${item.qcStatus !== '待质检' ? 'disabled' : ''}>去质检</button></td>
+          </tr>
+        `;
+      }).join('');
+      tbody.innerHTML = html || '<tr><td colspan="11" class="empty-state">暂无质检任务</td></tr>';
+    }
+
+    // ========== 渲染历史记录 ==========
+    let qcBatchData = {}; // 缓存每批次的数据
+
+    // 为历史记录生成模拟明细数据
+    function getHistoryDetailData(batchId, total) {
+      if (qcBatchData[batchId]) return qcBatchData[batchId];
+
+      // 生成模拟数据
+      const mockData = [];
+      const annotators = ['张三', '李四', '王五', '赵六', '钱七', '孙八'];
+      const shops = ['运动旗舰店', '得力文房旗舰店', '乐童玩具专营店', '数码配件专营店', 'Nike官方旗舰店'];
+
+      for (let i = 0; i < Math.min(total, 15); i++) {
+        const isCorrect = Math.random() > 0.3;
+        mockData.push({
+          id: `PD101${String(i).padStart(2, '0')}`,
+          name: `历史商品${batchId}-${i + 1}`,
+          category: ['健身器材', '文具', '玩具', '手机配件'][i % 4],
+          annotator: annotators[i % annotators.length],
+          annotation: isCorrect ? '正确' : '错误',
+          note: isCorrect ? '' : '类目判断错误',
+          shop: shops[i % shops.length],
+          qcStatus: Math.random() > 0.2 ? (isCorrect ? '已通过' : '已修正') : '待质检',
+          qcArchived: true,
+          qcNotify: Math.random() > 0.5
+        });
+      }
+
+      qcBatchData[batchId] = mockData;
+      return mockData;
+    }
+
+    window.toggleHistoryDetail = function(batchId) {
+      const detailRow = document.getElementById('detail-' + batchId);
+      if (detailRow) {
+        detailRow.classList.toggle('show');
+      }
+    };
+
+    window.exportBatch = function(batchId) {
+      const data = qcBatchData[batchId] || [];
+      alert(`将导出该批次 ${data.length} 条已质检数据为 CSV 文件，请选择保存位置。`);
+    };
+
+    function renderHistory() {
+      const tbody = document.getElementById('historyTableBody');
+      const html = qcHistory.map(item => {
+        const archiveClass = item.isArchived ? 'tag-archived' : 'tag-unarchived';
+        const archiveText = item.isArchived ? '已归档' : '未归档';
+
+        // 获取该批次的明细数据
+        const detailData = getHistoryDetailData(item.batchId, item.total);
+        const previewData = detailData.slice(0, 10);
+
+        return `
+          <tr>
+            <td>${item.batchId}</td>
+            <td>${item.time}</td>
+            <td>${item.extractType}</td>
+            <td>${item.total}</td>
+            <td>${item.passed}</td>
+            <td>${item.fixed}</td>
+            <td>${item.rate}</td>
+            <td><span class="${archiveClass}">${archiveText}</span></td>
+            <td><button class="btn btn-sm btn-default" onclick="toggleHistoryDetail('${item.batchId}')">查看详情</button></td>
+          </tr>
+          <tr id="detail-${item.batchId}" class="history-detail">
+            <td colspan="9">
+              <!-- 统计摘要卡片 -->
+              <div class="history-summary-cards" style="display:flex;gap:16px;margin-bottom:16px;">
+                <div style="flex:1;background:#fafbfc;border-radius:8px;padding:12px;text-align:center;border:1px solid var(--border-light);">
+                  <div style="font-size:12px;color:var(--text-secondary);">抽取总数</div>
+                  <div style="font-size:20px;font-weight:600;color:var(--primary);">${item.total}</div>
+                </div>
+                <div style="flex:1;background:#fafbfc;border-radius:8px;padding:12px;text-align:center;border:1px solid var(--border-light);">
+                  <div style="font-size:12px;color:var(--text-secondary);">通过数</div>
+                  <div style="font-size:20px;font-weight:600;color:var(--success);">${item.passed}</div>
+                </div>
+                <div style="flex:1;background:#fafbfc;border-radius:8px;padding:12px;text-align:center;border:1px solid var(--border-light);">
+                  <div style="font-size:12px;color:var(--text-secondary);">修正数</div>
+                  <div style="font-size:20px;font-weight:600;color:var(--warning);">${item.fixed}</div>
+                </div>
+                <div style="flex:1;background:#fafbfc;border-radius:8px;padding:12px;text-align:center;border:1px solid var(--border-light);">
+                  <div style="font-size:12px;color:var(--text-secondary);">修正率</div>
+                  <div style="font-size:20px;font-weight:600;color:var(--text-primary);">${item.rate}</div>
+                </div>
+              </div>
+              <!-- 明细预览表格 -->
+              <div class="history-detail-table">
+                <table class="data-table" style="font-size:12px;">
+                  <thead>
+                    <tr>
+                      <th>商品ID</th>
+                      <th>商品名称</th>
+                      <th>标注员</th>
+                      <th>原标注结果</th>
+                      <th>修正后结果</th>
+                      <th>是否推送</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    ${previewData.map(d => `
+                      <tr>
+                        <td>${d.id}</td>
+                        <td style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${d.name}</td>
+                        <td>${d.annotator}</td>
+                        <td><span class="${d.annotation === '正确' ? 'tag-correct' : 'tag-error'}">${d.annotation}</span></td>
+                        <td><span class="${d.qcStatus === '已通过' ? 'tag-passed' : d.qcStatus === '已修正' ? 'tag-fixed' : 'tag-pending'}">${d.qcStatus || '待质检'}</span></td>
+                        <td><span class="${d.qcNotify ? 'tag-yes' : 'tag-no'}">${d.qcNotify ? '是' : '否'}</span></td>
+                      </tr>
+                    `).join('')}
+                  </tbody>
+                </table>
+                ${item.total > 10 ? `<div style="margin-top:8px;color:var(--text-muted);font-size:12px;">仅展示前10条，共 ${item.total} 条完整数据。点击"导出此批次数据"可下载全部明细。</div>` : ''}
+              </div>
+              <!-- 导出按钮 -->
+              <div style="margin-top:12px;text-align:right;">
+                <button class="btn btn-sm btn-default" onclick="exportBatch('${item.batchId}')">📥 导出此批次数据</button>
+              </div>
+            </td>
+          </tr>
+        `;
+      }).join('');
+      tbody.innerHTML = html;
+    }
+
+    // ========== 更新统计 ==========
+    function updateStats() {
+      const total = qcList.length;
+      const checked = qcList.filter(item => item.qcStatus !== '待质检').length;
+      const passed = qcList.filter(item => item.qcStatus === '已通过').length;
+      const fixed = qcList.filter(item => item.qcStatus === '已修正').length;
+      const rate = checked > 0 ? Math.round(fixed / checked * 100) + '%' : '0%';
+
+      document.getElementById('statTotal').textContent = total;
+      document.getElementById('statChecked').textContent = checked;
+      document.getElementById('statPassed').textContent = passed;
+      document.getElementById('statFixed').textContent = fixed;
+      document.getElementById('statRate').textContent = rate;
+
+      // 更新历史记录
+      if (qcHistory.length > 0) {
+        qcHistory[0].passed = passed;
+        qcHistory[0].fixed = fixed;
+        qcHistory[0].rate = rate;
+      }
+    }
+
+    // ========== 质检弹窗 ==========
+    let qcImageList = [];
+    let qcCurrentImageIndex = 0;
+
+    window.openQCModal = function(idx) {
+      currentQCIndex = idx;
+      const item = qcList[idx];
+      selectedQCResult = '';
+
+      // 填充左侧信息
+      document.getElementById('qcProductTitle').textContent = item.name;
+      document.getElementById('qcCategory').textContent = item.category;
+      document.getElementById('qcShop').textContent = item.shop;
+      document.getElementById('qcProductId').textContent = item.id;
+
+      // 填充图片 - 按类型分行显示
+      renderQCImages(item);
+
+      // 填充右侧信息
+      document.getElementById('qcAnnotator').textContent = item.annotator;
+      
+      let resultHtml = '';
+      if (item.annotation === '正确') resultHtml = '<span class="tag-correct">正确</span>';
+      else if (item.annotation === '错误') resultHtml = '<span class="tag-error">错误</span>';
+      else if (item.annotation === '忽略') resultHtml = '<span class="tag-ignore">忽略</span>';
+      document.getElementById('qcOriginalResult').innerHTML = resultHtml;
+      
+      document.getElementById('qcOriginalNote').textContent = item.note || '-';
+      document.getElementById('qcAiResult').textContent = item.aiResult;
+      document.getElementById('qcAiReason').textContent = item.aiReason || '-';
+
+      // 重置表单
+      document.querySelectorAll('.qc-annotation-btn').forEach(btn => btn.classList.remove('active'));
+      document.getElementById('qcNoteArea').style.display = 'none';
+      document.getElementById('qcNoteSelect').value = '';
+      document.getElementById('qcCommentInput').value = '';
+      document.getElementById('qcSolutionInput').value = '';
+      document.getElementById('qcNotifyCheck').checked = true;
+
+      // 更新翻页按钮
+      document.getElementById('qcPrevBtn').disabled = currentQCIndex === 0;
+      document.getElementById('qcNextBtn').disabled = currentQCIndex === qcList.length - 1;
+
+      document.getElementById('qcModal').classList.add('active');
+    };
+
+    // ========== 渲染质检图片（按类型分行） ==========
+    function renderQCImages(item) {
+      const container = document.getElementById('qcImages');
+      qcImageList = [];
+
+      // 模拟各类型图片
+      const mainImages = [1, 2, 3, 4];
+      const detailImages = [5, 6];
+      const skuImages = [7, 8];
+      const spuImages = [9, 10];
+
+      let html = '';
+
+      // 主图
+      if (mainImages.length > 0) {
+        html += '<div class="qc-thumbnail-row"><div class="qc-thumbnail-label">主图</div><div class="qc-thumbnail-wrapper">';
+        mainImages.forEach((n, i) => {
+          const url = `https://picsum.photos/120/90?random=${item.id}${n}`;
+          qcImageList.push(url);
+          html += `<img class="qc-thumbnail-img" src="${url}" onclick="openQCImagePreview(${qcImageList.length - 1})">`;
+        });
+        html += '</div></div>';
+      }
+
+      // 详情图
+      if (detailImages.length > 0) {
+        html += '<div class="qc-thumbnail-row"><div class="qc-thumbnail-label">详情图</div><div class="qc-thumbnail-wrapper">';
+        detailImages.forEach((n, i) => {
+          const url = `https://picsum.photos/120/90?random=${item.id}${n}`;
+          qcImageList.push(url);
+          html += `<img class="qc-thumbnail-img" src="${url}" onclick="openQCImagePreview(${qcImageList.length - 1})">`;
+        });
+        html += '</div></div>';
+      }
+
+      // SKU图
+      if (skuImages.length > 0) {
+        html += '<div class="qc-thumbnail-row"><div class="qc-thumbnail-label">SKU图</div><div class="qc-thumbnail-wrapper">';
+        skuImages.forEach((n, i) => {
+          const url = `https://picsum.photos/120/90?random=${item.id}${n}`;
+          qcImageList.push(url);
+          html += `<img class="qc-thumbnail-img" src="${url}" onclick="openQCImagePreview(${qcImageList.length - 1})">`;
+        });
+        html += '</div></div>';
+      }
+
+      // SPU图
+      if (spuImages.length > 0) {
+        html += '<div class="qc-thumbnail-row"><div class="qc-thumbnail-label">SPU图</div><div class="qc-thumbnail-wrapper">';
+        spuImages.forEach((n, i) => {
+          const url = `https://picsum.photos/120/90?random=${item.id}${n}`;
+          qcImageList.push(url);
+          html += `<img class="qc-thumbnail-img" src="${url}" onclick="openQCImagePreview(${qcImageList.length - 1})">`;
+        });
+        html += '</div></div>';
+      }
+
+      container.innerHTML = html || '<div style="color:var(--text-muted)">暂无图片</div>';
+    }
+
+    // ========== 图片预览 ==========
+    window.openQCImagePreview = function(idx) {
+      qcCurrentImageIndex = idx;
+      showQCPreviewImage();
+      document.getElementById('qcImagePreview').classList.add('active');
+    };
+
+    function showQCPreviewImage() {
+      document.getElementById('qcPreviewImg').src = qcImageList[qcCurrentImageIndex];
+      document.getElementById('qcPreviewCounter').textContent = (qcCurrentImageIndex + 1) + ' / ' + qcImageList.length;
+    }
+
+    window.prevQCImage = function() {
+      if (qcCurrentImageIndex > 0) {
+        qcCurrentImageIndex--;
+        showQCPreviewImage();
+      }
+    };
+
+    window.nextQCImage = function() {
+      if (qcCurrentImageIndex < qcImageList.length - 1) {
+        qcCurrentImageIndex++;
+        showQCPreviewImage();
+      }
+    };
+
+    window.closeQCImagePreview = function() {
+      document.getElementById('qcImagePreview').classList.remove('active');
+    };
+
+    window.selectQCResult = function(result) {
+      selectedQCResult = result;
+      document.querySelectorAll('.qc-annotation-btn').forEach(btn => btn.classList.remove('active'));
+      document.querySelector(`.qc-annotation-btn.${result}`).classList.add('active');
+
+      const noteArea = document.getElementById('qcNoteArea');
+      noteArea.style.display = result === 'error' ? 'block' : 'none';
+    };
+
+    window.closeQCModal = function() {
+      document.getElementById('qcModal').classList.remove('active');
+    };
+
+    window.skipQC = function() {
+      closeQCModal();
+    };
+
+    window.submitQC = function(shouldPush) {
+      if (!selectedQCResult) {
+        showToast('请选择修正结果', true);
+        return;
+      }
+
+      if (selectedQCResult === 'error') {
+        const note = document.getElementById('qcNoteSelect').value;
+        if (!note) {
+          showToast('请选择标注备注', true);
+          return;
+        }
+      }
+
+      const item = qcList[currentQCIndex];
+      const solution = document.getElementById('qcSolutionInput').value;
+      const notify = shouldPush || document.getElementById('qcNotifyCheck').checked;
+
+      // 判断是否修正
+      const isFixed = selectedQCResult !== item.annotation || 
+        (selectedQCResult === 'error' && document.getElementById('qcNoteSelect').value !== item.note);
+
+      item.qcStatus = isFixed ? '已修正' : '已通过';
+      item.qcResult = selectedQCResult;
+      item.qcNote = selectedQCResult === 'error' ? document.getElementById('qcNoteSelect').value : '';
+      item.qcComment = document.getElementById('qcCommentInput').value;
+      item.qcSolution = solution;
+      item.qcNotify = notify;
+      // 【修改二】提交后自动归档
+      item.qcArchived = true;
+
+      // 保存到当前批次的缓存数据中
+      const batchId = qcHistory[0]?.batchId;
+      if (batchId) {
+        qcBatchData[batchId] = qcList;
+        qcHistory[0].detailData = qcList;
+        qcHistory[0].isArchived = true;
+      }
+
+      renderQCList();
+      renderHistory();
+      updateStats();
+      closeQCModal();
+
+      if (shouldPush && notify) {
+        showToast(`已保存修正结果，并将推送至标注员 ${item.annotator}（已自动归档）`);
+      } else {
+        showToast(isFixed ? '已修正（已自动归档）' : '已通过（已自动归档）');
+      }
+    };
+
+    window.prevQC = function() {
+      if (currentQCIndex > 0) {
+        openQCModal(currentQCIndex - 1);
+      }
+    };
+
+    window.nextQC = function() {
+      if (currentQCIndex < qcList.length - 1) {
+        openQCModal(currentQCIndex + 1);
+      }
+    };
+
+    // ========== 通用函数 ==========
+    function showToast(msg, isError) {
+      const t = document.getElementById('toast');
+      t.textContent = msg;
+      t.style.background = isError ? 'var(--danger)' : 'var(--success)';
+      t.classList.add('show');
+      setTimeout(() => t.classList.remove('show'), 3000);
+    }
+
+    // ========== 图片预览弹窗样式 ==========
+    const previewStyle = document.createElement('style');
+    previewStyle.textContent = `
+      .qc-image-preview-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.9); display: flex; align-items: center; justify-content: center; z-index: 2000; opacity: 0; visibility: hidden; transition: all 0.3s; }
+      .qc-image-preview-overlay.active { opacity: 1; visibility: visible; }
+      .qc-image-preview-overlay img { max-width: 90%; max-height: 90%; border-radius: 4px; }
+      .qc-preview-nav { position: absolute; top: 50%; transform: translateY(-50%); background: rgba(255,255,255,0.1); border: none; color: #fff; font-size: 32px; padding: 16px; cursor: pointer; border-radius: var(--radius); }
+      .qc-preview-nav:hover { background: rgba(255,255,255,0.2); }
+      .qc-preview-prev { left: 20px; }
+      .qc-preview-next { right: 20px; }
+      .qc-preview-close-btn { position: absolute; top: 20px; right: 20px; background: none; border: none; color: #fff; font-size: 28px; cursor: pointer; }
+      .qc-preview-counter { position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); color: #fff; font-size: 14px; }
+    `;
+    document.head.appendChild(previewStyle);
+
+    // 添加图片预览弹窗HTML
+    const previewHtml = `
+      <div class="qc-image-preview-overlay" id="qcImagePreview">
+        <button class="qc-preview-close-btn" onclick="closeQCImagePreview()">&times;</button>
+        <button class="qc-preview-nav qc-preview-prev" onclick="prevQCImage()">&#139;</button>
+        <img id="qcPreviewImg" src="" alt="">
+        <button class="qc-preview-nav qc-preview-next" onclick="nextQCImage()">&#155;</button>
+        <span class="qc-preview-counter" id="qcPreviewCounter">1 / 1</span>
+      </div>
+    `;
+    document.body.insertAdjacentHTML('beforeend', previewHtml);
+
+    // 初始化
+    init();
+  </script>
+</body>
+</html>

@@ -1,0 +1,672 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>智能分析中心</title>
+  <link rel="stylesheet" href="/static/common.css">
+  <script src="/static/config.js"></script>
+  <style>
+    body { background: var(--bg); min-height: 100vh; }
+    .page-container { padding: 20px 24px; max-width: 1400px; }
+    .page-header { margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; }
+    .page-title { font-size: 20px; font-weight: 600; color: var(--text-primary); }
+    .page-subtitle { font-size: 14px; color: var(--text-secondary); margin-top: 4px; }
+    .page-header-right { display: flex; gap: 12px; }
+
+    /* 卡片 */
+    .card { background: var(--white); border-radius: var(--radius-lg); box-shadow: var(--shadow); padding: 16px; margin-bottom: 16px; }
+    .card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid var(--border-light); }
+    .card-title { font-size: 15px; font-weight: 600; }
+
+    /* 统计卡片 - 顶部 */
+    .overview-cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 20px; }
+    .overview-card { background: var(--white); border-radius: var(--radius-lg); box-shadow: var(--shadow); padding: 16px 20px; }
+    .overview-card-label { font-size: 13px; color: var(--text-secondary); margin-bottom: 4px; }
+    .overview-card-value { font-size: 24px; font-weight: 700; color: var(--primary); }
+    .overview-card-value.warning { color: var(--warning); }
+    .overview-card-value.danger { color: var(--danger); }
+    .overview-card-value.success { color: var(--success); }
+
+    /* Tab切换 */
+    .analysis-tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); margin-bottom: 16px; }
+    .analysis-tab { padding: 10px 20px; font-size: 14px; color: var(--text-secondary); cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+    .analysis-tab:hover { color: var(--primary); }
+    .analysis-tab.active { color: var(--primary); border-bottom-color: var(--primary); font-weight: 500; }
+    .analysis-tab-content { display: none; }
+    .analysis-tab-content.active { display: block; }
+
+    /* 数据表格 */
+    .data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .data-table thead th { background: #fafbfc; color: var(--text-secondary); font-weight: 500; text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+    .data-table tbody td { padding: 10px 12px; border-bottom: 1px solid var(--border-light); }
+    .data-table tbody tr:hover { background: #f8f9ff; }
+
+    /* 标签样式 */
+    .tag { padding: 2px 8px; border-radius: 3px; font-size: 12px; display: inline-block; margin-right: 4px; margin-bottom: 2px; }
+    .tag-error-type { background: var(--danger-light); color: var(--danger); }
+    .tag-action { background: var(--primary-light); color: var(--primary); }
+    .tag-warning { background: var(--warning-light); color: var(--warning); }
+    .tag-success { background: var(--success-light); color: var(--success); }
+
+    /* 趋势图迷你卡片 */
+    .trend-mini { display: flex; align-items: center; gap: 8px; }
+    .trend-num { font-size: 14px; font-weight: 600; }
+    .trend-sparkline { display: flex; align-items: flex-end; gap: 2px; height: 20px; }
+    .trend-sparkline-bar { width: 4px; background: var(--primary); border-radius: 1px; }
+
+    /* 搜索框 */
+    .search-box { display: flex; gap: 12px; margin-bottom: 16px; }
+    .search-input { flex: 1; padding: 8px 12px; font-size: 13px; border: 1px solid var(--border); border-radius: var(--radius); }
+    .search-input:focus { outline: none; border-color: var(--primary); }
+
+    /* 一致性分析卡片 */
+    .consistency-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+    .consistency-card { background: var(--bg); border-radius: var(--radius); padding: 16px; }
+    .consistency-card-title { font-size: 14px; font-weight: 600; margin-bottom: 8px; }
+    .consistency-card-rate { font-size: 24px; font-weight: 700; color: var(--danger); margin-bottom: 4px; }
+    .consistency-card-label { font-size: 12px; color: var(--text-muted); }
+    .consistency-card-desc { font-size: 12px; color: var(--text-secondary); margin-top: 8px; }
+
+    /* 模态框 */
+    .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.45); display: flex; align-items: center; justify-content: center; z-index: 1000; opacity: 0; visibility: hidden; transition: all 0.25s; }
+    .modal-overlay.active { opacity: 1; visibility: visible; }
+    .modal { background: var(--white); border-radius: var(--radius-lg); box-shadow: var(--shadow-lg); width: 90%; max-width: 800px; max-height: 85vh; overflow: hidden; display: flex; flex-direction: column; }
+    .modal-header { display: flex; align-items: center; justify-content: space-between; padding: 16px 20px; border-bottom: 1px solid var(--border-light); }
+    .modal-title { font-size: 15px; font-weight: 600; }
+    .modal-close { background: none; border: none; font-size: 20px; color: var(--text-muted); cursor: pointer; padding: 0; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; border-radius: var(--radius); }
+    .modal-close:hover { background: var(--border-light); }
+    .modal-body { padding: 20px; overflow-y: auto; flex: 1; }
+    .modal-footer { display: flex; align-items: center; justify-content: flex-end; gap: 12px; padding: 12px 20px; border-top: 1px solid var(--border-light); background: #fafbfc; }
+
+    /* 错误案例表格 */
+    .case-table { font-size: 13px; }
+    .case-table th { background: #fafbfc; }
+    .case-table td { padding: 8px 12px; border-bottom: 1px solid var(--border-light); }
+
+    /* 知识库源卡片 */
+    .source-cards { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; margin-bottom: 20px; }
+    .source-card { background: var(--bg); border-radius: var(--radius); padding: 12px; cursor: pointer; transition: all 0.2s; border: 2px solid transparent; }
+    .source-card:hover { border-color: var(--primary-light); }
+    .source-card.active { border-color: var(--primary); background: var(--primary-light); }
+    .source-card-title { font-size: 13px; font-weight: 600; margin-bottom: 4px; }
+    .source-card-desc { font-size: 11px; color: var(--text-muted); }
+    .source-card-count { font-size: 20px; font-weight: 700; color: var(--primary); margin-top: 8px; }
+
+    /* 搜索结果 */
+    .search-result-item { padding: 12px; border-bottom: 1px solid var(--border-light); cursor: pointer; transition: background 0.2s; }
+    .search-result-item:hover { background: var(--bg); }
+    .search-result-item:last-child { border-bottom: none; }
+    .search-result-title { font-size: 14px; font-weight: 600; margin-bottom: 4px; }
+    .search-result-source { font-size: 11px; color: var(--primary); margin-bottom: 4px; }
+    .search-result-summary { font-size: 12px; color: var(--text-secondary); }
+
+    /* 提示 */
+    .toast { position: fixed; top: 20px; left: 50%; transform: translateX(-50%); padding: 12px 24px; background: var(--success); color: #fff; font-size: 13px; border-radius: var(--radius); z-index: 2000; opacity: 0; visibility: hidden; transition: all 0.3s; }
+    .toast.show { opacity: 1; visibility: visible; }
+
+    .empty-state { text-align: center; padding: 40px; color: var(--text-muted); }
+    .loading { text-align: center; padding: 40px; color: var(--text-muted); }
+
+    /* 筛选按钮 */
+    .filter-row { display: flex; gap: 12px; margin-bottom: 16px; align-items: center; flex-wrap: wrap; }
+    .filter-label { font-size: 13px; color: var(--text-secondary); }
+    .btn { padding: 6px 12px; font-size: 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--white); cursor: pointer; transition: all 0.2s; }
+    .btn:hover { border-color: var(--primary); color: var(--primary); }
+    .btn.active { background: var(--primary); color: #fff; border-color: var(--primary); }
+    .btn-primary { background: var(--primary); color: #fff; border: 1px solid var(--primary); }
+    .btn-primary:hover { background: #3b82f6; border-color: #3b82f6; }
+
+    /* 修正率趋势数字 */
+    .rate-trend { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; }
+    .rate-up { color: var(--danger); }
+    .rate-down { color: var(--success); }
+  </style>
+</head>
+<body>
+  <div class="page-container">
+    <div class="page-header">
+      <div>
+        <h1 class="page-title">💡 智能分析中心</h1>
+        <p class="page-subtitle">标注员问题分析、知识库搜索与问答</p>
+      </div>
+      <div class="page-header-right">
+        <button class="btn btn-default" onclick="refreshData()">🔄 刷新数据</button>
+        <button class="btn btn-default" onclick="exportReport()">📥 导出报告</button>
+      </div>
+    </div>
+
+    <div class="toast" id="toast"></div>
+
+    <!-- Tab切换 -->
+    <div class="analysis-tabs">
+      <div class="analysis-tab active" data-tab="tabOverview" onclick="switchTab('tabOverview')">📊 数据概览</div>
+      <div class="analysis-tab" data-tab="tabAnnotator" onclick="switchTab('tabAnnotator')">👤 标注员问题</div>
+      <div class="analysis-tab" data-tab="tabKnowledge" onclick="switchTab('tabKnowledge')">📚 知识库 & 问答</div>
+    </div>
+
+    <!-- Tab1: 数据概览 -->
+    <div class="analysis-tab-content active" id="tabOverview">
+      <!-- 顶部统计卡片 -->
+      <div class="overview-cards">
+        <div class="overview-card">
+          <div class="overview-card-label">本期标注总量</div>
+          <div class="overview-card-value" id="overviewTotal">-</div>
+        </div>
+        <div class="overview-card">
+          <div class="overview-card-label">质检修正数</div>
+          <div class="overview-card-value" id="overviewQcCount">-</div>
+        </div>
+        <div class="overview-card">
+          <div class="overview-card-label">整体修正率</div>
+          <div class="overview-card-value" id="overviewRate">-</div>
+        </div>
+        <div class="overview-card">
+          <div class="overview-card-label">待复审数量</div>
+          <div class="overview-card-value warning" id="overviewPending">-</div>
+        </div>
+      </div>
+
+      <!-- 趋势图表占位 -->
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">最近7天趋势</span>
+        </div>
+        <div style="height: 200px; display: flex; align-items: flex-end; justify-content: space-around; padding: 20px;" id="trendChart">
+          <!-- 动态生成 -->
+        </div>
+      </div>
+    </div>
+
+    <!-- Tab2: 标注员问题分析 -->
+    <div class="analysis-tab-content" id="tabAnnotator">
+      <!-- Tab4 顶部统计卡片 -->
+      <div class="overview-cards">
+        <div class="overview-card">
+          <div class="overview-card-label">总标注员数</div>
+          <div class="overview-card-value" id="statTotalAnnotators">-</div>
+        </div>
+        <div class="overview-card">
+          <div class="overview-card-label">被质检修正总数</div>
+          <div class="overview-card-value warning" id="statTotalCorrected">-</div>
+        </div>
+        <div class="overview-card">
+          <div class="overview-card-label">常见错误类型数</div>
+          <div class="overview-card-value" id="statErrorTypes">-</div>
+        </div>
+        <div class="overview-card">
+          <div class="overview-card-label">需重点关注标注员数</div>
+          <div class="overview-card-value danger" id="statFocusAnnotators">-</div>
+        </div>
+      </div>
+
+      <!-- 筛选条件 -->
+      <div class="card">
+        <div class="filter-row">
+          <span class="filter-label">规则组筛选：</span>
+          <button class="btn active" data-group="" onclick="filterByGroup('')">全部</button>
+          <button class="btn" data-group="浙江网超审核规则" onclick="filterByGroup('浙江网超审核规则')">浙江网超审核规则</button>
+          <button class="btn" data-group="浙江乐采网超审核规则" onclick="filterByGroup('浙江乐采网超审核规则')">浙江乐采网超审核规则</button>
+          <button class="btn" data-group="其他乐采网超审核规则" onclick="filterByGroup('其他乐采网超审核规则')">其他乐采网超审核规则</button>
+        </div>
+      </div>
+
+      <!-- 按标注员统计表格 -->
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">按标注员统计</span>
+        </div>
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>标注员姓名</th>
+              <th>所属规则组</th>
+              <th>总标注量</th>
+              <th>被修正量</th>
+              <th>修正率</th>
+              <th>常犯错误类型(Top3)</th>
+              <th>近30天修正率趋势</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody id="annotatorTableBody">
+            <tr><td colspan="8" class="loading">加载中...</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- 按错误类型统计表格 -->
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">按错误类型统计</span>
+        </div>
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>错误类型(标签)</th>
+              <th>出现次数</th>
+              <th>涉及标注员数</th>
+              <th>主要出现在哪个规则下</th>
+              <th>典型错误示例(解决方案)</th>
+            </tr>
+          </thead>
+          <tbody id="errorTypeTableBody">
+            <tr><td colspan="5" class="loading">加载中...</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- 一致性分析卡片 -->
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">一致性分析</span>
+        </div>
+        <div class="consistency-cards" id="consistencyCards">
+          <tr><td colspan="3" class="loading">加载中...</td></tr>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tab3: 知识库 & 问答 -->
+    <div class="analysis-tab-content" id="tabKnowledge">
+      <!-- 知识库内容源卡片 -->
+      <div class="source-cards" id="sourceCards">
+        <!-- 动态生成 -->
+      </div>
+
+      <!-- 搜索框 -->
+      <div class="search-box">
+        <input type="text" class="search-input" id="searchInput" placeholder="搜索知识库内容..." onkeypress="handleSearchKeypress(event)">
+        <button class="btn btn-primary" onclick="doSearch()">搜索</button>
+      </div>
+
+      <!-- 搜索结果 -->
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">搜索结果</span>
+          <span style="font-size: 12px; color: var(--text-muted);" id="resultCount"></span>
+        </div>
+        <div id="searchResults">
+          <div class="empty-state">请输入关键词进行搜索</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 标注员详情弹窗 -->
+  <div class="modal-overlay" id="detailModal">
+    <div class="modal">
+      <div class="modal-header">
+        <span class="modal-title" id="detailModalTitle">标注员详情</span>
+        <button class="modal-close" onclick="closeDetailModal()">×</button>
+      </div>
+      <div class="modal-body">
+        <table class="data-table case-table">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>商品名称</th>
+              <th>原始标注</th>
+              <th>修正后结果</th>
+              <th>修正原因</th>
+              <th>质检人</th>
+              <th>时间</th>
+            </tr>
+          </thead>
+          <tbody id="detailTableBody">
+            <!-- 动态生成 -->
+          </tbody>
+        </table>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-default" onclick="closeDetailModal()">关闭</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ========== 状态变量 ==========
+    let currentTab = 'tabOverview';
+    let annotatorData = [];
+    let errorTypeData = [];
+    let consistencyData = [];
+    let selectedGroup = '';
+
+    // ========== 初始化 ==========
+    function init() {
+      loadOverview();
+      loadAnnotatorIssues();
+      loadKnowledgeSources();
+    }
+
+    // ========== Tab切换 ==========
+    window.switchTab = function(tabId) {
+      currentTab = tabId;
+      document.querySelectorAll('.analysis-tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.analysis-tab-content').forEach(c => c.classList.remove('active'));
+      document.querySelector(`.analysis-tab[data-tab="${tabId}"]`).classList.add('active');
+      document.getElementById(tabId).classList.add('active');
+    };
+
+    // ========== 加载概览数据 ==========
+    async function loadOverview() {
+      try {
+        const resp = await fetch('/api/analysis/overview');
+        const ret = await resp.json();
+        if (ret.success) {
+          const d = ret.data;
+          document.getElementById('overviewTotal').textContent = d.total_annotations.toLocaleString();
+          document.getElementById('overviewQcCount').textContent = d.total_qc_records.toLocaleString();
+          document.getElementById('overviewRate').textContent = d.correction_rate + '%';
+          document.getElementById('overviewPending').textContent = d.pending_review.toLocaleString();
+          renderTrendChart(d.trend);
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    // ========== 渲染趋势图 ==========
+    function renderTrendChart(trend) {
+      const container = document.getElementById('trendChart');
+      const maxVal = Math.max(...trend.annotations);
+      const html = trend.dates.map((date, i) => {
+        const annH = (trend.annotations[i] / maxVal) * 160;
+        const corH = (trend.corrections[i] / maxVal) * 160;
+        return `
+          <div style="text-align:center;">
+            <div style="font-size:11px;color:var(--text-muted);margin-bottom:8px;">${date}</div>
+            <div style="display:flex;gap:4px;align-items:flex-end;height:160px;">
+              <div style="width:20px;background:var(--primary);border-radius:2px;height:${annH}px;"></div>
+              <div style="width:20px;background:var(--danger);border-radius:2px;height:${corH}px;"></div>
+            </div>
+            <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">
+              <span style="color:var(--primary)">${trend.annotations[i]}</span> /
+              <span style="color:var(--danger)">${trend.corrections[i]}</span>
+            </div>
+          </div>
+        `;
+      }).join('');
+      container.innerHTML = html;
+    }
+
+    // ========== 加载标注员问题数据 ==========
+    async function loadAnnotatorIssues() {
+      try {
+        const resp = await fetch('/api/analysis/annotator-issues');
+        const ret = await resp.json();
+        if (ret.success) {
+          const d = ret.data;
+          // 更新统计卡片
+          document.getElementById('statTotalAnnotators').textContent = d.overview.total_annotators;
+          document.getElementById('statTotalCorrected').textContent = d.overview.total_corrected;
+          document.getElementById('statErrorTypes').textContent = d.overview.error_type_count;
+          document.getElementById('statFocusAnnotators').textContent = d.overview.focus_annotators;
+
+          // 保存数据
+          annotatorData = d.annotator_stats;
+          errorTypeData = d.error_type_stats;
+          consistencyData = d.consistency;
+
+          // 渲染表格
+          renderAnnotatorTable();
+          renderErrorTypeTable();
+          renderConsistencyCards();
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    // ========== 渲染标注员表格 ==========
+    function renderAnnotatorTable() {
+      const tbody = document.getElementById('annotatorTableBody');
+      let data = annotatorData;
+
+      // 按规则组筛选
+      if (selectedGroup) {
+        data = data.filter(a => a.group === selectedGroup);
+      }
+
+      if (data.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="8" class="empty-state">暂无数据</td></tr>';
+        return;
+      }
+
+      const html = data.map(a => {
+        // 生成迷你趋势条
+        const trendBars = a.trend.map(v => {
+          const h = Math.max(4, v * 2);
+          return `<div class="trend-sparkline-bar" style="height:${h}px;"></div>`;
+        }).join('');
+
+        // 生成错误类型标签
+        const errorTags = a.top_error_tags.map(t =>
+          `<span class="tag tag-error-type">${t}</span>`
+        ).join('');
+
+        // 修正率样式
+        const rateClass = a.correction_rate > 20 ? 'danger' : a.correction_rate > 10 ? 'warning' : 'success';
+
+        return `
+          <tr>
+            <td>${a.name}</td>
+            <td>${a.group}</td>
+            <td>${a.total}</td>
+            <td>${a.corrected}</td>
+            <td><span class="tag tag-${rateClass}">${a.correction_rate}%</span></td>
+            <td>${errorTags}</td>
+            <td>
+              <div class="trend-mini">
+                <div class="trend-sparkline">${trendBars}</div>
+              </div>
+            </td>
+            <td>
+              <button class="btn btn-sm btn-primary" onclick="showAnnotatorDetail('${a.name}')">查看详情</button>
+            </td>
+          </tr>
+        `;
+      }).join('');
+      tbody.innerHTML = html;
+    }
+
+    // ========== 渲染错误类型表格 ==========
+    function renderErrorTypeTable() {
+      const tbody = document.getElementById('errorTypeTableBody');
+      if (errorTypeData.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" class="empty-state">暂无数据</td></tr>';
+        return;
+      }
+
+      const html = errorTypeData.map(e => {
+        return `
+          <tr>
+            <td><span class="tag tag-error-type">${e.tag}</span></td>
+            <td>${e.count}</td>
+            <td>${e.annotator_count}</td>
+            <td>${e.main_rule}</td>
+            <td style="max-width:300px;font-size:12px;color:var(--text-secondary);">${e.example_solution}</td>
+          </tr>
+        `;
+      }).join('');
+      tbody.innerHTML = html;
+    }
+
+    // ========== 渲染一致性卡片 ==========
+    function renderConsistencyCards() {
+      const container = document.getElementById('consistencyCards');
+      if (consistencyData.length === 0) {
+        container.innerHTML = '<div class="empty-state">暂无数据</div>';
+        return;
+      }
+
+      const html = consistencyData.map(c => {
+        const ratePct = Math.round(c.annotator_diff_rate * 100);
+        return `
+          <div class="consistency-card">
+            <div class="consistency-card-title">${c.rule} - ${c.tag}</div>
+            <div class="consistency-card-rate">${ratePct}%</div>
+            <div class="consistency-card-label">标注员之间判断差异率</div>
+            <div class="consistency-card-desc">${c.details}</div>
+          </div>
+        `;
+      }).join('');
+      container.innerHTML = html;
+    }
+
+    // ========== 规则组筛选 ==========
+    window.filterByGroup = function(group) {
+      selectedGroup = group;
+      document.querySelectorAll('.filter-row .btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.group === group);
+      });
+      renderAnnotatorTable();
+    };
+
+    // ========== 显示标注员详情 ==========
+    async function showAnnotatorDetail(name) {
+      document.getElementById('detailModalTitle').textContent = `标注员 ${name} - 错误案例详情`;
+
+      try {
+        const resp = await fetch(`/api/analysis/annotator-detail?annotator_name=${encodeURIComponent(name)}`);
+        const ret = await resp.json();
+        if (ret.success) {
+          const cases = ret.data.cases;
+          const tbody = document.getElementById('detailTableBody');
+          const html = cases.map(c => {
+            const origClass = c.original_annotation === '正确' ? 'tag-success' : 'tag-error-type';
+            const corrClass = c.corrected_annotation === '正确' ? 'tag-success' : 'tag-error-type';
+            return `
+              <tr>
+                <td>${c.id}</td>
+                <td style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${c.product_name}</td>
+                <td><span class="tag ${origClass}">${c.original_annotation}</span></td>
+                <td><span class="tag ${corrClass}">${c.corrected_annotation}</span></td>
+                <td style="max-width:180px;font-size:12px;">${c.correction_reason}</td>
+                <td>${c.corrected_by}</td>
+                <td>${c.corrected_at}</td>
+              </tr>
+            `;
+          }).join('');
+          tbody.innerHTML = html;
+        }
+      } catch (e) {
+        console.error(e);
+      }
+
+      document.getElementById('detailModal').classList.add('active');
+    }
+
+    window.closeDetailModal = function() {
+      document.getElementById('detailModal').classList.remove('active');
+    };
+
+    // ========== 知识库内容源 ==========
+    async function loadKnowledgeSources() {
+      try {
+        const resp = await fetch('/api/analysis/knowledge-sources');
+        const ret = await resp.json();
+        if (ret.success) {
+          const container = document.getElementById('sourceCards');
+          const html = ret.data.map(s => `
+            <div class="source-card" onclick="selectSource('${s.id}')">
+              <div class="source-card-title">${s.name}</div>
+              <div class="source-card-desc">${s.description}</div>
+              <div class="source-card-count">${s.count}</div>
+            </div>
+          `).join('');
+          container.innerHTML = html;
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    window.selectSource = function(sourceId) {
+      document.querySelectorAll('.source-card').forEach(c => c.classList.remove('active'));
+      event.target.closest('.source-card').classList.add('active');
+      // 可以根据sourceId加载对应内容
+      showToast(`已选择知识源: ${sourceId}`);
+    };
+
+    // ========== 搜索 ==========
+    window.handleSearchKeypress = function(event) {
+      if (event.key === 'Enter') {
+        doSearch();
+      }
+    };
+
+    async function doSearch() {
+      const q = document.getElementById('searchInput').value.trim();
+      if (!q || q.length < 2) {
+        showToast('请输入至少2个字符的关键词', true);
+        return;
+      }
+
+      const resultsContainer = document.getElementById('searchResults');
+      resultsContainer.innerHTML = '<div class="loading">搜索中...</div>';
+
+      try {
+        const resp = await fetch(`/api/analysis/search?q=${encodeURIComponent(q)}`);
+        const ret = await resp.json();
+        if (ret.success) {
+          const results = ret.data.results;
+          document.getElementById('resultCount').textContent = `共 ${results.length} 条结果`;
+
+          if (results.length === 0) {
+            resultsContainer.innerHTML = '<div class="empty-state">未找到匹配结果</div>';
+            return;
+          }
+
+          const sourceLabels = {
+            'annotation_note': '标注备注',
+            'qc_solution': '质检方案',
+            'prompt_template': '提示词模板',
+            'config': '系统配置'
+          };
+
+          const html = results.map(r => `
+            <div class="search-result-item" onclick="openResultLink('${r.link}')">
+              <div class="search-result-source">${sourceLabels[r.source_type] || r.source_type}</div>
+              <div class="search-result-title">${r.title}</div>
+              <div class="search-result-summary">${r.summary}</div>
+            </div>
+          `).join('');
+          resultsContainer.innerHTML = html;
+        }
+      } catch (e) {
+        console.error(e);
+        resultsContainer.innerHTML = '<div class="empty-state">搜索失败，请重试</div>';
+      }
+    }
+
+    window.openResultLink = function(link) {
+      // 在实际应用中跳转到对应页面
+      showToast(`将跳转到: ${link}`);
+    };
+
+    // ========== 工具函数 ==========
+    window.refreshData = function() {
+      showToast('刷新数据...');
+      loadOverview();
+      loadAnnotatorIssues();
+      loadKnowledgeSources();
+    };
+
+    window.exportReport = function() {
+      showToast('导出报告功能开发中...');
+    };
+
+    function showToast(msg, isError) {
+      const t = document.getElementById('toast');
+      t.textContent = msg;
+      t.style.background = isError ? 'var(--danger)' : 'var(--success)';
+      t.classList.add('show');
+      setTimeout(() => t.classList.remove('show'), 3000);
+    }
+
+    // 初始化
+    init();
+  </script>
+</body>
+</html>
