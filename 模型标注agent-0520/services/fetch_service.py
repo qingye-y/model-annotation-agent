@@ -691,13 +691,22 @@ def ping_idata(env, instance):
         return False, str(e)
 
 
-def fetch_data_from_idata(env, instance, start_date, end_date, sample_percent):
-    """核心函数：从 iData 拉取数据，使用窗口函数翻页，随机抽样，返回结果"""
+def fetch_data_from_idata(env, instance, start_date, end_date, sample_percent, excluded_audit_ids=None):
+    """核心函数：从 iData 拉取数据，使用窗口函数翻页，随机抽样，返回结果
+    
+    Args:
+        excluded_audit_ids: 已抽取的审核ID集合，用于增量抽样（排除已抽取的数据）
+    """
     
     # ========== 探活：确认 Cookie 有效 ==========
     ping_ok, ping_msg = ping_idata(env, instance)
     if not ping_ok:
         raise RuntimeError(f"iData 认证失败：{ping_msg}。请检查 Cookie 是否过期。")
+    
+    # 增量抽样：格式化排除的ID集合
+    excluded_ids_set = set(excluded_audit_ids) if excluded_audit_ids else set()
+    excluded_ids_str = ','.join([f"'{aid}'" for aid in excluded_ids_set]) if excluded_ids_set else None
+    excluded_sql = f"AND `审核id` NOT IN ({excluded_ids_str})" if excluded_ids_str else ""
     
     # 格式化日期（去除连字符，转为 YYYYMMDD）
     # 格式化日期（去除连字符，转为 YYYYMMDD）
@@ -708,8 +717,11 @@ def fetch_data_from_idata(env, instance, start_date, end_date, sample_percent):
     # 因为 detail_sql 中的 LEFT JOIN dwd_itm_audit_reject_detail_y 会让同一 app_id
     # 产生多条记录（同一审核单有多条驳回详情），COUNT(*) 把重复行也计入。
     # 验证结论：COUNT(DISTINCT app_id) = 5,588，完全对齐 iData 基准。
+    # 增量抽样：排除已抽取的审核ID
     count_sql = f"""SELECT `AI审核结果`, COUNT(DISTINCT `审核id`) as cnt
-        FROM ({detail_sql}) t GROUP BY `AI审核结果`"""
+        FROM ({detail_sql}) t
+        WHERE 1=1 {excluded_sql}
+        GROUP BY `AI审核结果`"""
 
     total_count = 0
     original_compliant = 0
@@ -814,6 +826,7 @@ def fetch_data_from_idata(env, instance, start_date, end_date, sample_percent):
             SELECT * FROM (
               {detail_sql}
             ) base
+            WHERE 1=1 {excluded_sql}
             GROUP BY `审核id`, `AI审核结果`
           ) t
           WHERE t.`AI审核结果` = '合规'
@@ -848,6 +861,7 @@ def fetch_data_from_idata(env, instance, start_date, end_date, sample_percent):
             SELECT * FROM (
               {detail_sql}
             ) base
+            WHERE 1=1 {excluded_sql}
             GROUP BY `审核id`, `AI审核结果`
           ) t
           WHERE t.`AI审核结果` = '违规'
@@ -886,7 +900,9 @@ def fetch_data_from_idata(env, instance, start_date, end_date, sample_percent):
         "original_total": total_count,
         "original_compliant": original_compliant,
         "original_non_compliant": original_non_compliant,
-        "error_reasons": error_reasons
+        "error_reasons": error_reasons,
+        "excluded_count": len(excluded_ids_set),  # 增量抽样：排除的ID数量
+        "is_incremental": len(excluded_ids_set) > 0  # 是否为增量抽样
     }
 
 
@@ -1036,8 +1052,12 @@ ORDER BY `创建日期`, cnt DESC"""
     return {'by_date': error_reasons_by_date, 'global': error_reasons_global}
 
 
-def fetch_data_with_template(env, instance, sql_template, sample_percent, start_date=None, end_date=None):
-    """使用自定义SQL模板拉取数据，使用窗口函数翻页"""
+def fetch_data_with_template(env, instance, sql_template, sample_percent, start_date=None, end_date=None, excluded_audit_ids=None):
+    """使用自定义SQL模板拉取数据，使用窗口函数翻页
+    
+    Args:
+        excluded_audit_ids: 已抽取的审核ID集合，用于增量抽样（排除已抽取的数据）
+    """
     
     # ========== 探活：确认 Cookie 有效 ==========
     ping_ok, ping_msg = ping_idata(env, instance)
@@ -1057,8 +1077,14 @@ def fetch_data_with_template(env, instance, sql_template, sample_percent, start_
         if match:
             audit_id_field = match.group(1)
     
+    # 增量抽样：格式化排除的ID集合（在识别 audit_id_field 之后）
+    excluded_ids_set = set(excluded_audit_ids) if excluded_audit_ids else set()
+    excluded_ids_str = ','.join([f"'{aid}'" for aid in excluded_ids_set]) if excluded_ids_set else None
+    excluded_sql = f"AND `{audit_id_field}` NOT IN ({excluded_ids_str})" if excluded_ids_str else ""
+    
     # 重要修复：COUNT 必须用 DISTINCT，避免 LEFT JOIN 行倍增
-    count_sql = f"SELECT `{ai_result_field}`, COUNT(DISTINCT `{audit_id_field}`) as count FROM ({sql_template}) t GROUP BY `{ai_result_field}`"
+    # 增量抽样：排除已抽取的审核ID
+    count_sql = f"SELECT `{ai_result_field}`, COUNT(DISTINCT `{audit_id_field}`) as count FROM ({sql_template}) t WHERE 1=1 {excluded_sql} GROUP BY `{ai_result_field}`"
 
     total_count = 0
     original_compliant = 0
@@ -1164,6 +1190,7 @@ def fetch_data_with_template(env, instance, sql_template, sample_percent, start_
             SELECT * FROM (
               {sql_template}
             ) base
+            WHERE 1=1 {excluded_sql}
             GROUP BY `{template_audit_id_field}`, `{ai_result_field}`
           ) t
           WHERE t.`{ai_result_field}` = '合规'
@@ -1198,6 +1225,7 @@ def fetch_data_with_template(env, instance, sql_template, sample_percent, start_
             SELECT * FROM (
               {sql_template}
             ) base
+            WHERE 1=1 {excluded_sql}
             GROUP BY `{template_audit_id_field}`, `{ai_result_field}`
           ) t
           WHERE t.`{ai_result_field}` = '违规'
@@ -1236,5 +1264,7 @@ def fetch_data_with_template(env, instance, sql_template, sample_percent, start_
         "non_compliant_count": violation_count,
         "original_total": total_count,
         "original_compliant": original_compliant,
-        "original_non_compliant": original_non_compliant
+        "original_non_compliant": original_non_compliant,
+        "excluded_count": len(excluded_ids_set),  # 增量抽样：排除的ID数量
+        "is_incremental": len(excluded_ids_set) > 0  # 是否为增量抽样
     }

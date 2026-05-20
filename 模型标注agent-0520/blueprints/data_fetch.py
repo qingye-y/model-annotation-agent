@@ -119,24 +119,8 @@ def api_data_fetch():
 
     for instance in final_instances:
         try:
-            # 判断是否使用自定义模板
-            from models import SqlTemplate
-            sql_template = None
-            if template_id:
-                config = SqlTemplate.query.get(template_id)
-                if config:
-                    sql_template = config.sql_text
-                    # 对每个实例单独替换参数
-                    instance_params = params.copy()
-                    instance_params['instance'] = instance
-                    instance_sql = replace_params(sql_template, instance_params)
-                    result = fetch_data_with_template(env, instance, instance_sql, sample_percent, start_date, end_date)
-                else:
-                    result = fetch_data_from_idata(env, instance, start_date, end_date, sample_percent)
-            else:
-                result = fetch_data_from_idata(env, instance, start_date, end_date, sample_percent)
-
-            # 去重：查询历史数据中相同日期和实例的 product_id
+            # ========== 增量抽样：查询历史已抽取的审核ID ==========
+            existing_audit_ids = set()
             existing_product_ids = set()
             if start_date and end_date:
                 start_date_slash = f"{start_date[:4]}/{start_date[4:6]}/{start_date[6:8]}" if len(start_date) == 8 else start_date
@@ -148,10 +132,35 @@ def api_data_fetch():
                     RawData.instance_code == instance
                 ).all()
                 for rec in existing_records:
+                    if rec.audit_id:
+                        existing_audit_ids.add(rec.audit_id)
                     if rec.product_id:
                         existing_product_ids.add(rec.product_id)
+            
+            print(f"[DEBUG 增量抽样] {instance} 已抽取: {len(existing_audit_ids)} 个审核ID, {len(existing_product_ids)} 个商品ID")
 
-            # 过滤重复数据
+            # 判断是否使用自定义模板
+            from models import SqlTemplate
+            sql_template = None
+            if template_id:
+                config = SqlTemplate.query.get(template_id)
+                if config:
+                    sql_template = config.sql_text
+                    # 对每个实例单独替换参数
+                    instance_params = params.copy()
+                    instance_params['instance'] = instance
+                    instance_sql = replace_params(sql_template, instance_params)
+                    # 传入已抽取的审核ID列表，实现增量抽样
+                    result = fetch_data_with_template(env, instance, instance_sql, sample_percent, start_date, end_date, 
+                                                      excluded_audit_ids=existing_audit_ids if existing_audit_ids else None)
+                else:
+                    result = fetch_data_from_idata(env, instance, start_date, end_date, sample_percent,
+                                                  excluded_audit_ids=existing_audit_ids if existing_audit_ids else None)
+            else:
+                result = fetch_data_from_idata(env, instance, start_date, end_date, sample_percent,
+                                              excluded_audit_ids=existing_audit_ids if existing_audit_ids else None)
+
+            # 过滤重复数据（安全兜底：基于 product_id 再次过滤）
             unique_fetched_data = []
             skipped_count = 0
             for row in result.get('fetched_data', []):
@@ -162,7 +171,11 @@ def api_data_fetch():
                 unique_fetched_data.append(row)
                 existing_product_ids.add(product_id)
 
-            print(f"[DEBUG 审计] {instance} 去重: 拉取{len(result.get('fetched_data', []))}条, 跳重{skipped_count}条, 唯一{len(unique_fetched_data)}条")
+            # 增量抽样状态
+            is_incremental = result.get('is_incremental', False)
+            excluded_count = result.get('excluded_count', 0)
+            incremental_msg = f"[增量抽样] 排除{excluded_count}条已抽取数据, " if is_incremental else ""
+            print(f"[DEBUG 审计] {instance} {incremental_msg}拉取{len(result.get('fetched_data', []))}条, 兜底过滤{skipped_count}条, 唯一{len(unique_fetched_data)}条")
             total_skipped += skipped_count
 
             # 基于去重后数据统计
