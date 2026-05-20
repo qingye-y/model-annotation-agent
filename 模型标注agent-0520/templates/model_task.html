@@ -1844,10 +1844,11 @@
         .then(function(data) {
           if (data.success) {
             showToast('批次已删除');
-            // 从列表中移除
-            var idx = allBatches.findIndex(function(b) { return b.id === batchId; });
+            // 从 allBatches 中移除该批次（注意：后端返回的是 batch_id 字段）
+            var idx = allBatches.findIndex(function(b) { return b.batch_id === batchId; });
             if (idx !== -1) { allBatches.splice(idx, 1); }
-            applyFilter();
+            // 重新加载批次列表，确保 RawData 数据同步更新
+            fetchBatches();
           } else {
             showToast(data.message || '删除失败', true);
           }
