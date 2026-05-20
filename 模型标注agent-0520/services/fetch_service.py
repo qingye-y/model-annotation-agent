@@ -86,7 +86,7 @@ def build_sql(instance, start_date, end_date):
           `变更类别`,
           r.gmt_created_time as "创建时间"
         from dwd.dwd_itm_audit_app_ai_result_detail_inc_y r
-        left join dwd.dwd_itm_audit_reject_detail_y d on r.app_id = d.app_id
+        left join dwd.dwd_itm_audit_reject_detail_y d on r.app_id = d.app_id and d.pt = '{year}'
         LEFT JOIN (
           select
             instance_code,
@@ -113,7 +113,7 @@ def build_sql(instance, start_date, end_date):
           group by 1
         ) as new on new.item_id = r.goods_id
         where date_format(r.gmt_created_time,'%Y%m%d') between '{start_date}' and '{end_date}'
-        and r.pt = '{year}' and d.pt = '{year}'
+        and r.pt = '{year}'
         and r.instance_code = '{instance}'
         """
     else:
@@ -811,7 +811,10 @@ def fetch_data_from_idata(env, instance, start_date, end_date, sample_percent):
         compliant_sql = f"""SELECT * FROM (
           SELECT t.*, ROW_NUMBER() OVER (ORDER BY MD5(t.`审核id`)) as rn
           FROM (
-            {detail_sql}
+            SELECT * FROM (
+              {detail_sql}
+            ) base
+            GROUP BY `审核id`, `AI审核结果`
           ) t
           WHERE t.`AI审核结果` = '合规'
         ) tmp
@@ -842,7 +845,10 @@ def fetch_data_from_idata(env, instance, start_date, end_date, sample_percent):
         non_compliant_sql = f"""SELECT * FROM (
           SELECT t.*, ROW_NUMBER() OVER (ORDER BY MD5(t.`审核id`)) as rn
           FROM (
-            {detail_sql}
+            SELECT * FROM (
+              {detail_sql}
+            ) base
+            GROUP BY `审核id`, `AI审核结果`
           ) t
           WHERE t.`AI审核结果` = '违规'
         ) tmp
@@ -1155,7 +1161,10 @@ def fetch_data_with_template(env, instance, sql_template, sample_percent, start_
         compliant_sql = f"""SELECT * FROM (
           SELECT t.*, ROW_NUMBER() OVER (ORDER BY MD5(t.`{template_audit_id_field}`)) as rn
           FROM (
-            {sql_template}
+            SELECT * FROM (
+              {sql_template}
+            ) base
+            GROUP BY `{template_audit_id_field}`, `{ai_result_field}`
           ) t
           WHERE t.`{ai_result_field}` = '合规'
         ) tmp
@@ -1186,7 +1195,10 @@ def fetch_data_with_template(env, instance, sql_template, sample_percent, start_
         non_compliant_sql = f"""SELECT * FROM (
           SELECT t.*, ROW_NUMBER() OVER (ORDER BY MD5(t.`{template_audit_id_field}`)) as rn
           FROM (
-            {sql_template}
+            SELECT * FROM (
+              {sql_template}
+            ) base
+            GROUP BY `{template_audit_id_field}`, `{ai_result_field}`
           ) t
           WHERE t.`{ai_result_field}` = '违规'
         ) tmp
