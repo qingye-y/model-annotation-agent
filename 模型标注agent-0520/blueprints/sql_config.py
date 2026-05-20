@@ -767,7 +767,7 @@ def api_save_user_preference(key):
         config.value = value
         config.updated_at = datetime.utcnow()
     else:
-        config = Config(key=full_key, value=value)
+        config = SqlConfig(key=full_key, value=value)
         db.session.add(config)
 
     db.session.commit()
