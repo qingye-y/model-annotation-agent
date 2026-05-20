@@ -222,7 +222,7 @@ with app.app_context():
     }
     existing_config = SqlConfig.query.filter_by(key='INSTANCE_RULE_MAPPING').first()
     if not existing_config:
-        new_config = Config(
+        new_config = SqlConfig(
             key='INSTANCE_RULE_MAPPING',
             value=json_lib.dumps(DEFAULT_INSTANCE_RULE_MAPPING, ensure_ascii=False)
         )
