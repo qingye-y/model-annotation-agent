@@ -1,0 +1,51 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Environment
+.env
+.env.local
+venv/
+.venv/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Logs & temp
+*.log
+logs/
+*.tmp
+*.bak
+
+# Playwright
+.playwright-cli/
+playwright/
+test-results/
+playwright-report/
+
+# Local DB (do NOT commit)
+*.db
+instance/*.db
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# WorkBuddy (local memory, not for repo)
+.workbuddy/
+
+# Data files
+html导入数据/
+*.xlsx
+*.xls
+*.csv

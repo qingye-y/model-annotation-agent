@@ -1,0 +1,2275 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>机审任务中心</title>
+  <link rel="stylesheet" href="/static/common.css">
+  <script src="/static/config.js"></script>
+  <style>
+    body { background: var(--bg); min-height: 100vh; }
+    .page-container { padding: 20px 24px; max-width: 1400px; }
+    .page-header { margin-bottom: 20px; }
+    .page-title { font-size: 20px; font-weight: 600; color: var(--text-primary); }
+    .page-subtitle { font-size: 14px; color: var(--text-secondary); margin-top: 4px; }
+
+    .action-bar { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 16px; padding: 14px 20px; background: var(--white); border-radius: var(--radius-lg); box-shadow: var(--shadow); flex-wrap: wrap; gap: 16px; }
+    .action-left { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; }
+    .action-right { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+
+    .instance-filter { display: flex; border-radius: var(--radius); overflow: hidden; border: 1px solid var(--border); }
+    .instance-filter .filter-btn { padding: 6px 14px; font-size: 13px; background: var(--white); border: none; border-right: 1px solid var(--border); cursor: pointer; color: var(--text-primary); }
+    .instance-filter .filter-btn:last-child { border-right: none; }
+    .instance-filter .filter-btn:hover { background: var(--primary-light); color: var(--primary); }
+    .instance-filter .filter-btn.active { background: var(--primary); color: #fff; }
+
+    .filter-item { display: flex; align-items: center; gap: 6px; }
+    .filter-item label { font-size: 13px; color: var(--text-secondary); }
+    .filter-item .form-input, .filter-item .form-select { padding: 6px 10px; font-size: 13px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--white); }
+    .btn-query { padding: 6px 16px; font-size: 13px; background: var(--primary); color: #fff; border: none; border-radius: var(--radius); cursor: pointer; }
+    .btn-query:hover { background: var(--primary-hover); }
+    .btn-reset { padding: 6px 16px; font-size: 13px; background: var(--white); color: var(--text-primary); border: 1px solid var(--border); border-radius: var(--radius); cursor: pointer; }
+    .btn-reset:hover { border-color: var(--primary); color: var(--primary); }
+    .btn-trigger { padding: 8px 18px; font-size: 14px; font-weight: 500; background: var(--primary); color: #fff; border: none; border-radius: var(--radius); cursor: pointer; display: flex; align-items: center; gap: 6px; }
+    .btn-trigger:hover { background: var(--primary-hover); }
+    .status-indicator { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text-primary); }
+    .status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--success); }
+    .status-dot.running { animation: pulse 2s infinite; }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+
+    .card { background: var(--white); border-radius: var(--radius-lg); box-shadow: var(--shadow); overflow: visible; }
+    .table-wrapper { overflow-x: auto; padding-bottom: 180px; }
+    .batch-table { width: 100%; border-collapse: collapse; font-size: 13px; table-layout: auto; }
+    .batch-table thead th { background: #fafbfc; color: var(--text-secondary); font-weight: 500; text-align: left; padding: 12px 14px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+    .batch-table tbody td { padding: 10px 12px; border-bottom: 1px solid var(--border-light); overflow: visible; vertical-align: middle; }
+    .batch-table tbody tr:hover { background: #f8f9ff; }
+    /* 表格文本省略 */
+    .batch-table .cell-truncate { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 0; }
+    .batch-table .cell-center { text-align: center; }
+
+    .diff-rate-high { color: var(--danger); font-weight: 600; }
+    .diff-rate-mid { color: var(--warning); font-weight: 600; }
+    .diff-rate-low { color: var(--success); font-weight: 600; }
+
+    .status-tag { display: inline-flex; padding: 3px 10px; font-size: 12px; font-weight: 500; border-radius: 12px; white-space: nowrap; }
+    .status-tag.completed { background: var(--success-light); color: var(--success); }
+    .status-tag.processing { background: var(--warning-light); color: var(--warning); animation: badge-pulse 1.5s infinite; }
+    .status-tag.failed { background: var(--danger-light); color: var(--danger); }
+    .status-tag.pending { background: #f0f4ff; color: #6b7280; }
+    .status-tag.default { background: #f3f4f6; color: #6b7280; }
+    @keyframes badge-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.7; } }
+    @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+    @keyframes highlight-flash { 0%, 100% { background: rgba(59, 130, 246, 0.2); } 50% { background: rgba(59, 130, 246, 0.4); } }
+    .status-tag.processing::after { content: ''; display: inline-block; width: 8px; height: 8px; border: 2px solid transparent; border-top-color: var(--warning); border-radius: 50%; margin-left: 4px; animation: spin 0.8s linear infinite; }
+
+    .cell-actions { display: flex; gap: 4px; flex-wrap: wrap; align-items: center; }
+    .cell-actions > * { flex-shrink: 0; }
+    .status-tag { display: inline-flex; padding: 3px 10px; font-size: 12px; font-weight: 500; border-radius: 12px; white-space: nowrap; }
+    .btn-action { padding: 4px 10px; font-size: 12px; border-radius: var(--radius); cursor: pointer; transition: all 0.2s; white-space: nowrap; }
+    .btn-action.primary { background: var(--primary); color: #fff; border: none; }
+    .btn-action.primary:hover { background: var(--primary-hover); }
+    .btn-action.default { background: var(--white); color: var(--text-primary); border: 1px solid var(--border); }
+    .btn-action.default:hover { border-color: var(--primary); color: var(--primary); }
+
+    .batch-highlight { animation: highlight-flash 0.5s ease-in-out 3; }
+
+    .pagination { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px; border-top: 1px solid var(--border-light); flex-wrap: wrap; gap: 12px; }
+    .pagination-left { display: flex; align-items: center; gap: 10px; }
+    .pagination-left label { font-size: 13px; color: var(--text-secondary); }
+    .pagination-left .form-select { padding: 4px 24px 4px 8px; font-size: 13px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--white); appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%236b7280' d='M6 8L1 3h10z'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 8px center; }
+    .pagination-center { display: flex; align-items: center; gap: 4px; }
+    .pagination-item { min-width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; font-size: 13px; border-radius: var(--radius); cursor: pointer; border: 1px solid var(--border); background: var(--white); color: var(--text-primary); }
+    .pagination-item:hover { border-color: var(--primary); color: var(--primary); }
+    .pagination-item.active { background: var(--primary); color: #fff; border-color: var(--primary); }
+    .pagination-info { font-size: 13px; color: var(--text-secondary); }
+
+    .detail-panel { max-height: 0; overflow: hidden; transition: max-height 0.4s ease; }
+    .detail-panel.expanded { max-height: 3000px; }
+    .detail-content { padding: 20px; background: #fafbfc; border-top: 1px solid var(--border); }
+    .detail-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+    .detail-title { font-size: 18px; font-weight: 600; color: var(--text-primary); }
+    .btn-close-detail { background: none; border: none; font-size: 18px; color: var(--text-muted); cursor: pointer; padding: 4px; }
+    .btn-close-detail:hover { color: var(--text-primary); }
+
+    .diff-stats { display: grid; grid-template-columns: repeat(6, 1fr); gap: 12px; margin-bottom: 16px; }
+    .diff-stat { background: var(--white); padding: 14px; border-radius: var(--radius); border: 1px solid var(--border); text-align: center; }
+    .diff-stat-value { font-size: 22px; font-weight: 700; color: var(--text-primary); }
+    .diff-stat-label { font-size: 12px; color: var(--text-secondary); margin-top: 4px; }
+    .diff-stat.highlight .diff-stat-value { color: var(--danger); }
+
+    .detail-filter { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; padding: 12px 16px; background: var(--white); border-radius: var(--radius); border: 1px solid var(--border); margin-bottom: 12px; }
+    .detail-filter .filter-btn { padding: 5px 12px; font-size: 12px; background: var(--white); border: 1px solid var(--border); border-radius: var(--radius); cursor: pointer; }
+    .detail-filter .filter-btn.active { background: var(--primary); color: #fff; border-color: var(--primary); }
+
+    .diff-table { width: 100%; min-width: 1200px; border-collapse: collapse; font-size: 12px; }
+    .diff-table thead th { background: var(--white); color: var(--text-secondary); font-weight: 500; text-align: left; padding: 10px 12px; border: 1px solid var(--border); }
+    .diff-table tbody td { padding: 10px 12px; border: 1px solid var(--border); background: var(--white); }
+    .diff-table .task-badge { display: inline-flex; padding: 2px 8px; font-size: 11px; border-radius: 10px; }
+    .diff-table .task-badge.yes { background: var(--success-light); color: var(--success); }
+    .diff-table .task-badge.no { background: #f3f4f6; color: var(--text-muted); }
+    .diff-table .diff-type-col { font-weight: 500; }
+
+    .action-buttons { display: flex; gap: 12px; margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border-light); }
+    .btn-generate { padding: 10px 20px; font-size: 14px; background: var(--primary); color: #fff; border: none; border-radius: var(--radius); cursor: pointer; display: flex; align-items: center; gap: 6px; }
+    .btn-generate:hover { background: var(--primary-hover); }
+    .btn-export { padding: 10px 20px; font-size: 14px; background: var(--white); color: var(--text-primary); border: 1px solid var(--border); border-radius: var(--radius); cursor: pointer; display: flex; align-items: center; gap: 6px; }
+    .btn-export:hover { border-color: var(--primary); color: var(--primary); }
+
+    /* 模态框 */
+    .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.45); display: flex; align-items: center; justify-content: center; z-index: 1000; opacity: 0; visibility: hidden; transition: all 0.25s; }
+    .modal-overlay.active { opacity: 1; visibility: visible; }
+    .modal { background: var(--white); border-radius: var(--radius-lg); box-shadow: var(--shadow-lg); width: 90%; max-width: 640px; max-height: 85vh; overflow: hidden; display: flex; flex-direction: column; transform: translateY(-20px); transition: transform 0.25s; }
+    .modal-overlay.active .modal { transform: translateY(0); }
+    .modal-header { display: flex; align-items: center; justify-content: space-between; padding: 16px 20px; border-bottom: 1px solid var(--border-light); }
+    .modal-title { font-size: 15px; font-weight: 600; }
+    .modal-close { background: none; border: none; font-size: 20px; color: var(--text-muted); cursor: pointer; padding: 0; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; border-radius: var(--radius); }
+    .modal-close:hover { background: var(--border-light); color: var(--text-primary); }
+    .modal-body { padding: 20px; overflow-y: auto; flex: 1; }
+    .modal-footer { display: flex; align-items: center; justify-content: flex-end; gap: 8px; padding: 12px 20px; border-top: 1px solid var(--border-light); background: #fafbfc; }
+
+    .form-group { margin-bottom: 16px; }
+    .form-group label { display: block; font-size: 13px; font-weight: 500; margin-bottom: 6px; color: var(--text-primary); }
+    .form-group .form-input, .form-group .form-select { width: 100%; padding: 8px 12px; font-size: 13px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--white); }
+    .form-group .form-input:focus, .form-group .form-select:focus { outline: none; border-color: var(--primary); }
+    .form-row { display: flex; gap: 16px; }
+    .form-row .form-group { flex: 1; }
+
+    /* 抽取配置网格 */
+    .extract-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin: 16px 0; }
+    .extract-item { background: var(--white); padding: 12px; border-radius: var(--radius); border: 1px solid var(--border); }
+    .extract-item-title { font-size: 13px; font-weight: 600; margin-bottom: 8px; color: var(--text-primary); }
+    .extract-item .form-select, .extract-item .form-input { margin-top: 6px; }
+    .extract-item .percentage-input { display: none; }
+    .extract-item .percentage-input.active { display: block; }
+
+    .instance-checkboxes { display: flex; flex-wrap: wrap; gap: 8px 16px; margin-top: 8px; }
+    .instance-checkbox { display: flex; align-items: center; gap: 4px; font-size: 13px; }
+    .instance-checkbox input { cursor: pointer; }
+
+    .preset-link { font-size: 12px; color: var(--primary); cursor: pointer; margin-left: 8px; }
+    .preset-link:hover { text-decoration: underline; }
+
+    .preview-text { padding: 12px; background: var(--primary-light); border-radius: var(--radius); font-size: 13px; color: var(--text-primary); margin-top: 16px; }
+
+    .toast { position: fixed; top: 20px; left: 50%; transform: translateX(-50%); padding: 12px 24px; background: var(--success); color: #fff; font-size: 13px; border-radius: var(--radius); box-shadow: 0 4px 12px rgba(46, 204, 113, 0.3); z-index: 2000; opacity: 0; visibility: hidden; transition: all 0.3s; }
+    .toast.show { opacity: 1; visibility: visible; }
+
+    @media (max-width: 768px) {
+      .action-bar { flex-direction: column; }
+      .diff-stats { grid-template-columns: repeat(2, 1fr); }
+      .extract-grid { grid-template-columns: 1fr; }
+    }
+
+    /* 获取线上数据弹窗样式 */
+    .modal-form-group { margin-bottom: 16px; }
+    .modal-form-label { display: block; font-size: 13px; font-weight: 500; color: var(--text-primary); margin-bottom: 6px; }
+    .modal-form-label .required { color: var(--danger); margin-left: 2px; }
+    .modal-form-input { width: 100%; padding: 8px 12px; font-size: 13px; border: 1px solid var(--border); border-radius: var(--radius); font-family: inherit; }
+    .modal-form-input:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px rgba(79, 110, 247, 0.1); }
+    .checkbox-group { display: flex; flex-wrap: wrap; gap: 8px 16px; padding: 8px 0; }
+    .checkbox-item { display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 13px; color: var(--text-primary); }
+    .checkbox-item input[type="checkbox"] { width: 14px; height: 14px; cursor: pointer; }
+    .radio-group { display: flex; gap: 16px; padding: 8px 0; }
+    .radio-item { display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 13px; color: var(--text-primary); }
+    .radio-item input[type="radio"] { width: 14px; height: 14px; cursor: pointer; }
+
+    /* 抽样规则说明 tooltip */
+    .th-with-tip { display: flex; align-items: center; gap: 4px; position: relative; }
+    .th-tip-btn { display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; border-radius: 50%; background: #d1d5db; color: #fff; font-size: 11px; font-weight: 700; cursor: pointer; flex-shrink: 0; line-height: 1; transition: background 0.2s; }
+    .th-tip-btn:hover { background: var(--primary); }
+    .th-tip-popup {
+      display: none; position: absolute; top: calc(100% + 8px); left: 50%; transform: translateX(-50%);
+      width: 320px; background: #1f2937; color: #f9fafb; font-size: 12px; line-height: 1.6;
+      border-radius: 8px; padding: 12px 14px; z-index: 99999; box-shadow: 0 4px 16px rgba(0,0,0,0.2);
+      text-align: left; font-weight: 400; white-space: pre-line;
+    }
+    .th-tip-popup::before { content: ''; position: absolute; top: -6px; left: 50%; transform: translateX(-50%); border: 6px solid transparent; border-bottom-color: #1f2937; }
+    .th-tip-btn:hover .th-tip-popup { display: block; }
+    .th-tip-popup strong { color: #93c5fd; }
+    .th-tip-popup .tip-rule { color: #86efac; }
+    .th-tip-popup.tip-right::before {
+      top: 50%; left: -6px; transform: translateY(-50%);
+      border: 6px solid transparent; border-right-color: #1f2937; border-bottom-color: transparent;
+    }
+  </style>
+</head>
+<body>
+  <div class="page-container">
+    <div class="page-header">
+      <h1 class="page-title">⚙️ 机审任务中心</h1>
+      <p class="page-subtitle">管理模型B复核任务批次，查看双模型审核差异明细</p>
+    </div>
+    <div class="toast" id="toast"></div>
+
+    <div class="action-bar">
+      <div class="action-left">
+        <div class="instance-filter" id="instanceFilter"></div>
+        <div class="filter-item">
+          <label>状态</label>
+          <select class="form-select" id="filterStatus">
+            <option value="all">全部</option>
+            <option value="completed">已完成</option>
+            <option value="pending">待处理</option>
+            <option value="processing">进行中</option>
+            <option value="failed">失败</option>
+          </select>
+        </div>
+        <div class="filter-item">
+          <label>日期</label>
+          <input type="date" class="form-input" id="filterStartDate">
+          <span style="color: var(--text-muted);">至</span>
+          <input type="date" class="form-input" id="filterEndDate">
+        </div>
+        <div class="filter-item">
+          <label>数据来源</label>
+          <select class="form-select" id="filterSource">
+            <option value="">全部</option>
+            <option value="fetch">线上获取</option>
+            <option value="upload">文件上传</option>
+          </select>
+        </div>
+        <div class="filter-item">
+          <label>审核规则</label>
+          <select class="form-select" id="filterRule">
+            <option value="">全部规则</option>
+          </select>
+        </div>
+        <button class="btn-query" onclick="loadBatches()">查询</button>
+        <button class="btn-reset" onclick="resetFilter()">重置</button>
+      </div>
+      <div class="action-right">
+        <button class="btn-trigger" onclick="openGetDataModal()">获取线上数据</button>
+        <button class="btn-trigger" style="background: var(--success);" onclick="openUploadModal()"><span>📤</span> 上传文件机审</button>
+        <button class="btn-reset" style="border-color: var(--danger); color: var(--danger);" onclick="clearAllBatches()">🗑 清空全部历史</button>
+        <div class="status-indicator" id="taskStatusIndicator"><span class="status-dot" id="taskStatusDot"></span><span id="taskStatusText">加载中...</span></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="table-wrapper" style="overflow-x: auto;">
+        <table class="batch-table" style="min-width: 900px;">
+          <thead><tr><th style="min-width:80px;max-width:100px;">批次号</th><th style="text-align:center;">来源</th><th style="text-align:center;">环境</th><th style="width:65px;max-width:80px;text-align:center;">实例</th><th style="width:40px;"><div class="th-with-tip">抽样<span class="th-tip-btn">?<div class="th-tip-popup"><strong>什么是分层抽样？</strong>
+
+假设线上有 10000 条数据，其中违规 2000 条（违规率 20%）。
+
+如果抽样 10%，系统会：
+• 从 8000 条合规里抽 800 条
+• 从 2000 条违规里抽 200 条
+
+最终本地样本的违规率 ≈ 20%，与线上完全一致。
+
+（每次用相同参数拉取，结果完全相同）</div></span></div></th><th style="width:60px;text-align:center;">审核总数</th><th style="width:50px;text-align:center;">合规</th><th style="width:50px;text-align:center;">违规</th><th style="width:50px;text-align:center;">抽样数</th><th style="width:70px;">数据日期</th><th style="width:85px;">拉取时间</th><th style="text-align:center;">状态</th><th style="width:55px;text-align:center;">互检进度</th><th style="width:85px;">操作</th></tr></thead>
+          <tbody id="batchTableBody"></tbody>
+        </table>
+      </div>
+      <div class="pagination">
+        <div class="pagination-left"><label>每页</label><select class="form-select" id="pageSize" onchange="changePageSize()"><option value="10">10</option><option value="20">20</option><option value="50" selected>50</option><option value="100">100</option></select><span>条</span></div>
+        <div class="pagination-center" id="paginationCenter"></div>
+        <div class="pagination-info" id="paginationInfo"></div>
+      </div>
+    </div>
+
+    <div class="detail-panel" id="detailPanel"><div class="detail-content" id="detailContent"></div></div>
+  </div>
+
+  <!-- 生成标注任务弹窗 -->
+  <div class="modal-overlay" id="generateModal">
+    <div class="modal">
+      <div class="modal-header">
+        <span class="modal-title">生成标注任务 - 抽样配置</span>
+        <button class="modal-close" onclick="closeModal('generateModal')">×</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label>预设规则选择</label>
+          <div style="display: flex; align-items: center;">
+            <select class="form-select" id="presetRuleSelect" onchange="loadPresetRule()"></select>
+            <span class="preset-link" onclick="saveAsNewPreset()" style="margin-left: 12px;">💾 保存为预设</span>
+          </div>
+        </div>
+        <div style="font-size: 13px; font-weight: 500; margin-bottom: 8px; color: var(--text-primary);">各类型抽取配置</div>
+        <div class="extract-grid" id="extractGrid"></div>
+        <div class="form-group">
+          <label>实例筛选</label>
+          <div class="instance-checkboxes" id="instanceCheckboxes"></div>
+        </div>
+        <div class="preview-text" id="previewText">预计将生成标注任务约 0 条</div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-default" onclick="closeModal('generateModal')">取消</button>
+        <button class="btn btn-primary" onclick="confirmGenerate()">确认生成</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 上传文件弹窗 -->
+  <div class="modal-overlay" id="uploadModal">
+    <div class="modal" style="max-width: 520px;">
+      <div class="modal-header">
+        <span class="modal-title">📤 上传文件机审</span>
+        <button class="modal-close" onclick="closeModal('uploadModal')">×</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label>选择 Excel 文件 <a href="javascript:void(0)" onclick="downloadTemplate()" style="margin-left: 12px; font-size: 12px;">📥 下载导入模板</a></label>
+          <input type="file" id="uploadFile" accept=".xlsx,.xls" style="width: 100%; padding: 8px; border: 1px solid var(--border); border-radius: var(--radius);">
+        </div>
+        <div class="form-group" style="background: #f0f9ff; padding: 12px; border-radius: var(--radius); border: 1px solid #bfe0ff;">
+          <div style="font-size: 13px; color: var(--text-primary);">ℹ️ 系统将根据上传文件中的实例编码自动匹配对应的审核规则。</div>
+        </div>
+        <div class="preview-text" id="uploadStatus">请选择 Excel 文件，支持 .xlsx 和 .xls 格式</div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-default" onclick="closeModal('uploadModal')">取消</button>
+        <button class="btn btn-primary" onclick="confirmUpload()">开始上传</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 获取线上数据弹窗 -->
+  <div class="modal-overlay" id="getDataModal">
+    <div class="modal" style="max-width: 560px;">
+      <div class="modal-header">
+        <span class="modal-title">获取线上数据</span>
+        <button class="modal-close" onclick="closeGetDataModal()">&times;</button>
+      </div>
+      <div class="modal-body">
+        <!-- 环境选择 -->
+        <div class="modal-form-group">
+          <label class="modal-form-label">选择环境<span class="required">*</span></label>
+          <div class="radio-group" id="envRadioGroup">
+            <label class="radio-item">
+              <input type="radio" name="env" value="云环境" checked onchange="switchEnv(this.value)"> 云环境
+            </label>
+            <label class="radio-item">
+              <input type="radio" name="env" value="乐采云环境" onchange="switchEnv(this.value)"> 乐采云环境
+            </label>
+          </div>
+        </div>
+        <!-- 模板选择 -->
+        <div class="modal-form-group">
+          <label class="modal-form-label">选择取数模板</label>
+          <select class="modal-form-input" id="templateSelect" onchange="onFetchTemplateChange()">
+            <option value="">-- 使用默认SQL --</option>
+          </select>
+          <div id="templateRememberHint" style="font-size: 12px; color: var(--text-muted); margin-top: 4px;"></div>
+        </div>
+        <!-- 模板参数区域 -->
+        <div class="modal-form-group" id="templateParamsArea" style="display: none;">
+          <label class="modal-form-label">模板参数</label>
+          <div id="templateParamsContainer"></div>
+        </div>
+        <!-- 实例选择 -->
+        <div class="modal-form-group">
+          <label class="modal-form-label">实例选择<span class="required">*</span></label>
+          <div class="checkbox-group" id="instanceCheckboxGroup">
+            <!-- 动态生成 -->
+          </div>
+        </div>
+        <!-- 选中实例显示 -->
+        <div class="modal-form-group" id="selectedEnvDisplay" style="margin-bottom: 16px;">
+          <div style="padding: 10px 12px; background: var(--primary-light); border-radius: var(--radius); font-size: 13px; color: var(--text-primary);">
+            请选择环境和实例
+          </div>
+        </div>
+        <!-- 抽样比例 -->
+        <div class="modal-form-group">
+          <label class="modal-form-label"><div class="th-with-tip" style="display:inline-flex;align-items:center;gap:4px;">抽样比例 (%)<span class="th-tip-btn" style="position:static;width:14px;height:14px;font-size:10px;cursor:pointer;">?<div class="th-tip-popup tip-right" style="left:calc(100% + 10px);top:50%;transform:translateY(-50%);right:auto;bottom:auto;"><strong>怎么抽的？</strong>
+
+系统采用分层随机抽样：合规数据按此比例随机抽取，违规数据也按此比例随机抽取，保证本地样本的违规率与线上一致，不会出现"运气不好抽不到违规"的情况。使用固定随机种子，相同查询条件下多次抽样结果可复现。</div></span></div><span class="required">*</span></label>
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <input type="number" class="modal-form-input" id="samplePercent" value="20" min="1" max="100" style="width: 100px;">
+            <span style="color: var(--text-secondary);">%</span>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="modal-form-group">
+            <label class="modal-form-label">开始日期<span class="required">*</span></label>
+            <input type="date" class="modal-form-input" id="modalStartDate" value="2026-05-06">
+          </div>
+          <div class="modal-form-group">
+            <label class="modal-form-label">结束日期<span class="required">*</span></label>
+            <input type="date" class="modal-form-input" id="modalEndDate" value="2026-05-06">
+          </div>
+        </div>
+        <!-- 进度显示区域 -->
+        <div id="fetchProgress" style="display: none; margin-top: 16px; padding: 16px; background: var(--primary-light); border-radius: var(--radius);">
+          <div id="fetchProgressText" style="font-size: 13px; color: var(--text-primary); text-align: center;"></div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-default" id="cancelBtn" onclick="closeGetDataModal()">取消</button>
+        <button class="btn btn-primary" id="startFetchBtn" onclick="submitGetData()">开始获取</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const STORAGE_KEYS = { INSTANCE_MAPPINGS: 'instance_mappings', SAMPLING_RULES: 'sampling_rules' };
+
+    function getInstanceMappings() {
+      const data = localStorage.getItem(STORAGE_KEYS.INSTANCE_MAPPINGS);
+      if (data) return JSON.parse(data);
+      return [
+        { id: 'inst_001', name: '实例01', env: '生产环境' },
+        { id: 'inst_002', name: '实例02', env: '生产环境' },
+        { id: 'inst_003', name: '实例03', env: '预发环境' },
+        { id: 'inst_004', name: '实例04', env: '测试环境' }
+      ];
+    }
+
+    function getSamplingRules() {
+      const data = localStorage.getItem(STORAGE_KEYS.SAMPLING_RULES);
+      if (data) return JSON.parse(data);
+      return []; // No hardcoded rules, read from global config
+    }
+
+    function saveSamplingRules(rules) { localStorage.setItem(STORAGE_KEYS.SAMPLING_RULES, JSON.stringify(rules)); }
+
+    function generateMockBatches() {
+      const batches = []; const statuses = ['completed', 'completed', 'completed', 'processing', 'failed'];
+      for (let i = 0; i < 12; i++) {
+        const date = new Date(); date.setDate(date.getDate() - Math.floor(i / 2));
+        const dataCount = 1500 + Math.floor(Math.random() * 2000);
+        const diffRate = 5 + Math.random() * 10;
+        batches.push({
+          id: `BAT-${date.toISOString().slice(0,10).replace(/-/g,'')}-${String((i%2)+1).padStart(3,'0')}`,
+          execDate: date.toISOString().slice(0,10),
+          dataCount: dataCount,
+          diffCount: Math.floor(dataCount * diffRate / 100),
+          diffRate: diffRate,
+          instanceCount: Math.ceil(Math.random() * 4),
+          status: i === 0 ? 'processing' : statuses[i % statuses.length],
+          involves: ['inst_001','inst_002','inst_003','inst_004'].slice(0, Math.ceil(Math.random() * 4))
+        });
+      }
+      return batches;
+    }
+
+    function generateMockDiffs(batchId) {
+      const diffs = [];
+      const products = [
+        { id: 'P001', name: 'iPhone 15 Pro', category: '手机' }, { id: 'P002', name: 'Samsung S24', category: '手机' },
+        { id: 'P003', name: '小米14 Ultra', category: '手机' }, { id: 'P004', name: 'OPPO Find X7', category: '手机' },
+        { id: 'P005', name: 'vivo X100', category: '手机' }, { id: 'P006', name: '华为Mate 60', category: '手机' },
+        { id: 'P007', name: 'MacBook Pro', category: '电脑' }, { id: 'P008', name: 'ThinkPad', category: '电脑' },
+        { id: 'P009', name: 'Dell XPS', category: '电脑' }, { id: 'P010', name: 'AirPods', category: '耳机' },
+        { id: 'P011', name: 'Sony XM5', category: '耳机' }, { id: 'P012', name: 'Nike Air', category: '鞋靴' },
+        { id: 'P013', name: 'Adidas Yeezy', category: '鞋靴' }, { id: 'P014', name: '优衣库T恤', category: '服装' },
+        { id: 'P015', name: 'Zara连衣裙', category: '服装' }, { id: 'P016', name: '宜家台灯', category: '家居' },
+        { id: 'P017', name: '戴森吸尘器', category: '家电' }, { id: 'P018', name: 'SK-II', category: '美妆' },
+        { id: 'P019', name: '雅���兰���', category: '美妆' }, { id: 'P020', name: 'Lamer', category: '美妆' }
+      ];
+      const diffTypes = ['A合规B违规', 'A违规B合规', 'A合规B合规', 'A违规B违规', 'A合规B违规', 'A违规B合规'];
+      const instances = getInstanceMappings();
+      for (let i = 0; i < 18; i++) {
+        const prod = products[i % products.length];
+        const diffType = diffTypes[Math.floor(Math.random() * diffTypes.length)];
+        const isA合规 = diffType.includes('合规');
+        const isB合规 = !diffType.includes('违规');
+        diffs.push({
+          productId: prod.id, productName: prod.name, category: prod.category,
+          modelA: isA合规 ? '合规' : '违规', modelB: isB合规 ? '合规' : '违规',
+          diffType: diffType, instance: instances[i % instances.length].name,
+          instanceId: instances[i % instances.length].id,
+          taskGenerated: Math.random() > 0.5
+        });
+      }
+      return diffs;
+    }
+
+    let allBatches = [];
+    let filteredBatches = [];
+    let currentPage = 1, pageSize = 50;
+    let selectedInstances = [];  // 支持多选
+    let availableInstances = [];  // 从系统配置动态获取
+    let availableRules = [];  // 可用规则列表
+    let instanceRuleMapping = {};  // 实例规则映射
+    let detailInstanceFilter = 'all';  // 明细筛选：实例
+    let detailTypeFilter = 'all';  // 明细筛选：差异类型
+    let newBatchId = null;  // URL参数中的新批次ID
+    let reviewPollingTimer = null;  // 互检轮询定时器
+    let reviewPollingBatchId = null;  // 当前轮询的批次ID
+
+    // 明细分页变量
+    let detailPage = 1;
+    let detailPerPage = 10;
+    let detailTotal = 0;
+    let detailPages = 0;
+    let currentBatchSummary = null;  // 统计信息（来自后端summary字段）
+
+    // ========== 初始化：加载实例列表和默认日期 ==========
+    function init() {
+      // 解析URL参数
+      var urlParams = new URLSearchParams(window.location.search);
+      newBatchId = urlParams.get('new_batch');
+
+      // 读取日期筛选参数（从看板跳转过来时）
+      var urlStartDate = urlParams.get('start_date');
+      var urlEndDate = urlParams.get('end_date');
+
+      loadInstancesFromConfig();
+      loadRuleConfig();
+
+      // 如果有URL日期参数，自动设置日期筛选
+      if (urlStartDate && urlEndDate) {
+        document.getElementById('filterStartDate').value = urlStartDate;
+        document.getElementById('filterEndDate').value = urlEndDate;
+        // 自动触发列表刷新
+        loadBatches();
+      } else if (urlStartDate) {
+        document.getElementById('filterStartDate').value = urlStartDate;
+        document.getElementById('filterEndDate').value = urlStartDate;
+        loadBatches();
+      } else {
+        setDefaultDates();
+      }
+
+      checkRunningTasks();
+
+      // 如果有new_batch参数，自动加载最新数据并高亮
+      if (newBatchId) {
+        loadBatchesWithNewBatch();
+      }
+    }
+
+    // 加载批次数据（带new_batch参数）
+    function loadBatchesWithNewBatch() {
+      // 重置筛选条件，确保新批次可见
+      document.getElementById('filterStatus').value = 'all';
+      document.getElementById('filterSource').value = '';
+      document.getElementById('filterStartDate').value = '';
+      document.getElementById('filterEndDate').value = '';
+      selectedInstances = [];
+      renderInstanceFilter();
+
+      // 调用正常的loadBatches，在数据加载完成后自动高亮
+      loadBatches();
+    }
+
+    // 检查正在执行的任务状态（支持自动轮询 + 任务完成自动刷新）
+    var _runningTaskPollingTimer = null;
+    var _lastRunningBatchId = null;
+
+    function startRunningTaskPolling() {
+      if (_runningTaskPollingTimer) return;  // 已在轮询中
+      _runningTaskPollingTimer = setInterval(checkRunningTasks, 5000);
+    }
+
+    function stopRunningTaskPolling() {
+      if (_runningTaskPollingTimer) {
+        clearInterval(_runningTaskPollingTimer);
+        _runningTaskPollingTimer = null;
+      }
+    }
+
+    function checkRunningTasks() {
+      fetch('/api/task-batches/running')
+        .then(function(res) { return res.json(); })
+        .then(function(data) {
+          var dotEl = document.getElementById('taskStatusDot');
+          var textEl = document.getElementById('taskStatusText');
+          var indicatorEl = document.getElementById('taskStatusIndicator');
+          if (!dotEl || !textEl || !indicatorEl) return;
+
+          if (data.running) {
+            // 有任务正在执行
+            dotEl.className = 'status-dot running';
+            textEl.textContent = '⏳ 有任务正在执行中（批次: ' + data.batch_id + '）';
+            indicatorEl.style.display = 'flex';
+            // 开始自动轮询
+            startRunningTaskPolling();
+            _lastRunningBatchId = data.batch_id;
+          } else {
+            // 没有正在执行的任务
+            dotEl.className = 'status-dot';
+            dotEl.style.background = 'var(--success)';
+            textEl.textContent = '✅ 当前无进行中的任务';
+            indicatorEl.style.display = 'flex';
+            // 停止轮询
+            stopRunningTaskPolling();
+            // 如果之前有 running 任务刚完成，刷新列表
+            if (_lastRunningBatchId) {
+              _lastRunningBatchId = null;
+              loadBatches();  // 列表会自动反映新批次状态
+            }
+          }
+        })
+        .catch(function() {
+          var indicatorEl = document.getElementById('taskStatusIndicator');
+          if (indicatorEl) indicatorEl.style.display = 'none';
+        });
+    }
+
+    // 高亮显示新批次
+    function highlightNewBatch() {
+      if (!newBatchId) return;
+
+      var batchRow = document.querySelector('[data-batch-id="' + newBatchId + '"]');
+      if (batchRow) {
+        batchRow.classList.add('batch-highlight');
+        batchRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        // 3秒后移除高亮
+        setTimeout(function() {
+          batchRow.classList.remove('batch-highlight');
+        }, 3000);
+      } else {
+        // 如果没找到，显示提示
+        var toast = document.getElementById('toast');
+        if (toast) {
+          toast.textContent = '检测到新批次但被当前筛选条件隐藏，点击"全部实例"查看';
+          toast.className = 'toast show';
+          setTimeout(function() {
+            toast.classList.remove('show');
+          }, 5000);
+        }
+      }
+    }
+
+    // 加载规则列表和实例规则映射
+    function loadRuleConfig() {
+      var token = localStorage.getItem('token');
+      var headers = token ? { 'Authorization': 'Bearer ' + token } : {};
+
+      Promise.all([
+        // 获取规则列表
+        fetch('/api/prompt-rules', { headers: headers }).then(function(res) { return res.json(); }),
+        // 获取实例规则映射
+        fetch('/api/config/instance-rule-mapping', { headers: headers }).then(function(res) { return res.json(); })
+      ]).then(function(results) {
+        var rulesData = results[0] || [];
+        var mappingData = results[1] || {};
+
+        // 提取规则名称
+        availableRules = rulesData.map(function(r) { return r.name; });
+
+        // 填充规则筛选下拉框
+        var ruleSelect = document.getElementById('filterRule');
+        if (ruleSelect) {
+          ruleSelect.innerHTML = '<option value="">全部规则</option>' +
+            availableRules.map(function(r) { return '<option value="' + r + '">' + r + '</option>'; }).join('');
+        }
+
+        // 缓存实例规则映射
+        instanceRuleMapping = mappingData.mapping || {};
+        localStorage.setItem('INSTANCE_RULE_MAPPING_CACHE', JSON.stringify(instanceRuleMapping));
+      }).catch(function() {
+        // 从缓存读取
+        var cached = localStorage.getItem('INSTANCE_RULE_MAPPING_CACHE');
+        if (cached) instanceRuleMapping = JSON.parse(cached);
+      });
+    }
+
+    // 从系统配置加载实例列表
+    function loadInstancesFromConfig() {
+      fetch('/api/sql-config')
+        .then(function(res) { return res.json(); })
+        .then(function(data) {
+          var instanceSet = new Set();
+          var configs = data.configs || [];
+          configs.forEach(function(t) {
+            if (t.instances) {
+              var instances = t.instances.split(',').map(function(s) { return s.trim(); }).filter(function(s) { return s; });
+              instances.forEach(function(inst) { instanceSet.add(inst); });
+            }
+          });
+          availableInstances = Array.from(instanceSet).sort();
+          renderInstanceFilter();
+          loadBatches();
+        })
+        .catch(function() {
+          // 降级方案：使用默认实例
+          availableInstances = ['ZJWC', 'HWCS', 'HNLCWC', 'YNLCY', 'GXLCY'];
+          renderInstanceFilter();
+          loadBatches();
+        });
+    }
+
+    // 设置默认日期（最近30天）
+    function setDefaultDates() {
+      var today = new Date();
+      var thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(today.getDate() - 30);
+
+      document.getElementById('filterStartDate').value = formatDate(thirtyDaysAgo);
+      document.getElementById('filterEndDate').value = formatDate(today);
+    }
+
+    // 格式化日期为 YYYY-MM-DD
+    function formatDate(date) {
+      var year = date.getFullYear();
+      var month = String(date.getMonth() + 1).padStart(2, '0');
+      var day = String(date.getDate()).padStart(2, '0');
+      return year + '-' + month + '-' + day;
+    }
+
+    // 全局批次状态缓存（用于中止按钮判断）
+    var _batchStatusCache = {};
+
+    // 加载批次数据
+    function loadBatches() {
+      var params = new URLSearchParams();
+      var startDate = document.getElementById('filterStartDate').value;
+      var endDate = document.getElementById('filterEndDate').value;
+      var source = document.getElementById('filterSource').value;
+      var status = document.getElementById('filterStatus').value;
+      var rule = document.getElementById('filterRule').value;
+
+      if (startDate) params.append('start_date', startDate);
+      if (endDate) params.append('end_date', endDate);
+      if (source) params.append('source', source);
+      if (status && status !== 'all') params.append('status', status);
+      if (selectedInstances.length > 0) params.append('instances', selectedInstances.join(','));
+      if (rule) params.append('rule', rule);
+
+      fetch('/api/task-batches?' + params.toString())
+        .then(function(res) { return res.json(); })
+        .then(function(data) {
+          // 字段映射：batch_id -> id，包含完整字段
+          allBatches = (data.batches || []).map(function(b) {
+            return {
+              id: b.batch_id,
+              fetch_time: b.fetch_time || '',
+              execDate: b.fetch_time ? b.fetch_time.split(' ')[0] : '',
+              data_start_date: b.data_start_date || '',
+              data_end_date: b.data_end_date || '',
+              dataDateRange: (b.data_start_date || b.data_end_date) ?
+                (b.data_start_date && b.data_end_date && b.data_start_date === b.data_end_date ?
+                  b.data_start_date :
+                  (b.data_start_date || '') + ' ~ ' + (b.data_end_date || '')) : '',
+              // 线上原始数据
+              originalTotal: b.original_total || 0,
+              originalCompliant: b.original_compliant || 0,
+              originalNonCompliant: b.original_non_compliant || 0,
+              // 抽样数据
+              dataCount: b.total_fetched || 0,
+              compliantCount: b.compliant_count || 0,
+              nonCompliantCount: b.non_compliant_count || 0,
+              diffCount: b.non_compliant_count || 0,
+              diffRate: b.original_total > 0 ? (b.non_compliant_count / b.original_total * 100) : 0,
+              instanceCount: b.instances ? b.instances.split(',').length : 0,
+              instances: b.instances || '',
+              involves: b.instances,
+              env: b.env || '',
+              samplePercent: b.sample_percent || 0,
+              status: b.status,
+              source: b.source || 'fetch',
+              // 互检状态字段（来自后端 data_fetch.py）
+              review_status: b.review_status || '未互检',
+              reviewed_count: b.reviewed_count || 0,
+              total_items: b.total_items || 0
+            };
+          });
+          // 更新全局批次状态缓存（供 abortBatch 使用）
+          _batchStatusCache = {};
+          allBatches.forEach(function(b) { _batchStatusCache[b.id] = { status: b.status, review_status: b.review_status }; });
+          applyFilter();
+          // 如果有 new_batch 参数，数据加载后执行高亮
+          if (newBatchId) {
+            setTimeout(function() {
+              highlightNewBatch();
+            }, 100);
+          }
+        })
+        .catch(function() {
+          // 降级：使用模拟数据
+          allBatches = generateMockBatches();
+          applyFilter();
+        });
+    }
+
+    // ========== 实例筛选渲染（强制单选）==========
+
+    function renderInstanceFilter() {
+      var container = document.getElementById('instanceFilter');
+      var html = '';
+
+      // 全部实例按钮
+      var allActive = selectedInstances.length === 0;
+      html += '<button class="filter-btn ' + (allActive ? 'active' : '') + '" data-instance="all" onclick="toggleInstanceFilter(\'all\')">全部实例</button>';
+
+      // 各实例按钮
+      availableInstances.forEach(function(inst) {
+        var isActive = selectedInstances.length === 1 && selectedInstances[0] === inst;
+        html += '<button class="filter-btn ' + (isActive ? 'active' : '') + '" data-instance="' + inst + '" onclick="toggleInstanceFilter(\'' + inst + '\')">' + inst + '</button>';
+      });
+
+      container.innerHTML = html;
+    }
+
+    // 切换实例筛选（强制单选：点击任意按钮时，仅该按钮高亮）
+    function toggleInstanceFilter(instanceId) {
+      if (instanceId === 'all') {
+        selectedInstances = [];
+      } else {
+        // 单选模式：直接替换为当前选中项
+        selectedInstances = [instanceId];
+      }
+
+      currentPage = 1;
+      renderInstanceFilter();
+      loadBatches();
+    }
+
+    function renderBatchTable() {
+      const tbody = document.getElementById('batchTableBody');
+      const start = (currentPage - 1) * pageSize; const end = start + pageSize;
+      const pageData = filteredBatches.slice(start, end);
+      if (!pageData.length) { tbody.innerHTML = '<tr><td colspan="9" style="padding:40px;text-align:center;color:var(--text-muted)">暂无数据</td></tr>'; return; }
+      tbody.innerHTML = pageData.map(batch => {
+        const diffRateClass = batch.diffRate > 10 ? 'diff-rate-high' : batch.diffRate >= 5 ? 'diff-rate-mid' : 'diff-rate-low';
+        const isRunning = batch.status === 'running' || batch.status === 'processing';
+        const isPending = batch.status === 'pending' || batch.status === 'initializing' || !batch.status;
+        const statusTag = batch.status === 'completed' ? '<span class="status-tag completed">已完成</span>'
+          : isRunning ? '<span class="status-tag processing">进行中</span>'
+          : isPending ? '<span class="status-tag pending">待处理</span>'
+          : '<span class="status-tag failed">失败</span>';
+        const source = batch.source || 'fetch';
+        const sourceTag = source === 'upload' ? '<span class="status-tag" style="background: #d4edda; color: #28a745;">文件上传</span>' : '<span class="status-tag" style="background: #cce5ff; color: #004085;">线上获取</span>';
+        const execDate = batch.execDate || batch.fetch_time || '';
+        return `<tr data-batch-id="${batch.id}"><td>${batch.id}</td><td>${sourceTag}</td><td>${execDate}</td><td>${batch.dataCount.toLocaleString()}</td><td>${batch.diffCount.toLocaleString()}</td><td><span class="${diffRateClass}">${batch.diffRate.toFixed(1)}%</span></td><td>${batch.instanceCount}</td><td>${statusTag}</td></tr>`;
+      }).join('');
+    }
+
+    function renderPagination() {
+      const totalPages = Math.ceil(filteredBatches.length / pageSize);
+      let html = `<span class="pagination-item" onclick="goToPage(${currentPage - 1})">‹</span>`;
+      for (let i = 1; i <= totalPages; i++) { if (i === 1 || i === totalPages || (i >= currentPage - 1 && i <= currentPage + 1)) html += `<span class="pagination-item ${i === currentPage ? 'active' : ''}" onclick="goToPage(${i})">${i}</span>`; }
+      html += `<span class="pagination-item" onclick="goToPage(${currentPage + 1})">›</span>`;
+      document.getElementById('paginationCenter').innerHTML = html;
+      const start = filteredBatches.length > 0 ? (currentPage - 1) * pageSize + 1 : 0;
+      const end = Math.min(currentPage * pageSize, filteredBatches.length);
+      document.getElementById('paginationInfo').innerHTML = `共 ${filteredBatches.length} 条记录，第 ${start}-${end} 条`;
+    }
+
+    function goToPage(page) { const totalPages = Math.ceil(filteredBatches.length / pageSize); if (page < 1 || page > totalPages) return; currentPage = page; renderBatchTable(); renderPagination(); }
+    function changePageSize() { pageSize = parseInt(document.getElementById('pageSize').value); currentPage = 1; renderBatchTable(); renderPagination(); }
+
+    function applyFilter() {
+      var status = document.getElementById('filterStatus').value;
+      var startDate = document.getElementById('filterStartDate').value;
+      var endDate = document.getElementById('filterEndDate').value;
+      var source = document.getElementById('filterSource').value;
+      var selectedRule = document.getElementById('filterRule').value;
+
+      filteredBatches = allBatches.filter(function(batch) {
+        if (status !== 'all') {
+          var batchStatus = batch.status;
+          if (status === 'processing') {
+            if (batchStatus !== 'running' && batchStatus !== 'processing') return false;
+          } else if (status === 'pending') {
+            if (batchStatus !== 'pending' && batchStatus !== 'initializing' && batchStatus !== '' && batchStatus !== null) return false;
+          } else if (batchStatus !== status) {
+            return false;
+          }
+        }
+        var batchDate = batch.execDate || batch.fetch_time || '';
+        if (startDate && batchDate < startDate) return false;
+        if (endDate && batchDate > endDate) return false;
+        // 实例多选筛选
+        if (selectedInstances.length > 0) {
+          var batchInstances = batch.instances || batch.involves || [];
+          if (!Array.isArray(batchInstances)) batchInstances = batchInstances.toString().split(',');
+          var hasMatch = selectedInstances.some(function(inst) { return batchInstances.indexOf(inst) !== -1; });
+          if (!hasMatch) return false;
+        }
+        if (source && batch.source !== source) return false;
+        // 规则筛选
+        if (selectedRule) {
+          var batchInstances = batch.instances || [];
+          if (!Array.isArray(batchInstances)) batchInstances = batchInstances.toString().split(',');
+          // 检查该批次是否有任何一个实例关联了选定的规则
+          var hasRule = batchInstances.some(function(inst) { return instanceRuleMapping[inst] === selectedRule; });
+          if (!hasRule) return false;
+        }
+        return true;
+      });
+      currentPage = 1;
+      renderBatchTable();
+      renderPagination();
+    }
+
+    function resetFilter() {
+      document.getElementById('filterStatus').value = 'all';
+      setDefaultDates();
+      document.getElementById('filterSource').value = '';
+      document.getElementById('filterRule').value = '';
+      selectedInstances = [];
+      renderInstanceFilter();
+      loadBatches();
+    }
+
+    function showDetail(batchId) {
+      const batch = allBatches.find(b => b.id === batchId);
+      if (!batch) return;
+      expandedBatchId = batchId;
+      
+      // 重置分页参数
+      detailPage = 1;
+      detailPerPage = 10;
+      
+      // 显示加载中
+      const panel = document.getElementById('detailPanel');
+      const content = document.getElementById('detailContent');
+      panel.classList.add('expanded');
+      content.innerHTML = '<div style="padding:40px;text-align:center;color:var(--text-muted);">加载中...</div>';
+      
+      // 从 API 加载真实数据（带分页参数）
+      fetch('/api/task-batches/' + batchId + '/items?page=' + detailPage + '&per_page=' + detailPerPage)
+        .then(function(res) { return res.json(); })
+        .then(function(data) {
+          // 保存分页信息
+          detailTotal = data.total || 0;
+          detailPages = data.pages || Math.ceil((data.total || 0) / detailPerPage);
+          
+          var items = data.items || [];
+          currentBatchDiffs = items.map(function(item) {
+            var diffType = 'A合规B合规';
+            var modelA = item.ai_result || '合规';
+            var modelB = item.modelb_result;
+            if (modelB) {
+              if (modelA === '合规' && modelB === '违规') diffType = 'A合规B违规';
+              else if (modelA === '违规' && modelB === '合规') diffType = 'A违规B合规';
+              else if (modelA === '合规' && modelB === '合规') diffType = 'A合规B合规';
+              else if (modelA === '违规' && modelB === '违规') diffType = 'A违规B违规';
+            } else if (!item.modelb_reviewed) {
+              diffType = '';
+            }
+            return {
+              id: item.id, productId: item.product_id, productName: item.product_name,
+              category: item.category, createdDate: item.created_date || '-', modelA: modelA, modelB: modelB || '-',
+              modelBReason: item.modelb_reason || '', modelBDetail: item.modelb_detail || '', diffType: diffType,
+              modelBConsistent: item.modelb_consistent,
+              instance: item.instance_code, instanceId: item.instance_code,
+              aiRejectReason: item.ai_reject_reason || '', aiExplain: item.ai_explain || '', shopName: item.shop_name || '-'
+            };
+          });
+          currentBatchInstances = [];
+          var instSet = new Set();
+          items.forEach(function(item) { if (item.instance_code) instSet.add(item.instance_code); });
+          currentBatchInstances = Array.from(instSet);
+          
+          // 保存 summary 信息用于统计卡片
+          currentBatchSummary = data.summary || null;
+          
+          renderDetailRealData(batchId, progressCallback);
+        })
+        .catch(function() {
+          currentBatchDiffs = [];
+          currentBatchInstances = [];
+          currentBatchSummary = null;
+          renderDetailRealData(batchId, function() {});
+        });
+    }
+    
+    function progressCallback(progress) {
+      // 回调用于渲染进度
+    }
+    
+    function renderDetailRealData(batchId, progressCallback) {
+      // 优先使用后端返回的全量 summary，否则使用分页数据计算（兼容）
+      var stats = { 'A合规B违规': 0, 'A违规B合规': 0, 'A合规B合规': 0, 'A违规B违规': 0, '未互检': 0, task: 0 };
+      if (currentBatchSummary && currentBatchSummary.modelb) {
+        stats = currentBatchSummary.modelb;
+      } else {
+        currentBatchDiffs.forEach(function(d) { stats[d.diffType] = (stats[d.diffType] || 0) + 1; if (d.taskGenerated) stats.task++; });
+      }
+      getModelBProgress(batchId, function(progress) {
+        var modelName = progress.model_name || 'Mock';
+        var promptInfo = progress.prompt_info || '通用默认';
+        var progressInfo = '';
+        if (progress.status === 'running' || progress.reviewed < progress.total) {
+          progressInfo = '<div style="color:var(--primary);font-size:13px;margin-top:8px;">互检进度: ' + progress.reviewed + '/' + progress.total + '</div>';
+        }
+        
+        // 构建分页器 HTML - 按规则显示
+        var paginationHtml = '';
+        if (detailTotal >= 0) {
+          paginationHtml = '<div class="detail-pagination" style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-top:1px solid var(--border-light);background:#fafbfc;font-size:13px;">' +
+            '<div style="display:flex;align-items:center;gap:8px;color:var(--text-secondary);">' +
+              '<span>每页</span>' +
+              '<select class="form-select" style="padding:4px 8px;font-size:13px;border:1px solid var(--border);border-radius:4px;" onchange="changeDetailPageSize(this.value)">' +
+                '<option value="10" ' + (detailPerPage === 10 ? 'selected' : '') + '>10</option>' +
+                '<option value="20" ' + (detailPerPage === 20 ? 'selected' : '') + '>20</option>' +
+                '<option value="50" ' + (detailPerPage === 50 ? 'selected' : '') + '>50</option>' +
+                '<option value="100" ' + (detailPerPage === 100 ? 'selected' : '') + '>100</option>' +
+              '</select>' +
+              '<span>条</span>' +
+            '</div>' +
+            '<div style="display:flex;align-items:center;gap:4px;">' +
+              // 上一页按钮
+              '<button class="pagination-item" ' + (detailPage <= 1 ? 'disabled style="opacity:0.5;pointer-events:none;"' : 'onclick="gotoDetailPage(' + (detailPage - 1) + ')"') + ' style="min-width:32px;height:32px;display:flex;align-items:center;justify-content:center;border:1px solid var(--border);border-radius:4px;cursor:pointer;background:#fff;">‹</button>';
+          
+          // 页码显示逻辑
+          var pageHtml = '';
+          if (detailPages <= 5) {
+            // 总页数<=5，显示全部
+            for (var p = 1; p <= detailPages; p++) {
+              pageHtml += '<button class="pagination-item ' + (p === detailPage ? 'active' : '') + '" onclick="gotoDetailPage(' + p + ')" style="min-width:32px;height:32px;display:flex;align-items:center;justify-content:center;border:1px solid var(--border);border-radius:4px;cursor:pointer;background:' + (p === detailPage ? 'var(--primary);color:#fff;' : '#fff;') + '">' + p + '</button>';
+            }
+          } else {
+            // 总页数>5，显示：首页、当前页前后、尾页，用...连接
+            var pagesToShow = [];
+            
+            // 始终显示第1页
+            pagesToShow.push(1);
+            
+            // 当前页前面的页码
+            if (detailPage > 2) {
+              if (detailPage > 3) {
+                pagesToShow.push('...');
+              }
+              pagesToShow.push(detailPage - 1);
+            }
+            
+            // 当前页
+            if (detailPage !== 1 && detailPage !== detailPages) {
+              pagesToShow.push(detailPage);
+            }
+            
+            // 当前页后面的页码
+            if (detailPage < detailPages - 1) {
+              pagesToShow.push(detailPage + 1);
+              if (detailPage < detailPages - 2) {
+                pagesToShow.push('...');
+              }
+            }
+            
+            // 始终显示最后一页
+            if (detailPages > 1) {
+              pagesToShow.push(detailPages);
+            }
+            
+            // 渲染页码按钮
+            for (var i = 0; i < pagesToShow.length; i++) {
+              var p = pagesToShow[i];
+              if (p === '...') {
+                pageHtml += '<span style="padding:0 4px;color:var(--text-muted);">...</span>';
+              } else {
+                pageHtml += '<button class="pagination-item ' + (p === detailPage ? 'active' : '') + '" onclick="gotoDetailPage(' + p + ')" style="min-width:32px;height:32px;display:flex;align-items:center;justify-content:center;border:1px solid var(--border);border-radius:4px;cursor:pointer;background:' + (p === detailPage ? 'var(--primary);color:#fff;' : '#fff;') + '">' + p + '</button>';
+              }
+            }
+          }
+          
+          paginationHtml += pageHtml;
+          
+          paginationHtml += '<button class="pagination-item" ' + (detailPage >= detailPages ? 'disabled style="opacity:0.5;pointer-events:none;"' : 'onclick="gotoDetailPage(' + (detailPage + 1) + ')"') + ' style="min-width:32px;height:32px;display:flex;align-items:center;justify-content:center;border:1px solid var(--border);border-radius:4px;cursor:pointer;background:#fff;">›</button>' +
+            '</div>' +
+            '<div style="color:var(--text-secondary);">' +
+              '共 ' + detailTotal + ' 条，第 ' + detailPage + '/' + detailPages + ' 页' +
+            '</div>' +
+          '</div>';
+        }
+        document.getElementById('detailContent').innerHTML = '<div class="detail-header"><span class="detail-title">批次 ' + batchId + ' 差异明细</span><button class="btn-close-detail" onclick="closeDetail()">X</button></div>' + '<div class="diff-meta" style="display:flex;gap:20px;margin-bottom:16px;padding:12px;background:#f9fafb;border-radius:8px;font-size:13px;"><div><strong>检查模型：</strong>' + modelName + '</div><div><strong>使用提示词：</strong>' + promptInfo + '</div></div>' + progressInfo + '<div class="diff-stats"><div class="diff-stat"><div class="diff-stat-value">' + (stats['A合规B违规'] + stats['A违规B合规']) + '</div><div class="diff-stat-label">不一致总数</div></div><div class="diff-stat highlight"><div class="diff-stat-value">' + stats['A合规B违规'] + '</div><div class="diff-stat-label">A合规B违规</div></div><div class="diff-stat highlight"><div class="diff-stat-value">' + stats['A违规B合规'] + '</div><div class="diff-stat-label">A违规B合规</div></div><div class="diff-stat"><div class="diff-stat-value">' + stats['A合规B合规'] + '</div><div class="diff-stat-label">A合规B合规</div></div><div class="diff-stat"><div class="diff-stat-value">' + stats['A违规B违规'] + '</div><div class="diff-stat-label">A违规B违规</div></div><div class="diff-stat"><div class="diff-stat-value">' + stats['未互检'] + '</div><div class="diff-stat-label">未互检</div></div></div><div class="detail-filter"><span style="font-size:13px;color:var(--text-secondary)">实例筛选：</span><button class="filter-btn active" data-detail-instance="all" onclick="filterDetailInstance(\'all\')">全部</button>' + currentBatchInstances.map(function(instId) { return '<button class="filter-btn" data-detail-instance="' + instId + '" onclick="filterDetailInstance(\'' + instId + '\')">' + instId + '</button>'; }).join('') + '<span style="font-size:13px;color:var(--text-secondary);margin-left:16px">差异类型：</span><button class="filter-btn active" data-detail-type="all" onclick="filterDetailType(\'all\')">全部</button><button class="filter-btn" data-detail-type="A合规B违规" onclick="filterDetailType(\'A合规B违规\')">A合规B违规</button><button class="filter-btn" data-detail-type="A违规B合规" onclick="filterDetailType(\'A违规B合规\')">A违规B合规</button><button class="filter-btn" data-detail-type="A合规B合规" onclick="filterDetailType(\'A合规B合规\')">A合规B合规</button><button class="filter-btn" data-detail-type="A违规B违规" onclick="filterDetailType(\'A违规B违规\')">A违规B违规</button></div><table class="diff-table"><thead><tr><th style="min-width:120px;max-width:120px;">商品ID</th><th style="min-width:160px;max-width:160px;">商品名称</th><th>类目</th><th>AI审核结果</th><th>AI拒绝原因</th><th>模型B审核结果</th><th>模型B拒绝原因</th><th>差异类型</th><th>实例编码</th><th>所属规则</th><th>操作</th></tr></thead><tbody id="diffTableBody"></tbody></table>' + paginationHtml + '<div class="action-buttons"><button class="btn-generate" onclick="openGenerateModal(\'' + batchId + '\')">生成标注任务</button><button class="btn-export" onclick="exportDetail(\'' + batchId + '\')">导出明细</button></div>';
+        document.getElementById('detailPanel').classList.add('expanded');
+        updateDetailFilters();
+        if (progress.status === 'running') startProgressPolling(batchId);
+      });
+    }
+    
+    var progressPollingTimer = null;
+    function startProgressPolling(batchId) {
+      if (progressPollingTimer) clearInterval(progressPollingTimer);
+      progressPollingTimer = setInterval(function() {
+        getModelBProgress(batchId, function(progress) {
+          if (progress.status !== 'running') {
+            clearInterval(progressPollingTimer);
+            progressPollingTimer = null;
+            if (expandedBatchId === batchId) showDetail(batchId);
+          } else {
+            var el = document.querySelector('.diff-meta');
+            if (el && el.innerHTML.indexOf('互检进度') >= 0) {
+              el.innerHTML = el.innerHTML.replace(/互检进度: \d+\/\d+/, '互检进度: ' + progress.reviewed + '/' + progress.total);
+            }
+          }
+        });
+      }, 3000);
+    }
+    
+    function exportDetail(batchId) {
+      var csv = '商品ID,商品名称,类目,模型A结果,模型B结果,差异类型,实例\n';
+      currentBatchDiffs.forEach(function(d) { csv += d.productId + ',' + d.productName + ',' + d.category + ',' + d.modelA + ',' + d.modelB + ',' + d.diffType + ',' + d.instance + '\n'; });
+      var blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      var link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = batchId + '_明细.csv';
+      link.click();
+    }
+
+    function closeDetail() { document.getElementById('detailPanel').classList.remove('expanded'); expandedBatchId = null; if (progressPollingTimer) clearInterval(progressPollingTimer); }
+
+    // 明细分页函数
+    function changeDetailPageSize(size) {
+      detailPerPage = parseInt(size);
+      detailPage = 1;
+      loadDetailPage();
+    }
+    
+    function gotoDetailPage(page) {
+      if (page < 1 || page > detailPages) return;
+      detailPage = page;
+      loadDetailPage();
+    }
+    
+    function loadDetailPage() {
+      if (!expandedBatchId) return;
+      fetch('/api/task-batches/' + expandedBatchId + '/items?page=' + detailPage + '&per_page=' + detailPerPage)
+        .then(function(res) { return res.json(); })
+        .then(function(data) {
+          detailTotal = data.total || 0;
+          detailPages = data.pages || Math.ceil((data.total || 0) / detailPerPage);
+          
+          var items = data.items || [];
+          currentBatchDiffs = items.map(function(item) {
+            var diffType = 'A合规B合规';
+            var modelA = item.ai_result || '合规';
+            var modelB = item.modelb_result;
+            if (modelB) {
+              if (modelA === '合规' && modelB === '违规') diffType = 'A合规B违规';
+              else if (modelA === '违规' && modelB === '合规') diffType = 'A违规B合规';
+              else if (modelA === '合规' && modelB === '合规') diffType = 'A合规B合规';
+              else if (modelA === '违规' && modelB === '违规') diffType = 'A违规B违规';
+            } else if (!item.modelb_reviewed) {
+              diffType = '';
+            }
+            return {
+              id: item.id, productId: item.product_id, productName: item.product_name,
+              category: item.category, createdDate: item.created_date || '-', modelA: modelA, modelB: modelB || '-',
+              modelBReason: item.modelb_reason || '', modelBDetail: item.modelb_detail || '', diffType: diffType,
+              modelBConsistent: item.modelb_consistent,
+              instance: item.instance_code, instanceId: item.instance_code,
+              aiRejectReason: item.ai_reject_reason || '', aiExplain: item.ai_explain || '', shopName: item.shop_name || '-'
+            };
+          });
+          
+          // 重新渲染表格和分页器
+          renderDetailRealData(expandedBatchId, function() {});
+        });
+    }
+
+    function filterDetailInstance(instanceId) { detailInstanceFilter = instanceId; updateDetailFilters(); }
+    function filterDetailType(type) { detailTypeFilter = type; updateDetailFilters(); }
+
+    function updateDetailFilters() {
+      document.querySelectorAll('.detail-filter .filter-btn').forEach(function(btn) { btn.classList.remove('active'); if (btn.dataset.detailInstance === detailInstanceFilter || btn.dataset.detailType === detailTypeFilter) btn.classList.add('active'); });
+      var filtered = currentBatchDiffs;
+      if (detailInstanceFilter !== 'all') filtered = filtered.filter(function(d) { return d.instanceId === detailInstanceFilter || d.instance === detailInstanceFilter; });
+      if (detailTypeFilter !== 'all') filtered = filtered.filter(function(d) { return d.diffType === detailTypeFilter; });
+      document.getElementById('diffTableBody').innerHTML = filtered.map(function(diff) {
+        var ruleName = instanceRuleMapping[diff.instance] || '';
+        var rowClass = (diff.diffType === 'A合规B违规' || diff.diffType === 'A违规B合规') ? 'style="background:#fee;background:var(--danger-light);"' : '';
+        var modelBResult = diff.modelB && diff.modelB !== '-' ? diff.modelB : '<span style="color:var(--text-muted);">-</span>';
+        var modelBClass = diff.modelB && diff.modelB !== diff.modelA ? 'style="color:var(--danger);font-weight:600;"' : 'style="color:var(--success);"';
+        
+        // 精炼模型B拒绝原因：优先使用简短reason字段
+        var modelBReasonFull = diff.modelBDetail || diff.modelBReason || '';
+        var modelBReasonShort = diff.modelBReason || '-';
+        if (modelBReasonShort !== '-' && modelBReasonShort.length > 20) {
+          modelBReasonShort = modelBReasonShort.substring(0, 20) + '...';
+        }
+        
+        // AI拒绝原因精简
+        var aiRejectReasonFull = diff.aiRejectReason || '-';
+        var aiRejectReasonShort = aiRejectReasonFull === '-' ? '-' : (aiRejectReasonFull.length > 15 ? aiRejectReasonFull.substring(0, 15) + '...' : aiRejectReasonFull);
+        
+        // 商品名称截断
+        var productNameFull = diff.productName || '-';
+        var productNameShort = productNameFull === '-' ? '-' : (productNameFull.length > 15 ? productNameFull.substring(0, 15) + '...' : productNameFull);
+        
+        // 详情弹窗内容
+        var detailContent = '<div style="padding:16px;max-width:600px;font-size:13px;line-height:1.8;max-height:70vh;overflow-y:auto;">' +
+          '<div style="margin-bottom:12px;"><strong>商品ID：</strong>' + diff.productId + '</div>' +
+          '<div style="margin-bottom:12px;"><strong>商品名称：</strong>' + (diff.productName || '-') + '</div>' +
+          '<div style="margin-bottom:12px;"><strong>商品链接：</strong>' + (diff.productUrl || diff.mainImage || '-') + '</div>' +
+          '<div style="margin-bottom:12px;"><strong>类目：</strong>' + (diff.category || '-') + '</div>' +
+          '<div style="margin-bottom:12px;"><strong>AI审核结果：</strong>' + diff.modelA + '</div>' +
+          '<div style="margin-bottom:12px;"><strong>AI拒绝原因：</strong>' + (diff.aiRejectReason || '-') + '</div>' +
+          '<div style="margin-bottom:12px;"><strong>AI拒绝解释：</strong>' + (diff.aiExplain || '-') + '</div>' +
+          '<div style="margin-bottom:12px;"><strong>模型B审核结果：</strong>' + diff.modelB + '</div>' +
+          '<div style="margin-bottom:12px;"><strong>模型B拒绝原因（简）：</strong>' + (diff.modelBReason || '-') + '</div>' +
+          '<div style="margin-bottom:12px;padding:12px;background:#f5f5f5;border-radius:8px;"><strong>模型B详细解释：</strong><br>' + (diff.modelBDetail || '无') + '</div>' +
+          '<div style="margin-bottom:12px;"><strong>差异类型：</strong>' + diff.diffType + '</div>' +
+          '<div style="margin-bottom:12px;"><strong>实例编码：</strong>' + diff.instance + '</div>' +
+          '<div style="margin-bottom:12px;"><strong>所属规则：</strong>' + (ruleName || '-') + '</div>' +
+          '<div style="margin-bottom:12px;"><strong>店铺名称：</strong>' + (diff.shopName || '-') + '</div>' +
+          '<div style="margin-bottom:12px;"><strong>创建日期：</strong>' + (diff.createdDate || '-') + '</div>' +
+        '</div>';
+        
+        // 简化表格：商品ID、商品名称、类目、AI审核结果、AI拒绝原因（简）、模型B审核结果、模型B拒绝原因（简）、差异类型、实例编码、所属规则、详情
+        return '<tr ' + rowClass + '>' +
+          '<td style="min-width:120px;max-width:120px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="' + diff.productId + '">' + diff.productId + '</td>' +
+          '<td style="min-width:160px;max-width:160px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="' + productNameFull + '">' + productNameShort + '</td>' +
+          '<td>' + (diff.category || '-') + '</td>' +
+          '<td>' + diff.modelA + '</td>' +
+          '<td title="' + aiRejectReasonFull + '">' + aiRejectReasonShort + '</td>' +
+          '<td><span ' + modelBClass + '>' + modelBResult + '</span></td>' +
+          '<td title="' + modelBReasonFull + '">' + modelBReasonShort + '</td>' +
+          '<td class="diff-type-col">' + diff.diffType + '</td>' +
+          '<td>' + diff.instance + '</td>' +
+          '<td>' + (ruleName ? ruleName : '<span class="text-muted">-</span>') + '</td>' +
+          '<td><button class="btn btn-sm" onclick="showDetailModal(\'' + diff.productId + '\', \'' + diff.instance + '\')">详情</button></td>' +
+        '</tr>';
+      }).join('');
+    }
+    
+    // ====== 详情弹窗 ======
+    window.showDetailModal = function(productId, instance) {
+      var diff = currentBatchDiffs.find(function(d) { return d.productId === productId && d.instance === instance; });
+      if (!diff) return;
+      
+      var ruleName = instanceRuleMapping[diff.instance] || '';
+      var content = '<div style="padding:16px;max-width:500px;font-size:13px;line-height:1.8;">' +
+        '<div style="margin-bottom:12px;"><strong>商品ID：</strong>' + diff.productId + '</div>' +
+        '<div style="margin-bottom:12px;"><strong>商品名称：</strong>' + (diff.productName || '-') + '</div>' +
+        '<div style="margin-bottom:12px;"><strong>类目：</strong>' + (diff.category || '-') + '</div>' +
+        '<div style="margin-bottom:12px;"><strong>AI审核结果：</strong>' + diff.modelA + '</div>' +
+        '<div style="margin-bottom:12px;"><strong>AI拒绝原因：</strong>' + (diff.aiRejectReason || '-') + '</div>' +
+        '<div style="margin-bottom:12px;"><strong>AI拒绝解释：</strong>' + (diff.aiExplain || '-') + '</div>' +
+        '<div style="margin-bottom:12px;"><strong>模型B审核结果：</strong>' + diff.modelB + '</div>' +
+        '<div style="margin-bottom:12px;"><strong>模型B拒绝原因：</strong>' + (diff.modelBReason || '-') + '</div>' +
+        '<div style="margin-bottom:12px;"><strong>差异类型：</strong>' + diff.diffType + '</div>' +
+        '<div style="margin-bottom:12px;"><strong>实例编码：</strong>' + diff.instance + '</div>' +
+        '<div style="margin-bottom:12px;"><strong>所属规则：</strong>' + (ruleName || '-') + '</div>' +
+        '<div style="margin-bottom:12px;"><strong>店铺名称：</strong>' + (diff.shopName || '-') + '</div>' +
+        '<div style="margin-bottom:12px;"><strong>创建日期：</strong>' + (diff.createdDate || '-') + '</div>' +
+      '</div>';
+      
+      var modal = document.createElement('div');
+      modal.id = 'detailModal';
+      modal.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:9999;display:flex;align-items:center;justify-content:center;';
+      modal.innerHTML = '<div style="background:#fff;border-radius:8px;max-width:600px;width:90%;max-height:80vh;overflow:auto;box-shadow:0 4px 20px rgba(0,0,0,0.2);">' +
+        '<div style="padding:16px 20px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;">' +
+          '<span style="font-weight:600;font-size:15px;">商品详情</span>' +
+          '<button onclick="closeDetailModal()" style="border:none;background:none;font-size:20px;cursor:pointer;">×</button>' +
+        '</div>' +
+        content +
+      '</div>';
+      document.body.appendChild(modal);
+    };
+    
+    window.closeDetailModal = function() {
+      var modal = document.getElementById('detailModal');
+      if (modal) modal.remove();
+    };
+    
+    function toggleExportMenu(batchId) {
+      // 关闭其他下拉菜单
+      document.querySelectorAll('.export-menu').forEach(function(menu) {
+        if (menu.id !== 'exportMenu_' + batchId) {
+          menu.style.display = 'none';
+        }
+      });
+      // 切换当前菜单
+      var menu = document.getElementById('exportMenu_' + batchId);
+      if (!menu) return;
+      
+      if (menu.style.display === 'block') {
+        menu.style.display = 'none';
+        return;
+      }
+      
+      // 先显示再测量（确保能拿到真实高度）
+      menu.style.display = 'block';
+      menu.style.visibility = 'hidden';
+      
+      // 检测菜单是否会超出页面底部
+      var menuBtn = menu.previousElementSibling;
+      var menuRect = menu.getBoundingClientRect();
+      var btnRect = menuBtn ? menuBtn.getBoundingClientRect() : null;
+      var viewportHeight = window.innerHeight;
+      var cardBottom = 0;
+      
+      // 找到最近的 .card 容器
+      var card = menu.closest('.card');
+      if (card) {
+        cardBottom = card.getBoundingClientRect().bottom;
+      }
+      
+      // 判断方向：菜单底部超出页面底部或卡片底部时向上翻折
+      var menuBottom = menuRect.bottom;
+      var threshold = Math.min(viewportHeight - 10, cardBottom > 0 ? cardBottom - 8 : viewportHeight - 10);
+      
+      if (menuBottom > threshold && btnRect) {
+        // 向上弹出
+        menu.style.top = 'auto';
+        menu.style.bottom = '100%';
+      } else {
+        // 向下弹出
+        menu.style.top = '100%';
+        menu.style.bottom = 'auto';
+      }
+      
+      menu.style.visibility = 'visible';
+    }
+
+    function downloadExport(batchId, type) {
+      // 关闭下拉菜单
+      var menu = document.getElementById('exportMenu_' + batchId);
+      if (menu) menu.style.display = 'none';
+
+      // 构建下载URL
+      var url = '/api/data-fetch/download/' + batchId + '?type=' + type;
+
+      // 创建下载链接
+      var link = document.createElement('a');
+      link.href = url;
+      
+      // 根据类型设置文件名
+      var filenames = {
+        'raw': batchId + '_raw.csv',
+        'violation': batchId + '_violation.csv',
+        'review': batchId + '_review.csv'
+      };
+      link.download = filenames[type] || batchId + '_export.csv';
+      
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+
+    // 点击其他地方关闭下拉菜单（但点击"更多"按钮本身或菜单时不关闭）
+    document.addEventListener('click', function(e) {
+      if (!e.target.closest('.export-dropdown') && !e.target.closest('.more-btn') && !e.target.closest('.more-menu')) {
+        document.querySelectorAll('.export-menu, .more-menu').forEach(function(menu) {
+          menu.style.display = 'none';
+        });
+      }
+    });
+
+    function toggleMoreMenu(batchId) {
+      // 关闭其他下拉菜单
+      document.querySelectorAll('.more-menu, .export-menu').forEach(function(menu) {
+        if (menu.id !== 'moreMenu_' + batchId) {
+          menu.style.display = 'none';
+        }
+      });
+      var menu = document.getElementById('moreMenu_' + batchId);
+      if (!menu) return;
+      menu.style.display = menu.style.display === 'block' ? 'none' : 'block';
+    }
+
+    // hover 效果
+    document.addEventListener('mouseover', function(e) {
+      var item = e.target.closest('.more-menu-item');
+      if (item) item.style.background = '#f8f9ff';
+    });
+    document.addEventListener('mouseout', function(e) {
+      var item = e.target.closest('.more-menu-item');
+      if (item) item.style.background = '';
+    });
+
+    function openGenerateModal(batchId) {
+      generateBatchId = batchId;
+      const batch = allBatches.find(b => b.id === batchId);
+      const diffCount = currentBatchDiffs.length;
+      const rules = getSamplingRules();
+
+      // 渲染预设规则下拉
+      const ruleSelect = document.getElementById('presetRuleSelect');
+      if (rules.length === 0) {
+        ruleSelect.innerHTML = '<option value="">暂无预设规则，请先在系统设置中创建</option>';
+      } else {
+        ruleSelect.innerHTML = rules.map(r => `<option value="${r.id}">${r.name}</option>`).join('');
+      }
+
+      // 渲染抽取配置网格
+      const diffTypes = ['A合规B违规', 'A违规B合规', 'A合规B合规', 'A违规B违规'];
+      let gridHtml = '';
+      diffTypes.forEach(type => {
+        const counts = currentBatchDiffs.filter(d => d.diffType === type).length;
+        gridHtml += `<div class="extract-item"><div class="extract-item-title">${type} (${counts}条)</div><select class="form-select" id="extractMethod_${type.replace(/[^a-zA-Z]/g,'')}" onchange="togglePercentageInput('${type.replace(/[^a-zA-Z]/g,'')}')"><option value="none">不抽取</option><option value="all">全量抽取</option><option value="ratio">按比例抽取</option></select><div class="percentage-input" id="percentage_${type.replace(/[^a-zA-Z]/g,'')}"><input type="number" class="form-input" id="extractValue_${type.replace(/[^a-zA-Z]/g,'')}" placeholder="百分比" value="20" min="1" max="100"></div></div>`;
+      });
+      document.getElementById('extractGrid').innerHTML = gridHtml;
+
+      // 渲染实例复选框
+      const instances = getInstanceMappings();
+      let checkboxHtml = currentBatchInstances.map(instId => { const inst = instances.find(i => i.id === instId); return inst ? `<label class="instance-checkbox"><input type="checkbox" name="genInstance" value="${inst.id}" checked> ${inst.name}</label>` : ''; }).join('');
+      document.getElementById('instanceCheckboxes').innerHTML = checkboxHtml;
+
+      document.getElementById('generateModal').classList.add('active');
+      updatePreview();
+    }
+
+    function togglePercentageInput(typeId) {
+      const method = document.getElementById(`extractMethod_${typeId}`).value;
+      const input = document.getElementById(`percentage_${typeId}`);
+      input.classList.toggle('active', method === 'ratio');
+      updatePreview();
+    }
+
+    function updatePreview() {
+      const diffTypes = ['A合规B违规', 'A违规B合规', 'A合规B合规', 'A违规B违规'];
+      let total = 0;
+      diffTypes.forEach(type => {
+        const typeId = type.replace(/[^a-zA-Z]/g,'');
+        const methodEl = document.getElementById(`extractMethod_${typeId}`);
+        if (!methodEl) return;
+        const method = methodEl.value;
+        if (method === 'none') return;
+        const count = (currentBatchDiffs || []).filter(d => d.diffType === type).length;
+        if (method === 'all') total += count;
+        else if (method === 'ratio') { 
+          const valEl = document.getElementById(`extractValue_${typeId}`);
+          if (!valEl) return;
+          const pct = parseInt(valEl.value) || 20; 
+          total += Math.ceil(count * pct / 100); 
+        }
+      });
+      document.getElementById('previewText').innerHTML = `预计将生成标注任务约 ${total} 条`;
+    }
+
+    function loadPresetRule() {
+      const ruleId = document.getElementById('presetRuleSelect').value;
+      if (!ruleId) return; // No rule selected
+      const rules = getSamplingRules();
+      const rule = rules.find(r => r.id === ruleId);
+      if (!rule) return;
+      const diffTypes = ['A合规B违规', 'A违规B合规', 'A合规B合规', 'A违规B违规'];
+      diffTypes.forEach(type => {
+        const typeId = type.replace(/[^a-zA-Z]/g,'');
+        const cfg = rule.config[type] || { method: 'none', value: 20 };
+        document.getElementById(`extractMethod_${typeId}`).value = cfg.method;
+        togglePercentageInput(typeId);
+        if (cfg.value) document.getElementById(`extractValue_${typeId}`).value = cfg.value;
+      });
+      updatePreview();
+    }
+
+    function saveAsNewPreset() {
+      const name = prompt('请输入新规则名称：');
+      if (!name) return;
+      const rules = getSamplingRules();
+      const diffTypes = ['A合规B违规', 'A违规B合规', 'A合规B合规', 'A违规B违规'];
+      const config = {};
+      diffTypes.forEach(type => { 
+        const typeId = type.replace(/[^a-zA-Z]/g,''); 
+        config[type] = { method: document.getElementById(`extractMethod_${typeId}`).value, value: parseInt(document.getElementById(`extractValue_${typeId}`).value) || 20 }; 
+      });
+      rules.push({ id: 'srule_' + Date.now(), name: name, desc: '自定义规则', config: config, updateTime: new Date().toISOString().slice(0,10) + ' ' + new Date().toTimeString().slice(0,8) });
+      saveSamplingRules(rules);
+      
+      // Refresh dropdown
+      const ruleSelect = document.getElementById('presetRuleSelect');
+      if (rules.length === 1) {
+        ruleSelect.innerHTML = rules.map(r => `<option value="${r.id}">${r.name}</option>`).join('');
+      } else {
+        ruleSelect.innerHTML = rules.map(r => `<option value="${r.id}">${r.name}</option>`).join('');
+      }
+      ruleSelect.value = rules[rules.length - 1].id;
+      showToast('规则已保存');
+    }
+
+    function confirmGenerate() {
+      const diffTypes = ['A合规B违规', 'A违规B合规', 'A合规B合规', 'A违规B违规'];
+      let hasExtract = false;
+      diffTypes.forEach(type => { const typeId = type.replace(/[^a-zA-Z]/g,''); if (document.getElementById(`extractMethod_${typeId}`).value !== 'none') hasExtract = true; });
+      if (!hasExtract) { alert('请至少选择一种类型进行抽取'); return; }
+      // 计算总数
+      let total = 0;
+      diffTypes.forEach(type => {
+        const typeId = type.replace(/[^a-zA-Z]/g,'');
+        const method = document.getElementById(`extractMethod_${typeId}`).value;
+        if (method === 'none') return;
+        const count = currentBatchDiffs.filter(d => d.diffType === type).length;
+        if (method === 'all') total += count;
+        else if (method === 'ratio') { const pct = parseInt(document.getElementById(`extractValue_${typeId}`).value) || 20; total += Math.ceil(count * pct / 100); }
+      });
+      closeModal('generateModal');
+      showToast(`已成功生成 ${total} 条标注任务，已注入标注任务池`);
+    }
+
+    function closeModal(id) { document.getElementById(id).classList.remove('active'); }
+    function showToast(msg) { const t = document.getElementById('toast'); t.innerText = msg; t.classList.add('show'); setTimeout(() => t.classList.remove('show'), 3000); }
+
+    function openUploadModal() {
+      document.getElementById('uploadFile').value = '';
+      document.getElementById('uploadTemplate').value = '';
+      document.getElementById('templateInfo').style.display = 'none';
+      document.getElementById('uploadStatus').textContent = '请选择 Excel 文件和审核规则，支持 .xlsx 和 .xls 格式';
+      document.getElementById('uploadModal').classList.add('active');
+      
+      // 加载审核规则列表
+      loadTemplates();
+    }
+
+    // 存储模板列表
+    var templateList = [];
+
+    function loadTemplates() {
+      fetch('/api/sql-config')
+        .then(function(response) { return response.json(); })
+        .then(function(data) {
+          templateList = data.configs || [];
+          var select = document.getElementById('uploadTemplate');
+          select.innerHTML = '<option value="">请选择审核规则</option>';
+          templateList.forEach(function(t) {
+            var option = document.createElement('option');
+            option.value = t.id;
+            option.textContent = t.name;
+            select.appendChild(option);
+          });
+        })
+        .catch(function() {
+          console.error('加载模板失败');
+        });
+    }
+
+    function onTemplateChange() {
+      var templateId = document.getElementById('uploadTemplate').value;
+      var infoDiv = document.getElementById('templateInfo');
+      
+      if (!templateId) {
+        infoDiv.style.display = 'none';
+        return;
+      }
+      
+      var template = templateList.find(function(t) { return t.id == templateId; });
+      if (template) {
+        document.getElementById('templateEnv').textContent = template.env || '-';
+        document.getElementById('templateInstances').textContent = template.instances || '-';
+        infoDiv.style.display = 'block';
+      }
+    }
+
+    function downloadTemplate() {
+      window.location.href = '/api/upload/template';
+    }
+
+    function confirmUpload() {
+      var fileInput = document.getElementById('uploadFile');
+      var file = fileInput.files[0];
+      if (!file) {
+        document.getElementById('uploadStatus').textContent = '请先选择文件';
+        return;
+      }
+
+      var formData = new FormData();
+      formData.append('file', file);
+      // 不再传递 template_id，后端根据实例编码自动匹配规则
+
+      document.getElementById('uploadStatus').textContent = '上传中...';
+
+      fetch('/api/upload/for-review', {
+        method: 'POST',
+        body: formData
+      })
+      .then(function(response) { return response.json(); })
+      .then(function(data) {
+        if (data.success) {
+          closeModal('uploadModal');
+          showToast('上传成功，批次号：' + data.batch_id + '，共 ' + data.total + ' 条，自动触发互检中...');
+          // 自动触发模型B互检
+          triggerModelBReview(data.batch_id);
+          // 刷新列表
+          setTimeout(function() { location.reload(); }, 2000);
+        } else {
+          document.getElementById('uploadStatus').textContent = '上传失败：' + (data.message || '未知错误');
+        }
+      })
+      .catch(function(error) {
+        document.getElementById('uploadStatus').textContent = '上传失败：' + error.message;
+      });
+    }
+
+    // ========== 模型B互检函数 ==========
+    function getModelBProgress(batchId, callback) {
+      fetch('/api/model-review/status/' + batchId)
+        .then(function(response) { return response.json(); })
+        .then(function(data) {
+          callback({
+            total: data.total || 0,
+            reviewed: data.reviewed || 0,
+            inconsistent: data.inconsistent || 0,
+            status: data.status || 'not_found',
+            model_name: data.model_name || '',
+            prompt_info: data.prompt_info || ''
+          });
+        })
+        .catch(function() {
+          callback({ total: 0, reviewed: 0, inconsistent: 0, status: 'not_found', model_name: '', prompt_info: '' });
+        });
+    }
+
+    function triggerModelBReview(batchId, force) {
+      force = force || false;
+      fetch('/api/model-review/trigger', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ batch_id: batchId, force: force })
+      })
+      .then(function(response) { return response.json(); })
+      .then(function(data) {
+        if (data.success) {
+          showToast('互检任务已提交');
+        } else {
+          showToast(data.message || '触发失败', true);
+        }
+      })
+      .catch(function() {
+        showToast('触发失败', true);
+      });
+    }
+
+    function renderBatchTableWithReview() {
+      var tbody = document.getElementById('batchTableBody');
+      var start = (currentPage - 1) * pageSize;
+      var end = start + pageSize;
+      var pageData = filteredBatches.slice(start, end);
+      
+      if (!pageData.length) {
+        tbody.innerHTML = '<tr><td colspan="14" style="padding:40px;text-align:center;color:var(--text-muted)">暂无数据</td></tr>';
+        return;
+      }
+      
+      // 为每个批次获取互检进度
+      var promises = pageData.map(function(batch) {
+        return new Promise(function(resolve) {
+          getModelBProgress(batch.id, function(progress) {
+            resolve({ batchId: batch.id, progress: progress });
+          });
+        });
+      });
+      
+      Promise.all(promises).then(function(results) {
+        var progressMap = {};
+        results.forEach(function(r) { progressMap[r.batchId] = r.progress; });
+        
+        tbody.innerHTML = pageData.map(function(batch) {
+          // 优先使用批次数据中自带的互检状态（来自后端data_fetch.py）
+          var batchReviewStatus = batch.review_status || '未互检';
+          var batchReviewedCount = batch.reviewed_count || 0;
+          var batchTotalItems = batch.total_items || 0;
+          
+          // 构建 progress 对象供轮询函数使用
+          var progress = progressMap[batch.id] || { 
+            total: batchTotalItems, 
+            reviewed: batchReviewedCount, 
+            inconsistent: 0, 
+            status: batchReviewStatus === '互检中' ? 'running' : (batchReviewStatus === '已互检' ? 'completed' : 'not_found')
+          };
+          
+          var source = batch.source || 'fetch';
+          var sourceTag = source === 'upload' ? '<span class="status-tag" style="background: #d4edda; color: #28a745;white-space:normal;text-align:center;line-height:1.3;">文件<br>上传</span>' : '<span class="status-tag" style="background: #cce5ff; color: #004085;white-space:normal;text-align:center;line-height:1.3;">线上<br>获取</span>';
+
+          // ====== 复合状态：数据状态 + 互检状态 ======
+          // 数据状态
+          var dataStatus = batch.status;
+          var isDataRunning = dataStatus === 'running' || dataStatus === 'processing';
+          var dataStatusClass = dataStatus === 'completed' ? 'completed' : isDataRunning ? 'processing' : 'failed';
+          var dataStatusText = dataStatus === 'completed' ? '已完成' : isDataRunning ? '进行中' : '失败';
+          // 互检状态 - 直接从后端返回的 review_status 读取
+          var reviewStatus = batchReviewStatus;
+          var reviewStatusClass = reviewStatus === '互检中' ? 'processing' : reviewStatus === '已互检' ? 'completed' : reviewStatus === '互检失败' ? 'failed' : 'default';
+          var reviewStatusText = reviewStatus;
+
+          var dataStatusTag = '<span class="status-tag ' + dataStatusClass + '">' + dataStatusText + '</span>';
+          var reviewStatusTag = '<span class="status-tag ' + reviewStatusClass + '" data-review-status>' + reviewStatusText + '</span>';
+          var statusTag = '<div style="display:flex;flex-direction:column;gap:3px;align-items:center;">' + dataStatusTag + reviewStatusTag + '</div>';
+
+          // 互检进度显示 - 使用后端返回的数据
+          var reviewProgress = '-';
+          if (batchTotalItems > 0) {
+            reviewProgress = '<span data-review-progress>' + batchReviewedCount + '/' + batchTotalItems + '</span>';
+          }
+
+          // 格式化数据日期：多日时换行显示
+          var dataDateDisplay = batch.dataDateRange || '-';
+          if (dataDateDisplay.indexOf(' ~ ') > -1) {
+            dataDateDisplay = dataDateDisplay.replace(' ~ ', '<br>~<br>');
+          }
+
+          var isReviewRunning = (batchReviewStatus === '互检中');
+          var instances = batch.instances || '';
+          var env = batch.env || '-';
+          // 缩短环境显示
+          var envDisplay = env.replace('乐采云环境', '乐采云');
+
+          // 格式化实例列表（换行，不截断）
+          var instancesArr = (instances || '-').split(',');
+          var instancesHtml = '';
+          if (instancesArr.length <= 2) {
+            instancesHtml = instancesArr.join(', ');
+          } else {
+            // 3个及以上：每行2个
+            for (var i = 0; i < instancesArr.length; i += 2) {
+              var row = instancesArr.slice(i, i + 2).join(', ');
+              instancesHtml += (i > 0 ? '<br>' : '') + row;
+            }
+          }
+
+          // 格式化拉取时间：日期一行，时间一行
+          var fetchTimeDisplay = batch.fetch_time || '-';
+          var fetchTimeParts = fetchTimeDisplay.split(' ');
+          if (fetchTimeParts.length === 2) {
+            fetchTimeDisplay = fetchTimeParts[0].replace(/-/g, '') + '<br>' + fetchTimeParts[1];
+          }
+
+          return '<tr data-batch-id="' + batch.id + '">' +
+            '<td style="min-width:80px;max-width:100px;white-space:normal;word-break:break-all;overflow:hidden;max-height:3em;line-height:1.3;"><a href="/batch-detail/' + batch.id + '" style="color:var(--primary);text-decoration:none;">' + batch.id + '</a></td>' +
+            '<td style="white-space:nowrap;text-align:center;">' + sourceTag + '</td>' +
+            '<td style="white-space:nowrap;text-align:center;">' + envDisplay + '</td>' +
+            '<td style="width:65px;max-width:80px;white-space:normal;font-size:12px;line-height:1.3;text-align:center;">' + instancesHtml + '</td>' +
+            '<td style="width:40px;text-align:center;white-space:nowrap;">' + (batch.samplePercent || 0) + '%</td>' +
+            '<td style="width:60px;text-align:center;white-space:nowrap;">' + (batch.originalTotal || 0).toLocaleString() + '</td>' +
+            '<td style="width:50px;text-align:center;white-space:nowrap;">' + (batch.originalCompliant || 0).toLocaleString() + '</td>' +
+            '<td style="width:50px;text-align:center;white-space:nowrap;">' + (batch.originalNonCompliant || 0).toLocaleString() + '</td>' +
+            '<td style="width:50px;text-align:center;white-space:nowrap;">' + (batch.dataCount || 0).toLocaleString() + '</td>' +
+            '<td style="width:70px;font-size:11px;white-space:normal;text-align:center;line-height:1.2;" title="' + (batch.dataDateRange || '') + '">' + dataDateDisplay + '</td>' +
+            '<td style="width:85px;font-size:11px;white-space:normal;text-align:center;line-height:1.2;">' + fetchTimeDisplay + '</td>' +
+            '<td style="white-space:nowrap;text-align:center;">' + statusTag + '</td>' +
+            '<td style="width:55px;text-align:center;white-space:nowrap;">' + reviewProgress + '</td>' +
+          '<td style="width:85px;white-space:nowrap;text-align:center;vertical-align:middle;">' +
+              '<button class="btn-action default more-btn" onclick="toggleMoreMenu(\'' + batch.id + '\')" style="display:inline-flex;align-items:center;gap:4px;vertical-align:middle;position:relative;">更多 <span style="font-size:10px;">▼</span>' +
+                '<div class="more-menu" id="moreMenu_' + batch.id + '" style="display:none;position:absolute;right:0;top:calc(100% + 2px);background:#fff;border:1px solid var(--border);border-radius:6px;box-shadow:0 4px 12px rgba(0,0,0,0.15);z-index:1000;width:85px;min-width:85px;overflow:hidden;white-space:nowrap;">' +
+                '<a class="more-menu-item" href="/batch-detail/' + batch.id + '" style="padding:8px 10px;display:block;cursor:pointer;border-bottom:1px solid var(--border-light);font-size:12px;color:var(--text-primary);text-decoration:none;">📋 明细</a>' +
+                (function() {
+                  var items = '';
+                  if (batch.status === 'completed') {
+                    if (batchReviewStatus === '已互检' || batchReviewStatus === '互检失败') {
+                      items += '<div class="more-menu-item" onclick="triggerReview(\'' + batch.id + '\', true)" style="padding:8px 10px;cursor:pointer;border-bottom:1px solid var(--border-light);font-size:12px;color:var(--text-primary);">🔁 重新互检</div>';
+                    } else if (batchReviewStatus !== '互检中') {
+                      items += '<div class="more-menu-item" onclick="triggerReview(\'' + batch.id + '\', false)" style="padding:8px 10px;cursor:pointer;border-bottom:1px solid var(--border-light);font-size:12px;color:var(--text-primary);">🧪 触发互检</div>';
+                    }
+                  }
+                  if (batch.status === 'running' || batch.status === 'processing' || isReviewRunning) {
+                    items += '<div class="more-menu-item" onclick="abortBatch(\'' + batch.id + '\')" style="padding:8px 10px;cursor:pointer;border-bottom:1px solid var(--border-light);font-size:12px;color:#ff9800;">⏹ 中止</div>';
+                  }
+                  items += '<div class="more-menu-item" onclick="deleteBatch(\'' + batch.id + '\')" style="padding:8px 10px;cursor:pointer;font-size:12px;color:var(--danger);">🗑 删除</div>';
+                  return items;
+                })() +
+              '</div>' +
+              '</button>' +
+          '</td>' +
+          '</tr>';
+        }).join('');
+      });
+    }
+
+    function abortBatch(batchId) {
+      var cached = _batchStatusCache[batchId] || {};
+      var batchStatus = cached.status || '';
+      var reviewStatus = cached.review_status || '未互检';
+      var confirmMsg = '';
+      var endpoint = '';
+
+      if (reviewStatus === '互检中') {
+        // 互检进行中 → 调用互检中止端点
+        confirmMsg = '确认中止互检？中止后线程将在当前条处理完毕后停止。';
+        endpoint = '/api/model-review/abort/' + batchId;
+      } else if (batchStatus === 'running' || batchStatus === 'processing') {
+        // 取数进行中 → 调用取数中止端点
+        confirmMsg = '确认中止数据拉取任务？中止后任务状态将变为失败。';
+        endpoint = '/api/task-batches/' + batchId + '/abort';
+      } else {
+        showToast('当前无进行中的任务，无需中止', true);
+        return;
+      }
+
+      if (!confirm(confirmMsg)) return;
+      fetch(endpoint, { method: 'PUT' })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          if (data.success) {
+            showToast(data.message || '中止信号已发送');
+            loadBatches();
+          } else {
+            showToast(data.message || '中止失败', true);
+          }
+        })
+        .catch(function(e) {
+          showToast('中止失败', true);
+        });
+    }
+
+    function triggerReview(batchId, isAlreadyReviewed) {
+      // 如果已经互检过，弹出确认框
+      if (isAlreadyReviewed) {
+        if (!confirm('该批次已完成互检，确认重新执行互检？原有互检结果将被覆盖。')) return;
+        // 强制重新互检
+        showToast('已触发批次 ' + batchId + ' 的模型B互检任务（重新互检），实时进度更新中...');
+        triggerModelBReview(batchId, true);
+      } else {
+        showToast('已触发批次 ' + batchId + ' 的模型B互检任务，实时进度更新中...');
+        triggerModelBReview(batchId, false);
+      }
+      // 启动轮询
+      startReviewPolling(batchId);
+    }
+
+    // 启动轮询互检进度
+    function startReviewPolling(batchId) {
+      // 清除之前的轮询
+      if (reviewPollingTimer) {
+        clearInterval(reviewPollingTimer);
+      }
+      reviewPollingBatchId = batchId;
+      // 每3秒轮询一次
+      reviewPollingTimer = setInterval(function() {
+        getModelBProgress(batchId, function(progress) {
+          // 更新表格中的进度显示
+          var progressEl = document.querySelector('[data-batch-id="' + batchId + '"] [data-review-progress]');
+          if (progressEl && progress.total > 0) {
+            progressEl.textContent = progress.reviewed + '/' + progress.total;
+          }
+          // 更新状态文字
+          var statusEl = document.querySelector('[data-batch-id="' + batchId + '"] [data-review-status]');
+          if (statusEl) {
+            if (progress.status === 'running') {
+              statusEl.textContent = '互检中';
+              statusEl.className = 'status-tag processing';
+            } else if (progress.status === 'completed') {
+              statusEl.textContent = '已互检';
+              statusEl.className = 'status-tag completed';
+              // 互检完成，停止轮询
+              if (reviewPollingTimer) {
+                clearInterval(reviewPollingTimer);
+                reviewPollingTimer = null;
+              }
+              // 重新从后端加载最新数据，获取正确的互检状态
+              loadBatches();
+            }
+          }
+          // 如果状态不是 running，停止轮询
+          if (progress.status !== 'running') {
+            if (reviewPollingTimer) {
+              clearInterval(reviewPollingTimer);
+              reviewPollingTimer = null;
+            }
+          }
+        });
+      }, 3000);
+    }
+
+    // 停止轮询
+    function stopReviewPolling() {
+      if (reviewPollingTimer) {
+        clearInterval(reviewPollingTimer);
+        reviewPollingTimer = null;
+      }
+      reviewPollingBatchId = null;
+    }
+
+    function deleteBatch(batchId) {
+      if (!confirm('确认删除批次 ' + batchId + '？将同时删除该批次所有明细数据。')) return;
+      fetch('/api/task-batches/' + batchId, { method: 'DELETE' })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          if (data.success) {
+            showToast('批次已删除');
+            // 从列表中移除
+            var idx = allBatches.findIndex(function(b) { return b.id === batchId; });
+            if (idx !== -1) { allBatches.splice(idx, 1); }
+            applyFilter();
+          } else {
+            showToast(data.message || '删除失败', true);
+          }
+        })
+        .catch(function(err) {
+          showToast('删除失败: ' + err.message, true);
+        });
+    }
+
+    function clearAllBatches() {
+      if (!confirm('⚠️ 确认清空所有机审批次记录？此操作不可恢复。')) return;
+      fetch('/api/task-batches/clear', { method: 'DELETE' })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          if (data.success) {
+            showToast('已清空所有记录');
+            allBatches = [];
+            applyFilter();
+          } else {
+            showToast(data.message || '清空失败', true);
+          }
+        })
+        .catch(function(err) {
+          showToast('清空失败: ' + err.message, true);
+        });
+    }
+
+    // ========== 获取线上数据弹窗相关函数（从 dashboard.html 迁移）==========
+    const ENV_CONFIG = {
+      "云环境": [
+        { code: "ZJWC", name: "浙江网超" },
+        { code: "HWCS", name: "浙江乐采网超" },
+        { code: "HNLCWC", name: "湖南乐采网超" }
+      ],
+      "乐采云环境": [
+        { code: "YNLCY", name: "云南乐采云" },
+        { code: "GXLCY", name: "广西乐采云" }
+      ]
+    };
+
+    let fetchCurrentEnv = "云环境";
+    let fetchCurrentTemplates = [];
+
+    function loadFetchTemplates(env, selectedTemplateId, lastPreference) {
+      var select = document.getElementById('templateSelect');
+      select.innerHTML = '<option value="">-- 使用默认SQL --</option>';
+
+      fetch('/api/sql-config?env=' + encodeURIComponent(env))
+        .then(function(response) { return response.json(); })
+        .then(function(data) {
+          fetchCurrentTemplates = data.configs || [];
+          fetchCurrentTemplates.forEach(function(t) {
+            var option = document.createElement('option');
+            option.value = t.id;
+            option.textContent = t.name;
+            select.appendChild(option);
+
+            if (selectedTemplateId && t.id === selectedTemplateId) {
+              option.selected = true;
+            }
+          });
+
+          if (lastPreference) {
+            updateTemplateRememberHint(lastPreference);
+          }
+        })
+        .catch(function() {
+          console.error('加载模板失败');
+        });
+    }
+
+    window.onFetchTemplateChange = function() {
+      var templateId = document.getElementById('templateSelect').value;
+      var paramsArea = document.getElementById('templateParamsArea');
+      var paramsContainer = document.getElementById('templateParamsContainer');
+      var hintEl = document.getElementById('templateRememberHint');
+
+      if (!templateId) {
+        paramsArea.style.display = 'none';
+        hintEl.innerHTML = '💡 选择模板后将自动记住';
+        hintEl.style.color = 'var(--text-muted)';
+        return;
+      }
+
+      hintEl.innerHTML = '✅ 本次选择将记住';
+      hintEl.style.color = 'var(--success)';
+
+      fetch('/api/sql-config/' + templateId + '/params')
+        .then(function(response) { return response.json(); })
+        .then(function(data) {
+          if (data.params && data.params.length > 0) {
+            var regularParams = ['start_date', 'end_date', 'instance', 'year'];
+            var extraParams = data.params.filter(function(p) {
+              return regularParams.indexOf(p.name) === -1;
+            });
+
+            if (extraParams.length > 0) {
+              var html = '';
+              extraParams.forEach(function(p) {
+                html += '<div style="margin-bottom: 8px;">' +
+                  '<label style="display: block; font-size: 12px; margin-bottom: 4px;">' + p.name + (p.required ? ' *' : '') + '</label>' +
+                  '<input type="text" class="modal-form-input" id="param_' + p.name + '" value="' + (p.default || '') + '" placeholder="请输入' + p.name + '">' +
+                '</div>';
+              });
+              paramsContainer.innerHTML = html;
+              paramsArea.style.display = 'block';
+            } else {
+              paramsArea.style.display = 'none';
+            }
+          } else {
+            paramsArea.style.display = 'none';
+          }
+        });
+    };
+
+    function renderInstanceCheckboxes(env) {
+      const container = document.getElementById('instanceCheckboxGroup');
+      const instances = ENV_CONFIG[env] || [];
+      let html = '';
+      instances.forEach(function(inst) {
+        html += '<label class="checkbox-item">' +
+          '<input type="checkbox" name="instance" value="' + inst.code + '" checked> ' + inst.name + ' (' + inst.code + ')' +
+        '</label>';
+      });
+      container.innerHTML = html;
+    }
+
+    function switchEnv(env) {
+      fetchCurrentEnv = env;
+      renderInstanceCheckboxes(env);
+      updateEnvDisplay();
+      loadUserPreference('last_sql_template', env).then(function(lastPref) {
+        loadFetchTemplates(env, lastPref ? lastPref.template_id : null, lastPref);
+        updateTemplateRememberHint(lastPref, env);
+      });
+      document.getElementById('templateParamsArea').style.display = 'none';
+    }
+
+    function updateEnvDisplay() {
+      const checkboxes = document.querySelectorAll('input[name="instance"]:checked');
+      const displayDiv = document.getElementById('selectedEnvDisplay');
+
+      if (checkboxes.length === 0) {
+        displayDiv.innerHTML = '<div style="padding: 10px 12px; background: var(--primary-light); border-radius: var(--radius); font-size: 13px; color: var(--text-primary);">请选择实例</div>';
+      } else {
+        const selectedCodes = Array.from(checkboxes).map(cb => cb.value);
+        displayDiv.innerHTML = '<div style="padding: 10px 12px; background: var(--primary-light); border-radius: var(--radius); font-size: 13px; color: var(--text-primary);"><strong>当前选择：</strong>' + fetchCurrentEnv + ' - ' + selectedCodes.join('、') + '</div>';
+      }
+    }
+
+    function loadUserPreference(key, env) {
+      var url = '/api/config/user-preference/' + key;
+      if (env) {
+        url += '?env=' + encodeURIComponent(env);
+      }
+      return fetch(url)
+        .then(function(r) { return r.json(); })
+        .then(function(data) { return data.value; })
+        .catch(function() { return null; });
+    }
+
+    function saveUserPreference(key, value, env) {
+      var url = '/api/config/user-preference/' + key;
+      return fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ value: value, env: env || '' })
+      });
+    }
+
+    function updateTemplateRememberHint(lastPreference, env) {
+      var hintEl = document.getElementById('templateRememberHint');
+      var displayEnv = env || fetchCurrentEnv;
+      if (lastPreference && lastPreference.template_id) {
+        hintEl.innerHTML = '✅ 已记住当前环境下选择（' + displayEnv + '）';
+        hintEl.style.color = 'var(--success)';
+      } else {
+        hintEl.innerHTML = '💡 选择模板后自动按环境记忆';
+        hintEl.style.color = 'var(--text-muted)';
+      }
+    }
+
+    window.openGetDataModal = function() {
+      var defaultEnv = '云环境';
+      loadUserPreference('last_sql_template', defaultEnv).then(function(lastPref) {
+        var savedEnv = lastPref && lastPref.env ? lastPref.env : defaultEnv;
+        fetchCurrentEnv = savedEnv;
+
+        var envRadio = document.querySelector('input[name="env"][value="' + savedEnv + '"]');
+        if (envRadio) {
+          envRadio.checked = true;
+        }
+
+        loadFetchTemplates(savedEnv, lastPref ? lastPref.template_id : null, lastPref);
+        updateTemplateRememberHint(lastPref, savedEnv);
+        renderInstanceCheckboxes(savedEnv);
+
+        if (lastPref && lastPref.instances) {
+          var savedInstances = lastPref.instances.split(',');
+          savedInstances.forEach(function(inst) {
+            var cb = document.querySelector('input[name="instance"][value="' + inst + '"]');
+            if (cb) cb.checked = true;
+          });
+        }
+        updateEnvDisplay();
+      });
+
+      document.getElementById('templateParamsArea').style.display = 'none';
+
+      var yesterday = new Date();
+      yesterday.setDate(yesterday.getDate() - 1);
+      var yyyy = yesterday.getFullYear();
+      var mm = String(yesterday.getMonth() + 1).padStart(2, '0');
+      var dd = String(yesterday.getDate()).padStart(2, '0');
+      var yesterdayStr = yyyy + '-' + mm + '-' + dd;
+
+      document.getElementById('modalStartDate').value = yesterdayStr;
+      document.getElementById('modalEndDate').value = yesterdayStr;
+
+      document.getElementById('getDataModal').classList.add('active');
+    };
+
+    window.closeGetDataModal = function() {
+      document.getElementById('getDataModal').classList.remove('active');
+      // 关闭弹窗后刷新批次列表，确保新任务出现
+      loadBatches();
+      // 关闭时若有待运行任务，触发一次检查（会在下一轮自动轮询中继续）
+      checkRunningTasks();
+    };
+
+    window.submitGetData = function() {
+      var checkboxes = document.querySelectorAll('input[name="instance"]:checked');
+      var startDate = document.getElementById('modalStartDate').value;
+      var endDate = document.getElementById('modalEndDate').value;
+      var samplePercent = document.getElementById('samplePercent').value;
+
+      if (checkboxes.length === 0) {
+        alert('请至少选择一个实例');
+        return;
+      }
+      if (!startDate || !endDate) {
+        alert('请填写日期');
+        return;
+      }
+
+      var selectedInstances = Array.from(checkboxes).map(function(cb) { return cb.value; });
+
+      var formatDate = function(dateStr) {
+        return dateStr.replace(/-/g, '');
+      };
+
+      var year = startDate.substring(0, 4);
+
+      var requestData = {
+        env: fetchCurrentEnv,
+        instances: selectedInstances,
+        sample_percent: parseInt(samplePercent),
+        start_date: formatDate(startDate),
+        end_date: formatDate(endDate),
+        year: year
+      };
+
+      var templateId = document.getElementById('templateSelect') ? document.getElementById('templateSelect').value : '';
+      if (templateId) {
+        requestData.template_id = parseInt(templateId);
+
+        var paramsContainer = document.getElementById('templateParamsContainer');
+        if (paramsContainer && paramsContainer.children.length > 0) {
+          var params = {};
+          var paramInputs = paramsContainer.querySelectorAll('input[class="modal-form-input"]');
+          paramInputs.forEach(function(input) {
+            var id = input.id;
+            if (id && id.startsWith('param_')) {
+              var paramName = id.substring(6);
+              if (paramName !== 'start_date' && paramName !== 'end_date' && paramName !== 'year' && paramName !== 'instance') {
+                params[paramName] = input.value;
+              }
+            }
+          });
+          if (Object.keys(params).length > 0) {
+            requestData.params = params;
+          }
+        }
+      }
+
+      var submitBtn = document.getElementById('startFetchBtn');
+      var cancelBtn = document.getElementById('cancelBtn');
+      var originalBtnText = submitBtn.textContent;
+      submitBtn.disabled = true;
+      cancelBtn.disabled = true;
+      submitBtn.textContent = '正在拉取...';
+
+      var progressDiv = document.getElementById('fetchProgress');
+      var progressText = document.getElementById('fetchProgressText');
+      progressDiv.style.display = 'block';
+      progressDiv.style.background = 'var(--primary-light)';
+      progressText.textContent = '⏳ 正在查询数据总量...';
+      progressText.style.color = 'var(--text-primary)';
+
+      fetch('/api/data-fetch', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(requestData)
+      })
+      .then(function(response) {
+        return response.json();
+      })
+      .then(function(result) {
+        submitBtn.disabled = false;
+        cancelBtn.disabled = false;
+        submitBtn.textContent = originalBtnText;
+
+        if (result.success) {
+          var originalTotal = result.original_total || 0;
+          var samplePercent = result.sample_percent || 100;
+          var totalFetched = result.total_fetched || 0;
+          var skippedDuplicates = result.skipped_duplicates || 0;
+          var templateName = result.template_name || '';
+          var newBatchId = result.batch_id || '';
+          var templateInfo = templateName ? '<br>使用模板：<strong>' + templateName + '</strong>' : '';
+          var skipInfo = skippedDuplicates > 0 ? '，跳过重复 <strong>' + skippedDuplicates.toLocaleString() + '</strong> 条' : '';
+          progressDiv.style.background = 'var(--success-light, #e8f8e8)';
+          progressText.innerHTML =
+            '✅ 任务已提交，批次号：' + result.batch_id +
+            templateInfo +
+            '<br>原始数据总数：<strong>' + originalTotal.toLocaleString() + '</strong> 条' +
+            '，抽样比例：<strong>' + samplePercent + '%</strong>' +
+            '，实际拉取：<strong>' + totalFetched.toLocaleString() + '</strong> 条' +
+            skipInfo +
+            '<br><span style="color: var(--primary);">2秒后自动刷新页面...</span>';
+          progressText.style.color = 'var(--success)';
+
+          var toast = document.getElementById('toast');
+          toast.className = 'toast show';
+          var toastMsg = '✅ 任务已提交！';
+          if (templateName) {
+            toastMsg += '使用模板「' + templateName + '」，';
+          }
+          var skipToastInfo = skippedDuplicates > 0 ? '，跳过 ' + skippedDuplicates.toLocaleString() + ' 条重复' : '';
+          toastMsg += '原始总数 ' + originalTotal.toLocaleString() + ' 条，实际新增 ' + totalFetched.toLocaleString() + ' 条' + skipToastInfo;
+          toast.textContent = toastMsg;
+
+          var currentTemplateId = document.getElementById('templateSelect') ? document.getElementById('templateSelect').value : '';
+          var prefValue = {
+            env: fetchCurrentEnv,
+            template_id: currentTemplateId ? parseInt(currentTemplateId) : null,
+            instances: selectedInstances.join(',')
+          };
+          saveUserPreference('last_sql_template', prefValue, fetchCurrentEnv).catch(function() {});
+
+          if (newBatchId) {
+            setTimeout(function() {
+              window.location.href = 'model_task.html?new_batch=' + newBatchId;
+            }, 2000);
+          }
+
+          setTimeout(function() {
+            toast.classList.remove('show');
+          }, 5000);
+        } else {
+          var errMsg = result.message || '未知错误';
+          var isAuthError = /401|Unauthorized|认证失败|Cookie.*过期|expired/i.test(errMsg);
+
+          progressDiv.style.background = 'var(--danger-light)';
+          if (isAuthError) {
+            progressText.innerHTML = '❌ 任务提交失败（401 认证错误），Cookie 可能已过期。<a href="#" onclick="window.top.document.getElementById(\'contentFrame\').src=\'/sql_config.html#cookie\';return false;" style="color:var(--primary);font-weight:600;">点此前往「数据源配置 → Cookie 管理」更新</a>';
+          } else {
+            progressText.textContent = '❌ 任务提交失败：' + errMsg;
+          }
+          progressText.style.color = 'var(--danger)';
+
+          var toast = document.getElementById('toast');
+          toast.className = 'toast error show';
+          toast.textContent = isAuthError
+            ? '❌ 任务提交失败（401 认证错误），Cookie 可能已过期，请前往「数据源配置 → Cookie 管理」更新'
+            : '❌ 任务提交失败：' + errMsg;
+
+          setTimeout(function() {
+            toast.classList.remove('show');
+          }, 5000);
+        }
+      })
+      .catch(function(error) {
+        submitBtn.disabled = false;
+        cancelBtn.disabled = false;
+        submitBtn.textContent = originalBtnText;
+
+        progressDiv.style.background = 'var(--danger-light)';
+        progressText.textContent = '❌ 任务提交失败：网络错误 - ' + error.message;
+        progressText.style.color = 'var(--danger)';
+
+        var toast = document.getElementById('toast');
+        toast.className = 'toast error show';
+        toast.textContent = '❌ 任务提交失败：网络错误 - ' + error.message;
+
+        setTimeout(function() {
+          toast.classList.remove('show');
+        }, 3000);
+      });
+    };
+
+    // 覆盖原有的 renderBatchTable
+    var originalRenderBatchTable = renderBatchTable;
+    renderBatchTable = renderBatchTableWithReview;
+
+    document.querySelectorAll('.modal-overlay').forEach(o => o.addEventListener('click', e => { if (e.target === o) o.classList.remove('active'); }));
+    document.addEventListener('change', updatePreview);
+    init();
+  </script>
+</body>
+</html>

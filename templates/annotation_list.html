@@ -1,0 +1,1909 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>标注任务</title>
+  <link rel="stylesheet" href="/static/common.css">
+  <script src="/static/config.js"></script>
+  <style>
+    .annotation-page {
+      padding: 20px 24px;
+    }
+
+    /* 页面标题 */
+    .page-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 16px;
+    }
+
+    .page-title {
+      font-size: 18px;
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+
+    /* 统计摘要栏 */
+    .stats-summary {
+      display: flex;
+      gap: 24px;
+      padding: 12px 16px;
+      background: var(--white);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow);
+      margin-bottom: 16px;
+      flex-wrap: wrap;
+    }
+
+    .stats-group {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .stats-item {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 13px;
+    }
+
+    .stats-item .num {
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+
+    .stats-item .label {
+      color: var(--text-secondary);
+    }
+
+    .stats-item .divider {
+      color: var(--border);
+      margin: 0 8px;
+    }
+
+    .stats-group .btn {
+      margin-left: 8px;
+    }
+
+    /* 批量操作按钮 */
+    .batch-actions {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+
+    .batch-btn {
+      padding: 8px 16px;
+      font-size: 13px;
+      border-radius: var(--radius);
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .batch-btn.secondary {
+      background: var(--white);
+      border: 1px solid var(--border);
+      color: var(--text-primary);
+    }
+
+    .batch-btn.secondary:hover {
+      border-color: var(--primary);
+      color: var(--primary);
+    }
+
+    .batch-btn.primary {
+      background: var(--primary);
+      border: 1px solid var(--primary);
+      color: #fff;
+    }
+
+    .batch-btn.primary:hover {
+      background: #3b82f6;
+    }
+
+    /* 提交后灰色显示 */
+    .submitted-row {
+      opacity: 0.5;
+      background: #f5f5f5;
+    }
+
+    /* 数据表格 */
+    .annotation-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+      background: var(--white);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+
+    .annotation-table thead th {
+      background: #fafbfc;
+      color: var(--text-secondary);
+      font-weight: 500;
+      text-align: left;
+      padding: 12px;
+      border-bottom: 1px solid var(--border);
+      white-space: nowrap;
+    }
+
+    .annotation-table tbody td {
+      padding: 12px;
+      border-bottom: 1px solid var(--border-light);
+      color: var(--text-primary);
+      vertical-align: middle;
+    }
+
+    .annotation-table tbody tr:hover {
+      background: #f8f9ff;
+    }
+
+    /* 标注结果标签 */
+    .tag-correct { background: var(--success-light); color: var(--success); padding: 2px 8px; border-radius: 3px; font-size: 12px; display: inline-block; }
+    .tag-error { background: var(--danger-light); color: var(--danger); padding: 2px 8px; border-radius: 3px; font-size: 12px; display: inline-block; }
+    .tag-ignore { background: var(--warning-light); color: var(--warning); padding: 2px 8px; border-radius: 3px; font-size: 12px; display: inline-block; }
+    .tag-pending { color: var(--text-muted); font-size: 12px; }
+
+    /* 标注规则标签 */
+    .tag-rule {
+      background: #e0e7ff;
+      color: #4f6ef7;
+      padding: 2px 8px;
+      border-radius: 3px;
+      font-size: 11px;
+      display: inline-block;
+    }
+
+    /* 加载动画 */
+    @keyframes spin {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
+    .loading-spinner {
+      display: inline-block;
+      width: 12px;
+      height: 12px;
+      border: 2px solid var(--border);
+      border-top-color: var(--warning);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin-left: 4px;
+    }
+
+    /* 紧凑图片展示布局 */
+    .image-compact {
+      flex: 1;
+      overflow-y: auto;
+      padding-right: 8px;
+    }
+
+    .image-compact::-webkit-scrollbar {
+      width: 6px;
+    }
+
+    .image-compact::-webkit-scrollbar-thumb {
+      background: #d1d5db;
+      border-radius: 3px;
+    }
+
+    .thumbnail-row {
+      margin-bottom: 12px;
+    }
+
+    .thumbnail-label {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-primary);
+      margin-bottom: 6px;
+    }
+
+    .thumbnail-wrapper {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .thumbnail-img {
+      width: 120px;
+      height: 90px;
+      object-fit: cover;
+      border-radius: var(--radius);
+      cursor: pointer;
+      transition: transform 0.2s, box-shadow 0.2s;
+      border: 1px solid var(--border-light);
+    }
+
+    .thumbnail-img:hover {
+      transform: scale(1.05);
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    }
+
+    /* 列表页操作按钮组 */
+    .action-btn-group {
+      display: flex;
+      gap: 4px;
+    }
+
+    .action-btn {
+      padding: 4px 8px;
+      font-size: 11px;
+      border: none;
+      border-radius: var(--radius);
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .action-btn.annotate {
+      background: var(--primary);
+      color: #fff;
+    }
+
+    .action-btn.annotate:hover {
+      background: #3b82f6;
+    }
+
+    .action-btn.save {
+      background: var(--success);
+      color: #fff;
+    }
+
+    .action-btn.save:hover {
+      background: #22c55e;
+    }
+
+    .action-btn.submit-btn {
+      background: var(--warning);
+      color: #fff;
+    }
+
+    .action-btn.submit-btn:hover {
+      background: #f59e0b;
+    }
+
+    /* 行闪烁反馈 */
+    @keyframes rowFlash {
+      0% { background: rgba(34, 197, 94, 0.3); }
+      100% { background: transparent; }
+    }
+
+    .row-flash {
+      animation: rowFlash 1s ease-out;
+    }
+
+    /* 底部翻页栏 */
+    .detail-modal-footer {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 24px;
+      padding: 12px 20px;
+      border-top: 1px solid var(--border-light);
+      background: #fafbfc;
+      flex-shrink: 0;
+    }
+
+    .detail-nav-btn {
+      padding: 8px 16px;
+      font-size: 13px;
+      background: var(--white);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      cursor: pointer;
+    }
+
+    .detail-nav-btn:hover:not(:disabled) {
+      border-color: var(--primary);
+      color: var(--primary);
+    }
+
+    .detail-nav-btn:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+
+    .detail-progress {
+      font-size: 14px;
+      font-weight: 500;
+    }
+
+    .back-to-list-btn {
+      padding: 8px 16px;
+      font-size: 13px;
+      background: var(--white);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      cursor: pointer;
+    }
+
+    .back-to-list-btn:hover {
+      border-color: var(--primary);
+      color: var(--primary);
+    }
+
+    /* 确认弹窗 */
+    .confirm-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.5);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 3000;
+      opacity: 0;
+      visibility: hidden;
+      transition: all 0.3s;
+    }
+
+    .confirm-overlay.active {
+      opacity: 1;
+      visibility: visible;
+    }
+
+    .confirm-dialog {
+      background: var(--white);
+      border-radius: var(--radius-lg);
+      padding: 24px;
+      max-width: 400px;
+      width: 90%;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+    }
+
+    .confirm-title {
+      font-size: 16px;
+      font-weight: 600;
+      margin-bottom: 12px;
+    }
+
+    .confirm-message {
+      font-size: 14px;
+      color: var(--text-secondary);
+      margin-bottom: 20px;
+    }
+
+    .confirm-buttons {
+      display: flex;
+      gap: 12px;
+      justify-content: flex-end;
+    }
+
+    /* ========== 标注详情弹窗 ========== */
+    .detail-modal-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.5);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+      opacity: 0;
+      visibility: hidden;
+      transition: all 0.3s;
+    }
+
+    .detail-modal-overlay.active {
+      opacity: 1;
+      visibility: visible;
+    }
+
+    .detail-modal {
+      background: var(--white);
+      border-radius: var(--radius-lg);
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+      width: 95%;
+      max-width: 1200px;
+      height: 90vh;
+      display: flex;
+      flex-direction: column;
+      transform: scale(0.95);
+      transition: transform 0.3s;
+    }
+
+    .detail-modal-overlay.active .detail-modal {
+      transform: scale(1);
+    }
+
+    .detail-modal-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--border-light);
+      flex-shrink: 0;
+    }
+
+    .detail-modal-title {
+      font-size: 16px;
+      font-weight: 600;
+    }
+
+    .detail-modal-close {
+      background: none;
+      border: none;
+      font-size: 24px;
+      color: var(--text-muted);
+      cursor: pointer;
+      line-height: 1;
+      padding: 4px 8px;
+      border-radius: var(--radius);
+    }
+
+    .detail-modal-close:hover {
+      background: var(--border-light);
+      color: var(--text-primary);
+    }
+
+    .detail-modal-body {
+      flex: 1;
+      display: flex;
+      overflow: hidden;
+      padding: 20px;
+      gap: 20px;
+    }
+
+    /* 左侧商品信息区 */
+    .product-info {
+      flex: 0 0 68%;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .product-title {
+      font-size: 18px;
+      font-weight: 600;
+      margin-bottom: 12px;
+      color: var(--text-primary);
+    }
+
+    .product-meta {
+      display: flex;
+      gap: 16px;
+      margin-bottom: 16px;
+      flex-wrap: wrap;
+    }
+
+    .product-meta-item {
+      font-size: 13px;
+      color: var(--text-secondary);
+    }
+
+    .product-meta-item .value {
+      color: var(--text-primary);
+      font-weight: 500;
+    }
+
+    /* 图片Tab */
+    .image-tabs {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+
+    .image-tab {
+      padding: 6px 16px;
+      font-size: 13px;
+      background: var(--border-light);
+      border: none;
+      border-radius: var(--radius);
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .image-tab.active {
+      background: var(--primary);
+      color: #fff;
+    }
+
+    .image-grid {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      overflow-y: auto;
+      padding-right: 8px;
+    }
+
+    .image-grid::-webkit-scrollbar {
+      width: 6px;
+    }
+
+    .image-grid::-webkit-scrollbar-thumb {
+      background: #d1d5db;
+      border-radius: 3px;
+    }
+
+    .image-item {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .image-item img {
+      width: 100%;
+      max-width: 400px;
+      height: auto;
+      border-radius: var(--radius);
+      cursor: pointer;
+      transition: transform 0.2s;
+    }
+
+    .image-item img:hover {
+      transform: scale(1.01);
+    }
+
+    .image-item .image-label {
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    /* 右侧审核区 */
+    .review-panel {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      overflow-y: auto;
+    }
+
+    .review-card {
+      background: #fafbfc;
+      border-radius: var(--radius-lg);
+      padding: 14px;
+      border: 1px solid var(--border-light);
+    }
+
+    .review-card-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-primary);
+      margin-bottom: 10px;
+    }
+
+    .review-item {
+      font-size: 12px;
+      margin-bottom: 6px;
+    }
+
+    .review-item .label {
+      color: var(--text-secondary);
+      margin-right: 6px;
+    }
+
+    .review-item .value {
+      color: var(--text-primary);
+      font-weight: 500;
+    }
+
+    .review-item .value.success { color: var(--success); }
+    .review-item .value.error { color: var(--danger); }
+    .review-item .value.warning { color: var(--warning); }
+
+    .collapse-toggle {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 500;
+      padding: 8px 0;
+      color: var(--text-secondary);
+    }
+
+    .collapse-toggle:hover {
+      color: var(--text-primary);
+    }
+
+    .collapse-content {
+      display: none;
+    }
+
+    .collapse-content.show {
+      display: block;
+    }
+
+    /* 标注操作区 */
+    .annotation-actions {
+      padding: 16px;
+      background: var(--white);
+      border-radius: var(--radius-lg);
+      border: 1px solid var(--border);
+    }
+
+    .annotation-buttons {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+
+    .annotation-btn {
+      flex: 1;
+      padding: 12px 16px;
+      font-size: 14px;
+      font-weight: 500;
+      border-radius: var(--radius);
+      cursor: pointer;
+      transition: all 0.2s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+    }
+
+    .annotation-btn.correct {
+      background: var(--white);
+      border: 2px solid var(--success);
+      color: var(--success);
+    }
+
+    .annotation-btn.correct.active,
+    .annotation-btn.correct:hover {
+      background: var(--success);
+      color: #fff;
+    }
+
+    .annotation-btn.error {
+      background: var(--white);
+      border: 2px solid var(--danger);
+      color: var(--danger);
+    }
+
+    .annotation-btn.error.active,
+    .annotation-btn.error:hover {
+      background: var(--danger);
+      color: #fff;
+    }
+
+    .annotation-btn.ignore {
+      background: var(--white);
+      border: 2px solid var(--warning);
+      color: var(--warning);
+    }
+
+    .annotation-btn.ignore.active,
+    .annotation-btn.ignore:hover {
+      background: var(--warning);
+      color: #fff;
+    }
+
+    .annotation-inputs {
+      display: none;
+      gap: 12px;
+      padding: 12px;
+      background: #fafbfc;
+      border-radius: var(--radius);
+      margin-bottom: 16px;
+    }
+
+    .annotation-inputs.show {
+      display: flex;
+    }
+
+    .annotation-inputs .form-group {
+      flex: 1;
+    }
+
+    .annotation-inputs label {
+      display: block;
+      font-size: 12px;
+      color: var(--text-secondary);
+      margin-bottom: 4px;
+    }
+
+    .annotation-inputs select,
+    .annotation-inputs input {
+      width: 100%;
+      padding: 6px 10px;
+      font-size: 13px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+    }
+
+    .action-buttons {
+      display: flex;
+      gap: 12px;
+    }
+
+    .action-buttons .btn {
+      flex: 1;
+    }
+
+    /* 底部翻页栏 */
+    .detail-modal-footer {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 24px;
+      padding: 12px 20px;
+      border-top: 1px solid var(--border-light);
+      background: #fafbfc;
+      flex-shrink: 0;
+    }
+
+    .detail-nav-btn {
+      padding: 8px 16px;
+      font-size: 13px;
+      background: var(--white);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      cursor: pointer;
+    }
+
+    .detail-nav-btn:hover:not(:disabled) {
+      border-color: var(--primary);
+      color: var(--primary);
+    }
+
+    .detail-nav-btn:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+
+    .detail-progress {
+      font-size: 14px;
+      font-weight: 500;
+    }
+
+    /* 图片预览弹窗 */
+    .image-preview-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.9);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 2000;
+      opacity: 0;
+      visibility: hidden;
+      transition: all 0.3s;
+    }
+
+    .image-preview-overlay.active {
+      opacity: 1;
+      visibility: visible;
+    }
+
+    .image-preview-overlay img {
+      max-width: 90%;
+      max-height: 90%;
+      border-radius: 4px;
+    }
+
+    .preview-nav {
+      position: absolute;
+      top: 50%;
+      transform: translateY(-50%);
+      background: rgba(255, 255, 255, 0.1);
+      border: none;
+      color: #fff;
+      font-size: 32px;
+      padding: 16px;
+      cursor: pointer;
+      border-radius: var(--radius);
+    }
+
+    .preview-nav:hover {
+      background: rgba(255, 255, 255, 0.2);
+    }
+
+    .preview-prev { left: 20px; }
+    .preview-next { right: 20px; }
+
+    .preview-close {
+      position: absolute;
+      top: 20px;
+      right: 20px;
+      background: none;
+      border: none;
+      color: #fff;
+      font-size: 28px;
+      cursor: pointer;
+    }
+
+    .preview-counter {
+      position: absolute;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      color: #fff;
+      font-size: 14px;
+    }
+
+    /* 任务保存提示 - 绿色版本 */
+    .task-toast {
+      position: fixed;
+      top: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      padding: 12px 24px;
+      background: var(--success);
+      color: #fff;
+      font-size: 13px;
+      border-radius: var(--radius);
+      box-shadow: 0 4px 12px rgba(46, 204, 113, 0.3);
+      z-index: 3000;
+      opacity: 0;
+      visibility: hidden;
+      transition: all 0.3s;
+    }
+
+    .task-toast.show {
+      opacity: 1;
+      visibility: visible;
+    }
+
+    /* 任务保存提示 - 红色/警告版本 */
+    .task-toast.error {
+      background: var(--danger);
+      box-shadow: 0 4px 12px rgba(231, 76, 60, 0.3);
+    }
+  </style>
+</head>
+<body>
+  <!-- 任务保存提示 -->
+  <div class="task-toast" id="taskToast">任务进度已保存</div>
+
+  <div class="annotation-page">
+    <!-- 页面标题 -->
+    <div class="page-header">
+      <div class="page-title">✏️ 标注任务</div>
+      <span class="text-sm text-secondary">数据更新时间：2026-05-07 17:30:00</span>
+    </div>
+
+    <!-- 筛选栏 -->
+    <div class="filter-bar">
+      <div class="filter-item">
+        <label>AI审核结果：</label>
+        <select class="form-select" id="filterAiResult">
+          <option value="">全部</option>
+          <option value="合规">合规</option>
+          <option value="违规">违规</option>
+        </select>
+      </div>
+      <div class="filter-item">
+        <label>标注状态：</label>
+        <select class="form-select" id="filterAnnotateStatus" onchange="handleFilterChange()">
+          <option value="">全部</option>
+          <option value="待标注">待标注</option>
+          <option value="正确">正确</option>
+          <option value="错误">错误</option>
+          <option value="忽略">忽略</option>
+        </select>
+      </div>
+      <div class="filter-item">
+        <label>标注规则：</label>
+        <select class="form-select" id="filterRule" onchange="handleFilterChange()">
+          <option value="">全部</option>
+        </select>
+      </div>
+      <div class="filter-item">
+        <label>标注备注：</label>
+        <select class="form-select" id="filterAnnotateNote">
+          <option value="">全部</option>
+        </select>
+      </div>
+      <div class="filter-item">
+        <label>类目：</label>
+        <select class="form-select" id="filterCategory">
+          <option value="">全部</option>
+          <option value="健身器材套装">健身器材套装</option>
+          <option value="订书机">订书机</option>
+          <option value="儿童玩具">儿童玩具</option>
+          <option value="手机支架">手机支架</option>
+          <option value="服装鞋帽">服装鞋帽</option>
+        </select>
+      </div>
+      <div class="filter-item">
+        <label>商品ID：</label>
+        <input type="text" class="form-input" id="searchProductId" placeholder="请输入商品ID">
+        <button class="btn btn-primary btn-sm" onclick="handleSearch()">查询</button>
+        <button class="btn btn-default btn-sm" onclick="clearSearch()">清除</button>
+      </div>
+    </div>
+
+    <!-- 统计摘要栏 -->
+    <div class="stats-summary">
+      <div class="stats-group">
+        <div class="stats-item">
+          <span class="num">AI审核总数</span>：
+          <span class="label num">2,847</span>
+        </div>
+        <span class="divider">|</span>
+        <div class="stats-item">
+          <span class="label">合规</span>：
+          <span class="num">2,456</span>
+        </div>
+        <span class="divider">|</span>
+        <div class="stats-item">
+          <span class="label">违规</span>：
+          <span class="num">391</span>
+        </div>
+      </div>
+      <div class="stats-group">
+        <div class="stats-item">
+          <span class="num">标注总数</span>：
+          <span class="label num">1,203</span>
+        </div>
+        <span class="divider">|</span>
+        <div class="stats-item">
+          <span class="label">正确</span>：
+          <span class="num">856</span>
+        </div>
+        <span class="divider">|</span>
+        <div class="stats-item">
+          <span class="label">错误</span>：
+          <span class="num">124</span>
+        </div>
+        <span class="divider">|</span>
+        <div class="stats-item">
+          <span class="label">忽略</span>：
+          <span class="num">223</span>
+        </div>
+      </div>
+      <button class="btn btn-default" onclick="exportAnnotation()">导出标注</button>
+    </div>
+
+    <!-- 批量操作按钮 -->
+    <div class="batch-actions">
+      <button class="batch-btn secondary" onclick="batchSave()">💾 全部保存</button>
+      <button class="batch-btn primary" onclick="batchSubmit()">✅ 全部提交</button>
+    </div>
+
+    <!-- 数据表格 -->
+    <table class="annotation-table" id="annotationTable">
+      <thead>
+        <tr>
+          <th>审核id</th>
+          <th>商品id</th>
+          <th>商品名称</th>
+          <th>类目</th>
+          <th>AI审核结果</th>
+          <th>审核单结果</th>
+          <th>标注规则</th>
+          <th>标注结果</th>
+          <th>操作</th>
+        </tr>
+      </thead>
+      <tbody id="tableBody">
+      </tbody>
+    </table>
+
+    <!-- 分页器 -->
+    <div class="pagination" id="pagination">
+      <div class="pagination-left">
+        <label>每页显示</label>
+        <select class="form-select" id="pageSizeSelect" onchange="changePageSize()">
+          <option value="10">10</option>
+          <option value="20" selected>20</option>
+          <option value="50">50</option>
+          <option value="100">100</option>
+        </select>
+      </div>
+      <div class="pagination-center" id="paginationCenter"></div>
+      <div class="pagination-right" id="paginationRight"></div>
+    </div>
+  </div>
+
+  <!-- 标注详情弹窗 -->
+  <div class="detail-modal-overlay" id="detailModal">
+    <div class="detail-modal">
+      <div class="detail-modal-header">
+        <span class="detail-modal-title">标注详情</span>
+        <button class="detail-modal-close" onclick="closeDetailModal()">&times;</button>
+      </div>
+      <div class="detail-modal-body">
+        <!-- 左侧商品信息 -->
+        <div class="product-info">
+          <div class="product-title" id="modalProductTitle">商品名称</div>
+          <div class="product-meta">
+            <div class="product-meta-item">类目：<span class="value" id="modalCategory">-</span></div>
+            <div class="product-meta-item">店铺：<span class="value" id="modalShop">-</span></div>
+            <div class="product-meta-item">商品ID：<span class="value" id="modalProductId">-</span></div>
+            <div class="product-meta-item"><a href="#" target="_blank" id="modalProductLink">商品链接</a></div>
+          </div>
+          <div class="image-compact" id="imageGrid">
+          </div>
+        </div>
+        <!-- 右侧审核区 -->
+        <div class="review-panel">
+          <div class="review-card">
+            <div class="review-card-title">模型A审核结果</div>
+            <div class="review-item">
+              <span class="label">AI审核结果：</span>
+              <span class="value" id="modalAiResult">-</span>
+            </div>
+            <div class="review-item">
+              <span class="label">AI拒绝原因：</span>
+              <span class="value" id="modalAiRejectReason">-</span>
+            </div>
+            <div class="review-item">
+              <span class="label">AI拒绝解释：</span>
+              <span class="value" id="modalAiRejectExplain">-</span>
+            </div>
+          </div>
+          <div class="review-card">
+            <div class="collapse-toggle" onclick="toggleCollapse(this)">
+              <span>模型B审核结果</span>
+              <span>▼</span>
+            </div>
+            <div class="collapse-content" id="modelBContent">
+              <div class="review-item">
+                <span class="label">模型B结果：</span>
+                <span class="value" id="modalModelBResult">-</span>
+              </div>
+              <div class="review-item">
+                <span class="label">模型B拒绝原因：</span>
+                <span class="value" id="modalModelBRejectReason">-</span>
+              </div>
+            </div>
+          </div>
+          <div class="annotation-actions">
+            <div class="annotation-buttons">
+              <button class="annotation-btn correct" id="btnCorrect" onclick="selectAnnotation('correct')">✓ 正确</button>
+              <button class="annotation-btn error" id="btnError" onclick="selectAnnotation('error')">✗ 错误</button>
+              <button class="annotation-btn ignore" id="btnIgnore" onclick="selectAnnotation('ignore')">⊘ 忽略</button>
+            </div>
+            <div class="annotation-inputs" id="annotationInputs">
+              <div class="form-group">
+                <label>标注备注<span style="color:var(--danger)">*</span></label>
+                <select id="inputNote">
+                  <option value="">请选择</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label>补充说明</label>
+                <input type="text" id="inputComment" placeholder="选填">
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="detail-modal-footer">
+        <button class="back-to-list-btn" onclick="closeDetailModal()">返回列表</button>
+        <button class="detail-nav-btn" id="prevBtn" onclick="prevRecord()">← 上一条</button>
+        <span class="detail-progress" id="progressInfo">1 / 20</span>
+        <button class="detail-nav-btn" id="nextBtn" onclick="nextRecord()">下一条 →</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 图片预览弹窗 -->
+  <div class="image-preview-overlay" id="imagePreview">
+    <button class="preview-close" onclick="closeImagePreview()">&times;</button>
+    <button class="preview-nav preview-prev" onclick="prevImage()">‹</button>
+    <img id="previewImg" src="" alt="">
+    <button class="preview-nav preview-next" onclick="nextImage()">›</button>
+    <span class="preview-counter" id="previewCounter">1 / 4</span>
+  </div>
+
+  <!-- 提交确认弹窗 -->
+  <div class="confirm-overlay" id="confirmOverlay">
+    <div class="confirm-dialog">
+      <div class="confirm-title">确认提交</div>
+      <div class="confirm-message">确认提交此任务？提交后将不可再修改标注。</div>
+      <div class="confirm-buttons">
+        <button class="btn btn-default" onclick="closeConfirm()">取消</button>
+        <button class="btn btn-primary" onclick="confirmSubmit()">确定</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // 全局数据存储（模拟数据库）
+    let globalAnnotationData = {};
+
+    // Mock 数据（47条），增加 ruleId 字段
+    const annotationData = [
+      { id: 'SP20260501001', productId: 'PD10001', name: '健身器材套装 家用多功能仰卧起坐板', category: '健身器材套装', aiResult: '违规', auditResult: '审核驳回', rejectItem: '主图违规', rejectReason: '主图包含违禁词', rejectOpinion: '图片处理不合格', aiRejectReason: '主图检测到违禁内容', aiRejectExplain: '主图文字涉及虚假宣传', shop: '运动旗舰店', mainImages: [1,2,3,4], detailImages: [5,6], skuImages: [7,8], spuImages: [9,10], annotation: '待标注', annotationNote: '', annotationComment: '', ruleId: 'rule_001', ruleName: '通用商品审核规则' },
+      { id: 'SP20260501002', productId: 'PD10002', name: '得力订书机省力型迷你', category: '订书机', aiResult: '合规', auditResult: '审核通过', rejectItem: '', rejectReason: '', rejectOpinion: '', aiRejectReason: '', aiRejectExplain: '', shop: '得力文房旗舰店', mainImages: [11,12,13,14], detailImages: [15,16], skuImages: [17,18], spuImages: [19,20], annotation: '正确', annotationNote: '', annotationComment: '', ruleId: 'rule_003', ruleName: '服装类审核规则' },
+      { id: 'SP20260501003', productId: 'PD10003', name: '儿童lego积木拼装玩具', category: '儿童玩具', aiResult: '违规', auditResult: '审核驳回', rejectItem: '标题违禁词', rejectReason: '标题含虚假宣传', rejectOpinion: '标题违规', aiRejectReason: '标题检测到违禁词', aiRejectExplain: '标题涉及绝对化用语', shop: '乐童玩具专营店', mainImages: [21,22,23,24], detailImages: [25,26], skuImages: [27,28], spuImages: [29,30], annotation: '待标注', annotationNote: '', annotationComment: '', ruleId: 'rule_001', ruleName: '通用商品审核规则' },
+      { id: 'SP20260501004', productId: 'PD10004', name: '手机支架车载重力感应', category: '手机支架', aiResult: '合规', auditResult: '审核通过', rejectItem: '', rejectReason: '', rejectOpinion: '', aiRejectReason: '', aiRejectExplain: '', shop: '数码配件专营店', mainImages: [31,32,33,34], detailImages: [35,36], skuImages: [37,38], spuImages: [39,40], annotation: '正确', annotationNote: '', annotationComment: '', ruleId: 'rule_005', ruleName: '3C数码审核规则' },
+      { id: 'SP20260501005', productId: 'PD10005', name: 'Nike运动鞋男款跑步鞋', category: '服装鞋帽', aiResult: '合规', auditResult: '审核通过', rejectItem: '', rejectReason: '', rejectOpinion: '', aiRejectReason: '', aiRejectExplain: '', shop: 'Nike官方旗舰店', mainImages: [41,42,43,44], detailImages: [45,46], skuImages: [47,48], spuImages: [49,50], annotation: '待标注', annotationNote: '', annotationComment: '', ruleId: 'rule_003', ruleName: '服装类审核规则' },
+      { id: 'SP20260501006', productId: 'PD10006', name: '美的挂烫机家用蒸汽熨斗', category: '家电', aiResult: '违规', auditResult: '审核驳回', rejectItem: '敏感信息', rejectReason: '包含敏感标识', rejectOpinion: '-logo违规', aiRejectReason: '检测到敏感标识', aiRejectExplain: '图片含违禁logo', shop: '美的官方旗舰店', mainImages: [51,52,53,54], detailImages: [55,56], skuImages: [57,58], spuImages: [59,60], annotation: '错误', annotationNote: '主图主体识别错误', annotationComment: '', ruleId: 'rule_002', ruleName: '食品类审核规则' },
+      { id: 'SP20260501007', productId: 'PD10007', name: '小米手环6智能穿戴', category: '智能穿戴', aiResult: '合规', auditResult: '商家撤回', rejectItem: '', rejectReason: '', rejectOpinion: '', aiRejectReason: '', aiRejectExplain: '', shop: '小米官方旗舰店', mainImages: [61,62,63,64], detailImages: [65,66], skuImages: [67,68], spuImages: [69,70], annotation: '忽略', annotationNote: '无关信息误判违规', annotationComment: '', ruleId: 'rule_005', ruleName: '3C数码审核规则' },
+      { id: 'SP20260501008', productId: 'PD10008', name: 'AirPods Pro无线耳机', category: '数码', aiResult: '合规', auditResult: '审核通过', rejectItem: '', rejectReason: '', rejectOpinion: '', aiRejectReason: '', aiRejectExplain: '', shop: 'Apple京东自营店', mainImages: [71,72,73,74], detailImages: [75,76], skuImages: [77,78], spuImages: [79,80], annotation: '正确', annotationNote: '', annotationComment: '', ruleId: 'rule_005', ruleName: '3C数码审核规则' },
+      { id: 'SP20260501009', productId: 'PD10009', name: '美的电饭锅智能版', category: '家电', aiResult: '违规', auditResult: '审核驳回', rejectItem: '虚假宣传', rejectReason: '夸大宣传', rejectOpinion: '功效描述违规', aiRejectReason: '检测到夸大宣传', aiRejectExplain: '描述含绝对化用语', shop: '美的厨卫旗舰店', mainImages: [81,82,83,84], detailImages: [85,86], skuImages: [87,88], spuImages: [89,90], annotation: '待标注', annotationNote: '', annotationComment: '', ruleId: 'rule_002', ruleName: '食品类审核规则' },
+      { id: 'SP20260501010', productId: 'PD10010', name: '联想ThinkPad笔记本', category: '电脑', aiResult: '合规', auditResult: '审核通过', rejectItem: '', rejectReason: '', rejectOpinion: '', aiRejectReason: '', aiRejectExplain: '', shop: '联想京东自营店', mainImages: [91,92,93,94], detailImages: [95,96], skuImages: [97,98], spuImages: [99,100], annotation: '正确', annotationNote: '', annotationComment: '', ruleId: 'rule_005', ruleName: '3C数码审核规则' },
+      { id: 'SP20260501011', productId: 'PD10011', name: 'Apple iPhone 14手机壳', category: '手机配件', aiResult: '合规', auditResult: '审核通过', rejectItem: '', rejectReason: '', rejectOpinion: '', aiRejectReason: '', aiRejectExplain: '', shop: 'Apple配件专营店', mainImages: [101,102,103,104], detailImages: [105,106], skuImages: [107,108], spuImages: [109,110], annotation: '错误', annotationNote: '类目判断错误', annotationComment: '', ruleId: 'rule_001', ruleName: '通用商品审核规则' },
+      { id: 'SP20260501012', productId: 'PD10012', name: '农夫山泉矿泉水整箱', category: '饮品', aiResult: '合规', auditResult: '审核通过', rejectItem: '', rejectReason: '', rejectOpinion: '', aiRejectReason: '', aiRejectExplain: '', shop: '农夫山泉旗舰店', mainImages: [111,112,113,114], detailImages: [115,116], skuImages: [117,118], spuImages: [119,120], annotation: '正确', annotationNote: '', annotationComment: '', ruleId: 'rule_002', ruleName: '食品类审核规则' },
+      { id: 'SP20260501013', productId: 'PD10013', name: '戴森吸尘器V12', category: '家电', aiResult: '违规', auditResult: '审核驳回', rejectItem: '主图违规', rejectReason: '主图含logo', rejectOpinion: '需要处理', aiRejectReason: '检测到品牌logo', aiRejectExplain: '主图需要模糊处理', shop: '戴森官方旗舰店', mainImages: [121,122,123,124], detailImages: [125,126], skuImages: [127,128], spuImages: [129,130], annotation: '忽略', annotationNote: '旗舰店识别错误', annotationComment: '', ruleId: 'rule_001', ruleName: '通用商品审核规则' },
+      { id: 'SP20260501014', productId: 'PD10014', name: '乐高积木城市系列', category: '玩具', aiResult: '合规', auditResult: '审核通过', rejectItem: '', rejectReason: '', rejectOpinion: '', aiRejectReason: '', aiRejectExplain: '', shop: '乐高玩具旗舰店', mainImages: [131,132,133,134], detailImages: [135,136], skuImages: [137,138], spuImages: [139,140], annotation: '正确', annotationNote: '', annotationComment: '', ruleId: 'rule_001', ruleName: '通用商品审核规则' },
+      { id: 'SP20260501015', productId: 'PD10015', name: '海澜之家男士衬衫', category: '服装鞋帽', aiResult: '违规', auditResult: '审核驳回', rejectItem: '敏感信息', rejectReason: '图片含敏感标识', rejectOpinion: '需处理', aiRejectReason: '检测到敏感标识', aiRejectExplain: '主图包含敏感信息', shop: '海澜之家旗舰店', mainImages: [141,142,143,144], detailImages: [145,146], skuImages: [147,148], spuImages: [149,150], annotation: '待标注', annotationNote: '', annotationComment: '', ruleId: 'rule_003', ruleName: '服装类审核规则' },
+      { id: 'SP20260501016', productId: 'PD10016', name: 'SK-II神仙水精华液', category: '美妆', aiResult: '合规', auditResult: '审核通过', rejectItem: '', rejectReason: '', rejectOpinion: '', aiRejectReason: '', aiRejectExplain: '', shop: 'SK-II官方旗舰店', mainImages: [151,152,153,154], detailImages: [155,156], skuImages: [157,158], spuImages: [159,160], annotation: '正确', annotationNote: '', annotationComment: '', ruleId: 'rule_004', ruleName: '美妆类审核规则' },
+      { id: 'SP20260501017', productId: 'PD10017', name: '九阳破壁机家用', category: '家电', aiResult: '违规', auditResult: '审核驳回', rejectItem: '标题违禁词', rejectReason: '标题含违禁词', rejectOpinion: '修改标题', aiRejectReason: '标题检测到违禁词', aiRejectExplain: '标题含绝对化用语', shop: '九阳小家电旗舰店', mainImages: [161,162,163,164], detailImages: [165,166], skuImages: [167,168], spuImages: [169,170], annotation: '错误', annotationNote: '���流信息识别错误', annotationComment: '', ruleId: 'rule_002', ruleName: '食品类审核规则' },
+      { id: 'SP20260501018', productId: 'PD10018', name: 'Adidas运动T恤', category: '服装鞋帽', aiResult: '合规', auditResult: '审核通过', rejectItem: '', rejectReason: '', rejectOpinion: '', aiRejectReason: '', aiRejectExplain: '', shop: 'Adidas官方旗舰店', mainImages: [171,172,173,174], detailImages: [175,176], skuImages: [177,178], spuImages: [179,180], annotation: '正确', annotationNote: '', annotationComment: '', ruleId: 'rule_003', ruleName: '服装类审核规则' },
+      { id: 'SP20260501019', productId: 'PD10019', name: '格力空调1.5匹变频', category: '家电', aiResult: '违规', auditResult: '商家撤回', rejectItem: '', rejectReason: '', rejectOpinion: '', aiRejectReason: '检测到参数问题', aiRejectExplain: '参数描述有问题', shop: '格力空调旗舰店', mainImages: [181,182,183,184], detailImages: [185,186], skuImages: [187,188], spuImages: [189,190], annotation: '忽略', annotationNote: '销售属性错误', annotationComment: '', ruleId: 'rule_001', ruleName: '通用商品审核规则' },
+      { id: 'SP20260501020', productId: 'PD10020', name: '罗技无线鼠标办公', category: '数码', aiResult: '合规', auditResult: '审核通过', rejectItem: '', rejectReason: '', rejectOpinion: '', aiRejectReason: '', aiRejectExplain: '', shop: '罗技京东自营店', mainImages: [191,192,193,194], detailImages: [195,196], skuImages: [197,198], spuImages: [199,200], annotation: '正确', annotationNote: '', annotationComment: '', ruleId: 'rule_005', ruleName: '3C数码审核规则' },
+      { id: 'SP20260501021', productId: 'PD10021', name: '华为Mate60 Pro手机', category: '手机', aiResult: '合规', auditResult: '审核通过', rejectItem: '', rejectReason: '', rejectOpinion: '', aiRejectReason: '', aiRejectExplain: '', shop: '华为官方旗舰店', mainImages: [201,202,203,204], detailImages: [205,206], skuImages: [207,208], spuImages: [209,210], annotation: '正确', annotationNote: '', annotationComment: '', ruleId: 'rule_005', ruleName: '3C数码审核规则' },
+      { id: 'SP20260501022', productId: 'PD10022', name: '三星电视55寸4K智能', category: '家电', aiResult: '违规', auditResult: '审核驳回', rejectItem: '虚假宣传', rejectReason: '夸大宣传', rejectOpinion: '参数违规', aiRejectReason: '检测到夸大宣传', aiRejectExplain: '描述含绝对化用语', shop: '三星官方旗舰店', mainImages: [211,212,213,214], detailImages: [215,216], skuImages: [217,218], spuImages: [219,220], annotation: '待标注', annotationNote: '', annotationComment: '', ruleId: 'rule_001', ruleName: '通用商品审核规则' },
+      { id: 'SP20260501023', productId: 'PD10023', name: '索尼PS5游戏机', category: '游戏设备', aiResult: '合规', auditResult: '审核通过', rejectItem: '', rejectReason: '', rejectOpinion: '', aiRejectReason: '', aiRejectExplain: '', shop: '索尼游戏旗舰店', mainImages: [221,222,223,224], detailImages: [225,226], skuImages: [227,228], spuImages: [229,230], annotation: '正确', annotationNote: '', annotationComment: '', ruleId: 'rule_005', ruleName: '3C数码审核规则' },
+      { id: 'SP20260501024', productId: 'PD10024', name: 'MacBook Air笔记本', category: '电脑', aiResult: '合规', auditResult: '审核通过', rejectItem: '', rejectReason: '', rejectOpinion: '', aiRejectReason: '', aiRejectExplain: '', shop: 'Apple官方旗舰店', mainImages: [231,232,233,234], detailImages: [235,236], skuImages: [237,238], spuImages: [239,240], annotation: '正确', annotationNote: '', annotationComment: '', ruleId: 'rule_005', ruleName: '3C数码审核规则' },
+      { id: 'SP20260501025', productId: 'PD10025', name: 'iPad Pro平板电脑', category: '平板', aiResult: '合规', auditResult: '审核通过', rejectItem: '', rejectReason: '', rejectOpinion: '', aiRejectReason: '', aiRejectExplain: '', shop: 'Apple官方旗舰店', mainImages: [241,242,243,244], detailImages: [245,246], skuImages: [247,248], spuImages: [249,250], annotation: '错误', annotationNote: '类目判断错误', annotationComment: '', ruleId: 'rule_005', ruleName: '3C数码审核规则' },
+      { id: 'SP20260501026', productId: 'PD10026', name: '小米电视65寸全面屏', category: '家电', aiResult: '违规', auditResult: '审核驳回', rejectItem: '敏感信息', rejectReason: '含违禁内容', rejectOpinion: 'Logo违规', aiRejectReason: '检测到敏感标识', aiRejectExplain: '需要模糊处理', shop: '小米电视旗舰店', mainImages: [251,252,253,254], detailImages: [255,256], skuImages: [257,258], spuImages: [259,260], annotation: '待标注', annotationNote: '', annotationComment: '', ruleId: 'rule_001', ruleName: '通用商品审核规则' },
+      { id: 'SP20260501027', productId: 'PD10027', name: '比亚迪汽车脚垫', category: '汽车用品', aiResult: '合规', auditResult: '审核通过', rejectItem: '', rejectReason: '', rejectOpinion: '', aiRejectReason: '', aiRejectExplain: '', shop: '比亚迪用品旗舰店', mainImages: [261,262,263,264], detailImages: [265,266], skuImages: [267,268], spuImages: [269,270], annotation: '正确', annotationNote: '', annotationComment: '', ruleId: 'rule_001', ruleName: '通用商品审核规则' },
+      { id: 'SP20260501028', productId: 'PD10028', name: '格力空调挂机大1.5匹', category: '家电', aiResult: '违规', auditResult: '审核驳回', rejectItem: '标题违禁词', rejectReason: '绝对化用语', rejectOpinion: '标题违规', aiRejectReason: '标题检测到违禁词', aiRejectExplain: '含绝对化用语', shop: '格力空调旗舰店', mainImages: [271,272,273,274], detailImages: [275,276], skuImages: [277,278], spuImages: [279,280], annotation: '忽略', annotationNote: '无关信息误判违规', annotationComment: '', ruleId: 'rule_002', ruleName: '食品类审核规则' },
+      { id: 'SP20260501029', productId: 'PD10029', name: '雅诗兰黛小棕瓶精华', category: '美妆', aiResult: '合规', auditResult: '审核通过', rejectItem: '', rejectReason: '', rejectOpinion: '', aiRejectReason: '', aiRejectExplain: '', shop: '雅诗兰黛官方旗舰店', mainImages: [281,282,283,284], detailImages: [285,286], skuImages: [287,288], spuImages: [289,290], annotation: '正确', annotationNote: '', annotationComment: '', ruleId: 'rule_004', ruleName: '美妆类审核规则' },
+      { id: 'SP20260501030', productId: 'PD10030', name: '兰蔻小黑瓶精华', category: '美妆', aiResult: '合规', auditResult: '审核通过', rejectItem: '', rejectReason: '', rejectOpinion: '', aiRejectReason: '', aiRejectExplain: '', shop: '兰蔻官方旗舰店', mainImages: [291,292,293,294], detailImages: [295,296], skuImages: [297,298], spuImages: [299,300], annotation: '正确', annotationNote: '', annotationComment: '', ruleId: 'rule_004', ruleName: '美妆类审核规则' },
+      { id: 'SP20260501031', productId: 'PD10031', name: '耐克篮球运动鞋', category: '服装鞋帽', aiResult: '合规', auditResult: '审核通过', rejectItem: '', rejectReason: '', rejectOpinion: '', aiRejectReason: '', aiRejectExplain: '', shop: '耐克官方旗舰店', mainImages: [301,302,303,304], detailImages: [305,306], skuImages: [307,308], spuImages: [309,310], annotation: '待标注', annotationNote: '', annotationComment: '', ruleId: 'rule_003', ruleName: '服装类审核规则' },
+      { id: 'SP20260501032', productId: 'PD10032', name: '阿迪达斯跑步鞋', category: '服装鞋帽', aiResult: '违规', auditResult: '审核驳回', rejectItem: '虚假宣传', rejectReason: '夸大功效', rejectOpinion: '描述违规', aiRejectReason: '检测到夸大宣传', aiRejectExplain: '含绝对化用语', shop: '阿迪达斯旗舰店', mainImages: [311,312,313,314], detailImages: [315,316], skuImages: [317,318], spuImages: [319,320], annotation: '错误', annotationNote: '引流信息识别错误', annotationComment: '', ruleId: 'rule_003', ruleName: '服装类审核规则' },
+      { id: 'SP20260501033', productId: 'PD10033', name: '李宁运动服套装', category: '服装鞋帽', aiResult: '合规', auditResult: '审核通过', rejectItem: '', rejectReason: '', rejectOpinion: '', aiRejectReason: '', aiRejectExplain: '', shop: '李宁官方旗舰店', mainImages: [321,322,323,324], detailImages: [325,326], skuImages: [327,328], spuImages: [329,330], annotation: '正确', annotationNote: '', annotationComment: '', ruleId: 'rule_003', ruleName: '服装类审核规则' },
+      { id: 'SP20260501034', productId: 'PD10034', name: '安踏运动鞋男款', category: '服装鞋帽', aiResult: '合规', auditResult: '审核通过', rejectItem: '', rejectReason: '', rejectOpinion: '', aiRejectReason: '', aiRejectExplain: '', shop: '安踏官方旗舰店', mainImages: [331,332,333,334], detailImages: [335,336], skuImages: [337,338], spuImages: [339,340], annotation: '正确', annotationNote: '', annotationComment: '', ruleId: 'rule_003', ruleName: '服装类审核规则' },
+      { id: 'SP20260501035', productId: 'PD10035', name: '特步跑步鞋女款', category: '服装鞋帽', aiResult: '违规', auditResult: '商家撤回', rejectItem: '', rejectReason: '', rejectOpinion: '', aiRejectReason: '检测到敏感词', aiRejectExplain: '需要确认', shop: '特步旗舰店', mainImages: [341,342,343,344], detailImages: [345,346], skuImages: [347,348], spuImages: [349,350], annotation: '忽略', annotationNote: '销售属性错误', annotationComment: '', ruleId: 'rule_003', ruleName: '服装类审核规则' },
+      { id: 'SP20260501036', productId: 'PD10036', name: '骆驼登山鞋男款', category: '服装鞋帽', aiResult: '合规', auditResult: '审核通过', rejectItem: '', rejectReason: '', rejectOpinion: '', aiRejectReason: '', aiRejectExplain: '', shop: '骆驼官方旗舰店', mainImages: [351,352,353,354], detailImages: [355,356], skuImages: [357,358], spuImages: [359,360], annotation: '正确', annotationNote: '', annotationComment: '', ruleId: 'rule_003', ruleName: '服装类审核规则' },
+      { id: 'SP20260501037', productId: 'PD10037', name: '斯凯奇运动鞋女款', category: '服装鞋帽', aiResult: '合规', auditResult: '审核通过', rejectItem: '', rejectReason: '', rejectOpinion: '', aiRejectReason: '', aiRejectExplain: '', shop: '斯凯奇旗舰店', mainImages: [361,362,363,364], detailImages: [365,366], skuImages: [367,368], spuImages: [369,370], annotation: '待标注', annotationNote: '', annotationComment: '', ruleId: 'rule_003', ruleName: '服装类审核规则' },
+      { id: 'SP20260501038', productId: 'PD10038', name: 'New Balance运动鞋', category: '服装鞋帽', aiResult: '违规', auditResult: '审核驳回', rejectItem: '敏感信息', rejectReason: '含敏感标识', rejectOpinion: '图片问题', aiRejectReason: '检测到敏感标识', aiRejectExplain: '需要处理', shop: 'NewBalance旗舰店', mainImages: [371,372,373,374], detailImages: [375,376], skuImages: [377,378], spuImages: [379,380], annotation: '待标注', annotationNote: '', annotationComment: '', ruleId: 'rule_003', ruleName: '服装类审核规则' },
+      { id: 'SP20260501039', productId: 'PD10039', name: '斐乐休闲运动鞋', category: '服装鞋帽', aiResult: '合规', auditResult: '审核通过', rejectItem: '', rejectReason: '', rejectOpinion: '', aiRejectReason: '', aiRejectExplain: '', shop: '斐乐旗舰店', mainImages: [381,382,383,384], detailImages: [385,386], skuImages: [387,388], spuImages: [389,390], annotation: '正确', annotationNote: '', annotationComment: '', ruleId: 'rule_003', ruleName: '服装类审核规则' },
+      { id: 'SP20260501040', productId: 'PD10040', name: '安德玛运动T恤', category: '服装鞋帽', aiResult: '合规', auditResult: '审核通过', rejectItem: '', rejectReason: '', rejectOpinion: '', aiRejectReason: '', aiRejectExplain: '', shop: '安德玛旗舰店', mainImages: [391,392,393,394], detailImages: [395,396], skuImages: [397,398], spuImages: [399,400], annotation: '正确', annotationNote: '', annotationComment: '', ruleId: 'rule_003', ruleName: '服装类审核规则' },
+      { id: 'SP20260501041', productId: 'PD10041', name: 'Puma运动鞋男款', category: '��装鞋帽', aiResult: '违规', auditResult: '审核驳回', rejectItem: '主图违规', rejectReason: '图片含logo', rejectOpinion: '需处理', aiRejectReason: '检测到品牌logo', aiRejectExplain: '主图需要模糊', shop: 'Puma旗舰店', mainImages: [401,402,403,404], detailImages: [405,406], skuImages: [407,408], spuImages: [409,410], annotation: '错误', annotationNote: '旗舰店识别错误', annotationComment: '', ruleId: 'rule_003', ruleName: '服装类审核规则' },
+      { id: 'SP20260501042', productId: 'PD10042', name: '匡威帆布鞋经典款', category: '服装鞋帽', aiResult: '合规', auditResult: '审核通过', rejectItem: '', rejectReason: '', rejectOpinion: '', aiRejectReason: '', aiRejectExplain: '', shop: '匡威官方旗舰店', mainImages: [411,412,413,414], detailImages: [415,416], skuImages: [417,418], spuImages: [419,420], annotation: '正确', annotationNote: '', annotationComment: '', ruleId: 'rule_003', ruleName: '服装类审核规则' },
+      { id: 'SP20260501043', productId: 'PD10043', name: 'Vans经典帆布鞋', category: '服装鞋帽', aiResult: '合规', auditResult: '审核通过', rejectItem: '', rejectReason: '', rejectOpinion: '', aiRejectReason: '', aiRejectExplain: '', shop: 'Vans官方旗舰店', mainImages: [421,422,423,424], detailImages: [425,426], skuImages: [427,428], spuImages: [429,430], annotation: '正确', annotationNote: '', annotationComment: '', ruleId: 'rule_003', ruleName: '服装类审核规则' },
+      { id: 'SP20260501044', productId: 'PD10044', name: 'Converse Chuck Taylor', category: '服装鞋帽', aiResult: '违规', auditResult: '审核驳回', rejectItem: '标题违禁词', rejectReason: '含违禁词', rejectOpinion: '标题需修改', aiRejectReason: '标题检测到违禁词', aiRejectExplain: '需优化标题', shop: 'Converse旗舰店', mainImages: [431,432,433,434], detailImages: [435,436], skuImages: [437,438], spuImages: [439,440], annotation: '待标注', annotationNote: '', annotationComment: '', ruleId: 'rule_003', ruleName: '服装类审核规则' },
+      { id: 'SP20260501045', productId: 'PD10045', name: '卡帕运动套装', category: '服装鞋帽', aiResult: '合规', auditResult: '审核通过', rejectItem: '', rejectReason: '', rejectOpinion: '', aiRejectReason: '', aiRejectExplain: '', shop: '卡帕旗舰店', mainImages: [441,442,443,444], detailImages: [445,446], skuImages: [447,448], spuImages: [449,450], annotation: '正确', annotationNote: '', annotationComment: '', ruleId: 'rule_003', ruleName: '服装类审核规则' },
+      { id: 'SP20260501046', productId: 'PD10046', name: 'Dickies工装裤', category: '服装鞋帽', aiResult: '合规', auditResult: '审核通过', rejectItem: '', rejectReason: '', rejectOpinion: '', aiRejectReason: '', aiRejectExplain: '', shop: 'Dickies官方旗舰店', mainImages: [451,452,453,454], detailImages: [455,456], skuImages: [457,458], spuImages: [459,460], annotation: '忽略', annotationNote: '无关信息误判违规', annotationComment: '', ruleId: 'rule_001', ruleName: '通用商品审核规则' },
+      { id: 'SP20260501047', productId: 'PD10047', name: 'Lee牛仔裤男款', category: '服装鞋帽', aiResult: '违规', auditResult: '商家撤回', rejectItem: '', rejectReason: '', rejectOpinion: '', aiRejectReason: '检测到敏感词', aiRejectExplain: '待确认', shop: 'Lee旗舰店', mainImages: [461,462,463,464], detailImages: [465,466], skuImages: [467,468], spuImages: [469,470], annotation: '待标注', annotationNote: '', annotationComment: '', ruleId: 'rule_003', ruleName: '服装类审核规则' }
+    ];
+
+    // 分页变量
+    let currentPage = 1;
+    let pageSize = 20;
+    let totalItems = annotationData.length;
+    let pendingSubmitIndex = null;
+    let batchPendingIndexes = [];
+    let currentIndex = 0;
+    let imageList = [];
+    let currentImageIndex = 0;
+    let selectedAnnotation = ''; // 当前选中的标注类型
+
+    // 筛选后的数据
+    let filteredData = [];
+
+    // 初始化
+    function init() {
+      // 从全局数据恢复标注状态
+      restoreFromGlobal();
+      // 初始化筛选规则下拉框
+      populateRuleFilterOptions();
+      // 渲染表格
+      filteredData = [...annotationData];
+      renderTable();
+      populateLabelOptions();
+      populateFilterOptions();
+    }
+
+    // 从全局存储恢复数据
+    function restoreFromGlobal() {
+      const stored = localStorage.getItem('annotation_global_data');
+      if (stored) {
+        try {
+          const globalData = JSON.parse(stored);
+          // 合并全局数据到本地数据
+          annotationData.forEach((item, idx) => {
+            if (globalData[item.id]) {
+              item.annotation = globalData[item.id].annotation;
+              item.annotationNote = globalData[item.id].annotationNote || '';
+              item.annotationComment = globalData[item.id].annotationComment || '';
+              item.saved = globalData[item.id].saved;
+            }
+          });
+        } catch (e) {
+          console.error('恢复数据失败', e);
+        }
+      }
+    }
+
+    // 保存到全局存储
+    function saveToGlobal() {
+      const globalData = {};
+      annotationData.forEach(item => {
+        if (item.annotation && item.annotation !== '待标注') {
+          globalData[item.id] = {
+            annotation: item.annotation,
+            annotationNote: item.annotationNote || '',
+            annotationComment: item.annotationComment || '',
+            saved: item.saved
+          };
+        }
+      });
+      localStorage.setItem('annotation_global_data', JSON.stringify(globalData));
+    }
+
+    // 动态填充标注规则筛选选项
+    function populateRuleFilterOptions() {
+      const select = document.getElementById('filterRule');
+      const rules = window.APP_CONFIG.getPromptRules();
+      let html = '<option value="">全部</option>';
+      rules.forEach(rule => {
+        html += `<option value="${rule.id}">${rule.name}</option>`;
+      });
+      select.innerHTML = html;
+    }
+
+    // 动态填充标签选项（标注详情弹窗）
+    function populateLabelOptions() {
+      const select = document.getElementById('inputNote');
+      const labels = window.APP_CONFIG.getLabels();
+      let html = '<option value="">请选择</option>';
+      labels.forEach(label => {
+        html += `<option value="${label}">${label}</option>`;
+      });
+      select.innerHTML = html;
+    }
+
+    // 动态填充筛选选项（筛选栏）
+    function populateFilterOptions() {
+      const select = document.getElementById('filterAnnotateNote');
+      const labels = window.APP_CONFIG.getLabels();
+      let html = '<option value="">全部</option>';
+      labels.forEach(label => {
+        html += `<option value="${label}">${label}</option>`;
+      });
+      select.innerHTML = html;
+    }
+
+    // 筛选变化处理
+    function handleFilterChange() {
+      const filterAiResult = document.getElementById('filterAiResult').value;
+      const filterAnnotateStatus = document.getElementById('filterAnnotateStatus').value;
+      const filterRule = document.getElementById('filterRule').value;
+      const filterAnnotateNote = document.getElementById('filterAnnotateNote').value;
+      const filterCategory = document.getElementById('filterCategory').value;
+
+      filteredData = annotationData.filter(item => {
+        if (filterAiResult && item.aiResult !== filterAiResult) return false;
+        if (filterAnnotateStatus && item.annotation !== filterAnnotateStatus) return false;
+        if (filterRule && item.ruleId !== filterRule) return false;
+        if (filterAnnotateNote && item.annotationNote !== filterAnnotateNote) return false;
+        if (filterCategory && item.category !== filterCategory) return false;
+        return true;
+      });
+
+      totalItems = filteredData.length;
+      currentPage = 1;
+      renderTable();
+    }
+
+    function renderTable() {
+      // 分页切片
+      const start = (currentPage - 1) * pageSize;
+      const end = start + pageSize;
+      const pageData = filteredData.slice(start, end);
+
+      const tbody = document.getElementById('tableBody');
+      let html = '';
+      pageData.forEach((item, idx) => {
+        const realIndex = start + idx;
+        let annotationClass = '';
+        let annotationText = item.annotation;
+        if (item.annotation === '正确') annotationClass = 'tag-correct';
+        else if (item.annotation === '错误') annotationClass = 'tag-error';
+        else if (item.annotation === '忽略') annotationClass = 'tag-ignore';
+        else annotationClass = 'tag-pending';
+
+        html += '<tr>' +
+          '<td>' + item.id + '</td>' +
+          '<td>' + item.productId + '</td>' +
+          '<td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + item.name + '</td>' +
+          '<td>' + item.category + '</td>' +
+          '<td>' + item.aiResult + '</td>' +
+          '<td>' + item.auditResult + '</td>' +
+          '<td><span class="tag-rule">' + (item.ruleName || '-') + '</span></td>' +
+          '<td><span class="' + annotationClass + '">' + annotationText + '</span></td>' +
+          '<td><button class="btn btn-sm btn-primary" onclick="openDetailModal(' + realIndex + ')">标注</button></td>' +
+          '</tr>';
+      });
+      tbody.innerHTML = html;
+
+      // 渲染分页器
+      renderPagination();
+    }
+
+    function renderPagination() {
+      const totalPages = Math.ceil(totalItems / pageSize);
+      const center = document.getElementById('paginationCenter');
+      const right = document.getElementById('paginationRight');
+
+      // 右侧共X条
+      right.textContent = '共 ' + totalItems + ' 条';
+
+      // 中间页码按钮
+      let pages = [];
+      if (totalPages <= 7) {
+        for (let i = 1; i <= totalPages; i++) pages.push(i);
+      } else {
+        pages = [1, 2, 3, '...', totalPages - 2, totalPages - 1, totalPages];
+      }
+
+      let html = '';
+      // 上一页
+      html += '<div class="pagination-item' + (currentPage === 1 ? ' disabled' : '') + '" onclick="goToPage(' + (currentPage - 1) + ')">← 上一页</div>';
+      // 页码
+      pages.forEach(p => {
+        if (p === '...') {
+          html += '<span class="pagination-ellipsis">...</span>';
+        } else {
+          html += '<div class="pagination-item' + (p === currentPage ? ' active' : '') + '" onclick="goToPage(' + p + ')">' + p + '</div>';
+        }
+      });
+      // 下一页
+      html += '<div class="pagination-item' + (currentPage === totalPages ? ' disabled' : '') + '" onclick="goToPage(' + (currentPage + 1) + ')">下一页 →</div>';
+      center.innerHTML = html;
+    }
+
+    function goToPage(page) {
+      const totalPages = Math.ceil(totalItems / pageSize);
+      if (page < 1 || page > totalPages) return;
+      currentPage = page;
+      renderTable();
+    }
+
+    function changePageSize() {
+      const select = document.getElementById('pageSizeSelect');
+      pageSize = parseInt(select.value);
+      currentPage = 1;
+      renderTable();
+    }
+
+    // 重置分页（筛选变化时调用）
+    function resetPagination() {
+      currentPage = 1;
+      renderTable();
+    }
+
+    function openDetailModal(index) {
+      currentIndex = index;
+      const item = annotationData[index];
+
+      // 从全局数据读取最新状态
+      restoreFromGlobal();
+      const globalData = JSON.parse(localStorage.getItem('annotation_global_data') || '{}');
+      if (globalData[item.id]) {
+        item.annotation = globalData[item.id].annotation;
+        item.annotationNote = globalData[item.id].annotationNote || '';
+        item.annotationComment = globalData[item.id].annotationComment || '';
+      }
+
+      document.getElementById('modalProductTitle').textContent = item.name;
+      document.getElementById('modalCategory').textContent = item.category;
+      document.getElementById('modalShop').textContent = item.shop;
+      document.getElementById('modalProductId').textContent = item.productId;
+      document.getElementById('modalProductLink').href = '#';
+
+      document.getElementById('modalAiResult').textContent = item.aiResult;
+      document.getElementById('modalAiResult').className = 'value';
+      document.getElementById('modalAiRejectReason').textContent = item.aiRejectReason || '-';
+      document.getElementById('modalAiRejectExplain').textContent = item.aiRejectExplain || '-';
+
+      document.getElementById('modalModelBResult').textContent = item.aiRejectReason ? '违规' : '合规';
+      document.getElementById('modalModelBRejectReason').textContent = item.aiRejectReason || '-';
+
+      updateImageGrid();
+      updateAnnotationUI();
+      updateProgress();
+
+      document.getElementById('detailModal').classList.add('active');
+    }
+
+    function closeDetailModal() {
+      document.getElementById('detailModal').classList.remove('active');
+      // 刷新表格以显示最新的标注状态
+      restoreFromGlobal();
+      renderTable();
+    }
+
+    function updateImageGrid() {
+      const item = annotationData[currentIndex];
+      const grid = document.getElementById('imageGrid');
+      imageList = [];
+
+      // 构建紧凑布局HTML，按类型分组
+      let html = '';
+
+      // 主图
+      if (item.mainImages && item.mainImages.length > 0) {
+        html += '<div class="thumbnail-row"><div class="thumbnail-label">主图</div><div class="thumbnail-wrapper">';
+        item.mainImages.forEach((n, i) => {
+          const url = `https://picsum.photos/120/90?random=${n}`;
+          imageList.push(url);
+          html += `<img class="thumbnail-img" src="${url}" onclick="openImagePreview(${imageList.length - 1})">`;
+        });
+        html += '</div></div>';
+      }
+
+      // 详情图
+      if (item.detailImages && item.detailImages.length > 0) {
+        html += '<div class="thumbnail-row"><div class="thumbnail-label">详情图</div><div class="thumbnail-wrapper">';
+        item.detailImages.forEach((n, i) => {
+          const url = `https://picsum.photos/120/90?random=${n}`;
+          imageList.push(url);
+          html += `<img class="thumbnail-img" src="${url}" onclick="openImagePreview(${imageList.length - 1})">`;
+        });
+        html += '</div></div>';
+      }
+
+      // SKU图
+      if (item.skuImages && item.skuImages.length > 0) {
+        html += '<div class="thumbnail-row"><div class="thumbnail-label">SKU图</div><div class="thumbnail-wrapper">';
+        item.skuImages.forEach((n, i) => {
+          const url = `https://picsum.photos/120/90?random=${n}`;
+          imageList.push(url);
+          html += `<img class="thumbnail-img" src="${url}" onclick="openImagePreview(${imageList.length - 1})">`;
+        });
+        html += '</div></div>';
+      }
+
+      // SPU图
+      if (item.spuImages && item.spuImages.length > 0) {
+        html += '<div class="thumbnail-row"><div class="thumbnail-label">SPU图</div><div class="thumbnail-wrapper">';
+        item.spuImages.forEach((n, i) => {
+          const url = `https://picsum.photos/120/90?random=${n}`;
+          imageList.push(url);
+          html += `<img class="thumbnail-img" src="${url}" onclick="openImagePreview(${imageList.length - 1})">`;
+        });
+        html += '</div></div>';
+      }
+
+      grid.innerHTML = html;
+    }
+
+    function updateAnnotationUI() {
+      const item = annotationData[currentIndex];
+      // 将中文标注状态映射为英文标识
+      let annotationType = '';
+      if (item.annotation === '正确') annotationType = 'correct';
+      else if (item.annotation === '错误') annotationType = 'error';
+      else if (item.annotation === '忽略') annotationType = 'ignore';
+
+      selectedAnnotation = annotationType;
+
+      document.querySelectorAll('.annotation-btn').forEach(btn => btn.classList.remove('active'));
+      document.getElementById('annotationInputs').classList.remove('show');
+
+      if (selectedAnnotation === 'correct') {
+        document.getElementById('btnCorrect').classList.add('active');
+      } else if (selectedAnnotation === 'error') {
+        document.getElementById('btnError').classList.add('active');
+        document.getElementById('annotationInputs').classList.add('show');
+        document.getElementById('inputNote').value = item.annotationNote || '';
+        document.getElementById('inputComment').value = item.annotationComment || '';
+      } else if (selectedAnnotation === 'ignore') {
+        document.getElementById('btnIgnore').classList.add('active');
+      }
+    }
+
+    function selectAnnotation(type) {
+      selectedAnnotation = type;
+      document.querySelectorAll('.annotation-btn').forEach(btn => btn.classList.remove('active'));
+
+      if (type === 'correct') {
+        document.getElementById('btnCorrect').classList.add('active');
+        document.getElementById('annotationInputs').classList.remove('show');
+
+        // 【问题一：1】点击"正确"按钮时：自动保存为"正确"，自动跳转下一条，显示绿色提示
+        saveAndNavigateNext();
+
+      } else if (type === 'error') {
+        document.getElementById('btnError').classList.add('active');
+        document.getElementById('annotationInputs').classList.add('show');
+
+        // 点击"错误"按钮时，只展开输入框，暂不保存，等点击"下一条"按钮时再保存
+
+      } else if (type === 'ignore') {
+        document.getElementById('btnIgnore').classList.add('active');
+        document.getElementById('annotationInputs').classList.remove('show');
+
+        // 【问题一：3】点击"忽略"按钮时：行为与"正确"一致
+        saveAndNavigateNext();
+      }
+    }
+
+    // 保存并跳转到下一条（正确/忽略按钮使用）
+    function saveAndNavigateNext() {
+      const item = annotationData[currentIndex];
+      const annotationText = selectedAnnotation === 'correct' ? '正确' : '忽略';
+
+      // 保存到本地数据
+      item.annotation = annotationText;
+      item.annotationNote = '';
+      item.annotationComment = '';
+      item.saved = true;
+
+      // 保存到全局数据
+      saveToGlobal();
+
+      // 显示绿色提示
+      showTaskToast('标注结果已保存');
+
+      // 自动跳转到下一条
+      if (currentIndex < annotationData.length - 1) {
+        currentIndex++;
+        openDetailModal(currentIndex);
+      } else {
+        // 已经是最后一条，停留在当前页
+        updateProgress();
+      }
+
+      // 刷新列表（显示最新的标注状态）
+      renderTable();
+    }
+
+    // 保存当前记录（错误按钮的"下一条"按钮使用）
+    function saveCurrentAndNavigateNext() {
+      const item = annotationData[currentIndex];
+
+      // 验证
+      if (selectedAnnotation === 'error') {
+        const note = document.getElementById('inputNote').value;
+        if (!note) {
+          // 【问题一：2】如果未选错误标签就点击"下一条"，弹出提示
+          showToastErr('请先选择错误标签');
+          return;
+        }
+      }
+
+      // 保存当前标注结果
+      if (selectedAnnotation === 'error') {
+        item.annotation = '错误';
+        item.annotationNote = document.getElementById('inputNote').value;
+        item.annotationComment = document.getElementById('inputComment').value;
+      } else if (selectedAnnotation === 'correct') {
+        item.annotation = '正确';
+        item.annotationNote = '';
+        item.annotationComment = '';
+      } else if (selectedAnnotation === 'ignore') {
+        item.annotation = '忽略';
+        item.annotationNote = '';
+        item.annotationComment = '';
+      }
+      item.saved = true;
+
+      // 保存到全局数据
+      saveToGlobal();
+
+      // 显示绿色提示
+      showTaskToast('标注结果已保存');
+
+      // 跳转到下一条
+      if (currentIndex < annotationData.length - 1) {
+        currentIndex++;
+        openDetailModal(currentIndex);
+      } else {
+        updateProgress();
+      }
+
+      // 刷新列表
+      renderTable();
+    }
+
+    function toggleCollapse(btn) {
+      const content = btn.nextElementSibling;
+      content.classList.toggle('show');
+    }
+
+    function saveTask() {
+      if (!selectedAnnotation) {
+        alert('请选择标注结果');
+        return;
+      }
+      if (selectedAnnotation === 'error') {
+        const note = document.getElementById('inputNote').value;
+        if (!note) {
+          alert('请选择标注备注');
+          return;
+        }
+      }
+
+      annotationData[currentIndex].annotation = selectedAnnotation === 'correct' ? '正确' : selectedAnnotation === 'error' ? '错误' : '忽略';
+      annotationData[currentIndex].annotationNote = selectedAnnotation === 'error' ? document.getElementById('inputNote').value : '';
+      annotationData[currentIndex].annotationComment = selectedAnnotation === 'error' ? document.getElementById('inputComment').value : '';
+
+      renderTable();
+      showTaskToast();
+    }
+
+    function submitTask() {
+      if (!selectedAnnotation) {
+        alert('请选择标注结果');
+        return;
+      }
+      if (selectedAnnotation === 'error') {
+        const note = document.getElementById('inputNote').value;
+        if (!note) {
+          alert('请选择标注备注');
+          return;
+        }
+      }
+
+      annotationData[currentIndex].annotation = selectedAnnotation === 'correct' ? '正确' : selectedAnnotation === 'error' ? '错误' : '忽略';
+      annotationData[currentIndex].annotationNote = selectedAnnotation === 'error' ? document.getElementById('inputNote').value : '';
+      annotationData[currentIndex].annotationComment = selectedAnnotation === 'error' ? document.getElementById('inputComment').value : '';
+      annotationData[currentIndex].submitted = true;
+
+      renderTable();
+      closeDetailModal();
+    }
+
+    // 列表页快速保存
+    function quickSave(index, btn) {
+      const item = annotationData[index];
+      // 如果从未标注过，提示选择标注结果
+      if (!item.annotation || item.annotation === '待标注') {
+        showToast('请先选择标注结果（正确/错误/忽略）', true);
+        return;
+      }
+      // 刷新表格并显示反馈
+      renderTable();
+      showTaskToast();
+
+      // 行闪烁反馈
+      const row = btn.closest('tr');
+      if (row) {
+        row.classList.add('row-flash');
+        setTimeout(() => row.classList.remove('row-flash'), 1000);
+      }
+    }
+
+    // 列表页快速提交（先保存再提交）
+    function quickSubmit(index) {
+      const item = annotationData[index];
+      // 如果从未标注过，提示选择标注结果
+      if (!item.annotation || item.annotation === '待标注') {
+        showToast('请先选择标注结果（正确/错误/忽略）', true);
+        return;
+      }
+      // 记录要提交的索引
+      pendingSubmitIndex = index;
+      // 更新确认框文本
+      document.querySelector('#confirmOverlay .confirm-message').textContent = '确认提交此任务？提交后将不可再修改标注。';
+      // 显示确认弹窗
+      document.getElementById('confirmOverlay').classList.add('active');
+    }
+
+    // 批量保存当前页所有已修改的数据
+    function batchSave() {
+      const start = (currentPage - 1) * pageSize;
+      const end = start + pageSize;
+      const pageData = annotationData.slice(start, end);
+
+      let savedCount = 0;
+      pageData.forEach((item, idx) => {
+        const realIndex = start + idx;
+        // 只保存已修改的（非待标注状态的）
+        if (item.annotation && item.annotation !== '待标注' && !item.saved) {
+          item.saved = true;
+          savedCount++;
+        }
+      });
+
+      // 保存到全局数据
+      saveToGlobal();
+
+      if (savedCount > 0) {
+        // 【问题一：4】alert 提示"已保存 X 条修改记录至本地文件"
+        alert('已保存 ' + savedCount + ' 条修改记录至本地文件');
+      } else {
+        alert('没有需要保存的修改');
+      }
+    }
+
+    // 批量提交当前页所有数据
+    function batchSubmit() {
+      const start = (currentPage - 1) * pageSize;
+      const end = start + pageSize;
+      const pageData = annotationData.slice(start, end);
+
+      // 检查是否有待标注的数据
+      let pendingCount = 0;
+      pageData.forEach(item => {
+        if (!item.annotation || item.annotation === '待标注') {
+          pendingCount++;
+        }
+      });
+
+      if (pendingCount > 0) {
+        showToast('有 ' + pendingCount + ' 条待标注数据，请先选择标注结果', true);
+        return;
+      }
+
+      // 记录要批量提交的索引列表
+      batchPendingIndexes = pageData.map((item, idx) => start + idx);
+
+      // 更新确认框文本
+      document.querySelector('#confirmOverlay .confirm-message').textContent = '确认提交当前页面全部 ' + batchPendingIndexes.length + ' 条标注结果？提交后将不可再修改。';
+
+      // 显示确认弹窗
+      document.getElementById('confirmOverlay').classList.add('active');
+    }
+
+    // 批量确认提交
+    function batchConfirmSubmit() {
+      if (batchPendingIndexes && batchPendingIndexes.length > 0) {
+        batchPendingIndexes.forEach(idx => {
+          annotationData[idx].submitted = true;
+        });
+        const count = batchPendingIndexes.length;
+        renderTable();
+        closeConfirm();
+        showTaskToast('已提交 ' + count + ' 条任务');
+        batchPendingIndexes = [];
+      }
+    }
+
+    // 关闭确认弹窗
+    function closeConfirm() {
+      document.getElementById('confirmOverlay').classList.remove('active');
+      pendingSubmitIndex = null;
+    }
+
+    // 确认提交
+    function confirmSubmit() {
+      if (pendingSubmitIndex !== null) {
+        annotationData[pendingSubmitIndex].submitted = true;
+        renderTable();
+        closeConfirm();
+        showTaskToast();
+      } else if (batchPendingIndexes && batchPendingIndexes.length > 0) {
+        // 批量提交模式
+        batchPendingIndexes.forEach(idx => {
+          annotationData[idx].submitted = true;
+        });
+        const count = batchPendingIndexes.length;
+        renderTable();
+        closeConfirm();
+        showTaskToast('已提交 ' + count + ' 条任务');
+        batchPendingIndexes = [];
+      }
+    }
+
+    function showTaskToast(customMsg) {
+      const toast = document.getElementById('taskToast');
+      if (customMsg) {
+        toast.textContent = customMsg;
+      } else {
+        toast.textContent = '任务进度已保存';
+      }
+      toast.classList.remove('error');
+      toast.style.background = 'var(--success)';
+      toast.classList.add('show');
+      setTimeout(() => {
+        toast.classList.remove('show');
+      }, 3000);
+    }
+
+    // 红色警告提示
+    function showToastErr(msg) {
+      const toast = document.getElementById('taskToast');
+      toast.textContent = msg;
+      toast.classList.add('error');
+      toast.classList.add('show');
+      setTimeout(() => {
+        toast.classList.remove('show');
+        toast.classList.remove('error');
+      }, 3000);
+    }
+
+    function showToast(msg, isError) {
+      const toast = document.getElementById('taskToast');
+      toast.textContent = msg;
+      if (isError) {
+        toast.classList.add('error');
+      } else {
+        toast.classList.remove('error');
+      }
+      toast.style.background = isError ? 'var(--danger)' : 'var(--success)';
+      toast.classList.add('show');
+      setTimeout(() => {
+        toast.classList.remove('show');
+        toast.classList.remove('error');
+      }, 3000);
+    }
+
+    function prevRecord() {
+      if (currentIndex > 0) {
+        currentIndex--;
+        openDetailModal(currentIndex);
+      }
+    }
+
+    function nextRecord() {
+      // 【问题一：2】点击"下一条"按钮时，需要根据当前状态决定是否保存
+      if (selectedAnnotation === 'error') {
+        // 如果是错误状态，需要先保存再跳转
+        saveCurrentAndNavigateNext();
+      } else if (selectedAnnotation === 'correct' || selectedAnnotation === 'ignore') {
+        // 如果是正确或忽略状态，也需要保存
+        saveCurrentAndNavigateNext();
+      } else {
+        // 没有选择任何标注状态，直接跳转
+        if (currentIndex < annotationData.length - 1) {
+          currentIndex++;
+          openDetailModal(currentIndex);
+        }
+      }
+    }
+
+    function updateProgress() {
+      document.getElementById('progressInfo').textContent = (currentIndex + 1) + ' / ' + annotationData.length;
+      document.getElementById('prevBtn').disabled = currentIndex === 0;
+      document.getElementById('nextBtn').disabled = currentIndex === annotationData.length - 1;
+    }
+
+    // 图片预览
+    function openImagePreview(idx) {
+      currentImageIndex = idx;
+      showPreviewImage();
+      document.getElementById('imagePreview').classList.add('active');
+    }
+
+    function closeImagePreview() {
+      document.getElementById('imagePreview').classList.remove('active');
+    }
+
+    function showPreviewImage() {
+      document.getElementById('previewImg').src = imageList[currentImageIndex];
+      document.getElementById('previewCounter').textContent = (currentImageIndex + 1) + ' / ' + imageList.length;
+    }
+
+    function prevImage() {
+      if (currentImageIndex > 0) {
+        currentImageIndex--;
+        showPreviewImage();
+      }
+    }
+
+    function nextImage() {
+      if (currentImageIndex < imageList.length - 1) {
+        currentImageIndex++;
+        showPreviewImage();
+      }
+    }
+
+    // 键盘控制
+    document.addEventListener('keydown', function(e) {
+      if (!document.getElementById('detailModal').classList.contains('active')) return;
+
+      if (e.key === 'Escape') closeDetailModal();
+      if (e.key === 'ArrowLeft') prevRecord();
+      if (e.key === 'ArrowRight') nextRecord();
+    });
+
+    document.addEventListener('keydown', function(e) {
+      if (!document.getElementById('imagePreview').classList.contains('active')) return;
+
+      if (e.key === 'Escape') closeImagePreview();
+      if (e.key === 'ArrowLeft') prevImage();
+      if (e.key === 'ArrowRight') nextImage();
+    });
+
+    // 筛选功能
+    function handleSearch() { alert('查询功能将在后续版本实现'); }
+    function clearSearch() {
+      document.getElementById('searchProductId').value = '';
+      document.getElementById('filterAiResult').value = '';
+      document.getElementById('filterAnnotateStatus').value = '';
+      document.getElementById('filterRule').value = '';
+      document.getElementById('filterAnnotateNote').value = '';
+      document.getElementById('filterCategory').value = '';
+      filteredData = [...annotationData];
+      totalItems = filteredData.length;
+      currentPage = 1;
+      renderTable();
+    }
+    function exportAnnotation() { alert('导出功能将在后续版本实现'); }
+
+    // 初始化
+    init();
+  </script>
+</body>
+</html>

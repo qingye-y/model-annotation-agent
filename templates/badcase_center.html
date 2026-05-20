@@ -1,0 +1,1008 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Badcase管理中心</title>
+  <link rel="stylesheet" href="/static/common.css">
+  <script src="/static/config.js"></script>
+  <style>
+    body { background: var(--bg); min-height: 100vh; }
+    .page-container { padding: 20px 24px; max-width: 1400px; }
+    .page-header { margin-bottom: 20px; }
+    .page-title { font-size: 20px; font-weight: 600; color: var(--text-primary); }
+    .page-subtitle { font-size: 14px; color: var(--text-secondary); margin-top: 4px; }
+
+    /* 卡片 */
+    .card { background: var(--white); border-radius: var(--radius-lg); box-shadow: var(--shadow); padding: 16px; margin-bottom: 16px; }
+    .card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid var(--border-light); }
+    .card-title { font-size: 15px; font-weight: 600; }
+
+    /* 筛选栏 */
+    .filter-bar { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; margin-bottom: 16px; padding: 12px 16px; background: var(--white); border-radius: var(--radius-lg); box-shadow: var(--shadow); }
+    .filter-item { display: flex; align-items: center; gap: 8px; }
+    .filter-label { font-size: 13px; color: var(--text-secondary); white-space: nowrap; }
+    .filter-select { padding: 6px 12px; font-size: 13px; border: 1px solid var(--border); border-radius: var(--radius); min-width: 140px; }
+    .filter-input { padding: 6px 12px; font-size: 13px; border: 1px solid var(--border); border-radius: var(--radius); width: 120px; }
+
+    /* 按钮组 */
+    .btn-group { display: flex; gap: 4px; flex-wrap: wrap; }
+    .btn-group .btn { padding: 6px 12px; font-size: 12px; }
+    .btn-group .btn.active { background: var(--primary); color: #fff; border-color: var(--primary); }
+
+    /* 统计卡片 */
+    .stats-cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 20px; }
+    .stats-card { background: var(--white); border-radius: var(--radius-lg); box-shadow: var(--shadow); padding: 16px 20px; }
+    .stats-card-label { font-size: 13px; color: var(--text-secondary); margin-bottom: 4px; }
+    .stats-card-value { font-size: 24px; font-weight: 700; color: var(--primary); }
+
+    /* 数据表格 */
+    .data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .data-table thead th { background: #fafbfc; color: var(--text-secondary); font-weight: 500; text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+    .data-table tbody td { padding: 10px 12px; border-bottom: 1px solid var(--border-light); }
+    .data-table tbody tr:hover { background: #f8f9ff; }
+
+    /* 标签 */
+    .tag-error { background: var(--danger-light); color: var(--danger); padding: 2px 8px; border-radius: 3px; font-size: 12px; }
+    .tag-yes { background: var(--success-light); color: var(--success); padding: 2px 8px; border-radius: 3px; font-size: 12px; }
+    .tag-no { background: #f3f4f6; color: var(--text-muted); padding: 2px 8px; border-radius: 3px; font-size: 12px; }
+    .tag-empty { background: #f3f4f6; color: var(--text-muted); padding: 2px 8px; border-radius: 3px; font-size: 12px; }
+
+    /* 复选框 */
+    .checkbox { width: 16px; height: 16px; cursor: pointer; }
+
+    /* 操作按钮 */
+    .action-btn { padding: 4px 8px; font-size: 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--white); cursor: pointer; margin-right: 4px; }
+    .action-btn:hover { border-color: var(--primary); color: var(--primary); }
+
+    /* 分页器 */
+    .pagination { display: flex; justify-content: space-between; align-items: center; margin-top: 16px; padding: 12px; background: var(--white); border-radius: var(--radius-lg); box-shadow: var(--shadow); }
+    .pagination-info { font-size: 13px; color: var(--text-secondary); }
+    .pagination-controls { display: flex; gap: 8px; align-items: center; }
+    .pagination-btn { padding: 6px 12px; font-size: 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--white); cursor: pointer; }
+    .pagination-btn:hover:not(:disabled) { border-color: var(--primary); color: var(--primary); }
+    .pagination-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .page-size-select { padding: 6px 8px; font-size: 12px; border: 1px solid var(--border); border-radius: var(--radius); }
+
+    /* 模态框 */
+    .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.45); display: flex; align-items: center; justify-content: center; z-index: 1000; opacity: 0; visibility: hidden; transition: all 0.25s; }
+    .modal-overlay.active { opacity: 1; visibility: visible; }
+    .modal { background: var(--white); border-radius: var(--radius-lg); box-shadow: var(--shadow-lg); width: 90%; max-width: 900px; max-height: 90vh; overflow: hidden; display: flex; flex-direction: column; }
+    .modal-header { display: flex; align-items: center; justify-content: space-between; padding: 16px 20px; border-bottom: 1px solid var(--border-light); }
+    .modal-title { font-size: 15px; font-weight: 600; }
+    .modal-close { background: none; border: none; font-size: 20px; color: var(--text-muted); cursor: pointer; padding: 0; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; border-radius: var(--radius); }
+    .modal-close:hover { background: var(--border-light); }
+    .modal-body { padding: 20px; overflow-y: auto; flex: 1; display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+    .modal-footer { display: flex; align-items: center; justify-content: space-between; padding: 12px 20px; border-top: 1px solid var(--border-light); background: #fafbfc; }
+
+    /* 详情弹窗左侧 */
+    .detail-left { border-right: 1px solid var(--border-light); padding-right: 20px; }
+    .detail-product-title { font-size: 16px; font-weight: 600; margin-bottom: 12px; }
+    .detail-product-meta { font-size: 13px; color: var(--text-secondary); margin-bottom: 16px; }
+    .detail-product-meta div { margin-bottom: 4px; }
+    .detail-images { margin-top: 12px; overflow-y: auto; max-height: 300px; }
+    .detail-images::-webkit-scrollbar { width: 6px; }
+    .detail-images::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 3px; }
+    .detail-thumbnail-row { margin-bottom: 12px; }
+    .detail-thumbnail-label { font-size: 12px; font-weight: 600; color: var(--text-primary); margin-bottom: 6px; }
+    .detail-thumbnail-wrapper { display: flex; flex-wrap: wrap; gap: 8px; }
+    .detail-thumbnail-img { width: 100px; height: 75px; object-fit: cover; border-radius: var(--radius); cursor: pointer; border: 1px solid var(--border-light); }
+    .detail-thumbnail-img:hover { border-color: var(--primary); }
+
+    /* 详情弹窗右侧 */
+    .detail-right { padding-left: 0; }
+    .detail-section { margin-bottom: 20px; }
+    .detail-section-title { font-size: 14px; font-weight: 600; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid var(--border-light); }
+    .detail-info-row { display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 13px; }
+    .detail-info-label { color: var(--text-secondary); }
+    .detail-info-value { font-weight: 500; }
+
+    /* 解决方案编辑 */
+    .solution-input { width: 100%; padding: 10px; font-size: 13px; border: 1px solid var(--border); border-radius: var(--radius); min-height: 80px; resize: vertical; margin-bottom: 12px; }
+    .solution-input:focus { outline: none; border-color: var(--primary); }
+
+    /* 翻页按钮 */
+    .detail-nav-btns { display: flex; gap: 8px; }
+    .detail-nav-btn { padding: 6px 12px; font-size: 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--white); cursor: pointer; }
+    .detail-nav-btn:hover:not(:disabled) { border-color: var(--primary); color: var(--primary); }
+    .detail-nav-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    /* 下拉菜单 */
+    .dropdown { position: relative; display: inline-block; }
+    .dropdown-menu { position: absolute; top: 100%; right: 0; background: var(--white); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow-lg); min-width: 120px; z-index: 100; display: none; }
+    .dropdown-menu.show { display: block; }
+    .dropdown-item { padding: 8px 12px; font-size: 12px; cursor: pointer; }
+    .dropdown-item:hover { background: var(--border-light); }
+    .dropdown-item.danger { color: var(--danger); }
+
+    /* 底部操作栏 */
+    .bottom-actions { display: flex; align-items: center; justify-content: space-between; margin-top: 16px; padding: 12px 16px; background: var(--white); border-radius: var(--radius-lg); box-shadow: var(--shadow); }
+    .bottom-left { display: flex; align-items: center; gap: 8px; }
+    .bottom-right { display: flex; gap: 8px; }
+
+    /* 提示 */
+    .toast { position: fixed; top: 20px; left: 50%; transform: translateX(-50%); padding: 12px 24px; background: var(--success); color: #fff; font-size: 13px; border-radius: var(--radius); z-index: 2000; opacity: 0; visibility: hidden; transition: all 0.3s; }
+    .toast.show { opacity: 1; visibility: visible; }
+
+    /* 图片预览 */
+    .image-preview-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.9); display: flex; align-items: center; justify-content: center; z-index: 2000; opacity: 0; visibility: hidden; transition: all 0.3s; }
+    .image-preview-overlay.active { opacity: 1; visibility: visible; }
+    .image-preview-overlay img { max-width: 90%; max-height: 90%; border-radius: 4px; }
+    .image-preview-nav { position: absolute; top: 50%; transform: translateY(-50%); background: rgba(255,255,255,0.1); border: none; color: #fff; font-size: 32px; padding: 16px; cursor: pointer; border-radius: var(--radius); }
+    .image-preview-nav:hover { background: rgba(255,255,255,0.2); }
+    .image-preview-close { position: absolute; top: 20px; right: 20px; background: none; border: none; color: #fff; font-size: 28px; cursor: pointer; }
+    .image-preview-counter { position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); color: #fff; font-size: 14px; }
+
+    /* 文本截断 */
+    .text-ellipsis { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 150px; }
+
+    /* 已导出标签 */
+    .tag-exported { background: var(--success-light); color: var(--success); }
+    .tag-not-exported { background: #f3f4f6; color: var(--text-muted); }
+
+    /* AI分析卡片 */
+    .ai-card { background: var(--white); border: 1px solid var(--border-light); border-radius: var(--radius-lg); padding: 16px; margin-bottom: 12px; }
+    .ai-card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+    .ai-card-label { font-weight: 600; }
+    .ai-card-count { background: var(--danger-light); color: var(--danger); padding: 2px 8px; border-radius: 3px; font-size: 12px; }
+    .ai-card-desc { font-size: 13px; color: var(--text-secondary); margin-bottom: 8px; }
+    .ai-card-suggestion { font-size: 13px; color: var(--text-secondary); margin-bottom: 12px; }
+    .ai-card-section-title { font-weight: 500; color: var(--text-primary); margin-bottom: 4px; }
+  </style>
+</head>
+<body>
+  <div class="page-container">
+    <div class="page-header">
+      <h1 class="page-title">🔍 Badcase管理中心</h1>
+      <p class="page-subtitle">集中管理所有标注为"错误"的数据，补充解决方案，导出用于模型微调</p>
+    </div>
+
+    <div class="toast" id="toast"></div>
+
+    <!-- 筛选栏 -->
+    <div class="filter-bar">
+      <div class="filter-item">
+        <span class="filter-label">错误标签：</span>
+        <select class="filter-select" id="labelFilter">
+          <option value="">全部</option>
+        </select>
+      </div>
+      <div class="filter-item">
+        <span class="filter-label">实例：</span>
+        <div class="btn-group" id="instanceBtns">
+          <button class="btn btn-default active" data-instance="" onclick="selectInstance('')">全部</button>
+          <button class="btn btn-default" data-instance="实例01" onclick="selectInstance('实例01')">实例01</button>
+          <button class="btn btn-default" data-instance="实例02" onclick="selectInstance('实例02')">实例02</button>
+          <button class="btn btn-default" data-instance="实例03" onclick="selectInstance('实例03')">实例03</button>
+          <button class="btn btn-default" data-instance="实例04" onclick="selectInstance('实例04')">实例04</button>
+        </div>
+      </div>
+      <div class="filter-item">
+        <span class="filter-label">日期范围：</span>
+        <input type="date" class="filter-input" id="dateStart">
+        <span class="filter-label">至</span>
+        <input type="date" class="filter-input" id="dateEnd">
+      </div>
+      <div class="filter-item" style="margin-left: auto;">
+        <button class="btn btn-primary" onclick="queryData()">查询</button>
+        <button class="btn btn-default" onclick="resetFilter()">重置</button>
+      </div>
+    </div>
+
+    <!-- 统计卡片 -->
+    <div class="stats-cards">
+      <div class="stats-card">
+        <div class="stats-card-label">Badcase总数</div>
+        <div class="stats-card-value" id="statTotal">0</div>
+      </div>
+      <div class="stats-card">
+        <div class="stats-card-label">涉及实例数</div>
+        <div class="stats-card-value" id="statInstances">0</div>
+      </div>
+      <div class="stats-card">
+        <div class="stats-card-label">已补充解决方案数</div>
+        <div class="stats-card-value" id="statSolutions">0</div>
+      </div>
+      <div class="stats-card">
+        <div class="stats-card-label">已导出数</div>
+        <div class="stats-card-value" id="statExported">0</div>
+      </div>
+    </div>
+
+    <!-- 表格 -->
+    <div class="card">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th style="width:40px;"><input type="checkbox" id="selectAll" onchange="toggleSelectAll()"></th>
+            <th>商品ID</th>
+            <th>商品名称</th>
+            <th>类目</th>
+            <th>AI审核结果</th>
+            <th>标注员</th>
+            <th>错误标签</th>
+            <th>解决方案</th>
+            <th>实例</th>
+            <th>是否已导出</th>
+            <th>操作</th>
+          </tr>
+        </thead>
+        <tbody id="tableBody"></tbody>
+      </table>
+    </div>
+
+    <!-- 分页器 -->
+    <div class="pagination">
+      <div class="pagination-info" id="paginationInfo">共 0 条记录，第 1/1 页</div>
+      <div class="pagination-controls">
+        <select class="page-size-select" id="pageSize" onchange="changePageSize()">
+          <option value="10">10条/页</option>
+          <option value="20">20条/页</option>
+          <option value="50">50条/页</option>
+        </select>
+        <button class="pagination-btn" id="prevBtn" onclick="prevPage()">上一页</button>
+        <button class="pagination-btn" id="nextBtn" onclick="nextPage()">下一页</button>
+      </div>
+    </div>
+
+    <!-- 底部操作栏 -->
+    <div class="bottom-actions">
+      <div class="bottom-left">
+        <button class="btn btn-primary" onclick="openAIModal()">🤖 AI分析建议</button>
+        <span style="margin-left: 16px;">已选择 <span id="selectedCount">0</span> 条</span>
+      </div>
+      <div class="bottom-right">
+        <button class="btn btn-primary" onclick="exportSelected()">📥 导出选中</button>
+        <button class="btn btn-default" onclick="exportAll()">📥 导出全部</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- AI分析弹窗 -->
+  <div class="modal-overlay" id="aiModal">
+    <div class="modal" style="max-width: 700px;">
+      <div class="modal-header">
+        <span class="modal-title">AI智能分析 - 生成整改建议</span>
+        <button class="modal-close" onclick="closeAIModal()">×</button>
+      </div>
+      <div class="modal-body" id="aiModalBody" style="display: block; padding: 20px;">
+        <!-- 配置区 -->
+        <div id="aiConfigSection">
+          <p style="margin-bottom: 16px; font-size: 14px; color: var(--text-secondary);">
+            将对已选中的 <span id="aiSelectedCount">0</span> 条Badcase进行分析，识别共性问题并生成解决方案建议。
+          </p>
+          <div style="margin-bottom: 16px;">
+            <div style="font-size: 13px; font-weight: 500; margin-bottom: 8px;">分析维度（可多选）：</div>
+            <label style="display: inline-flex; align-items: center; margin-right: 16px; cursor: pointer;">
+              <input type="checkbox" id="aiMode1" checked> 错误模式分析
+            </label>
+            <label style="display: inline-flex; align-items: center; margin-right: 16px; cursor: pointer;">
+              <input type="checkbox" id="aiMode2" checked> 相似案例归类
+            </label>
+            <label style="display: inline-flex; align-items: center; margin-right: 16px; cursor: pointer;">
+              <input type="checkbox" id="aiMode3" checked> 整改方案建议
+            </label>
+          </div>
+          <div style="text-align: right;">
+            <button class="btn btn-default" onclick="closeAIModal()">取消</button>
+            <button class="btn btn-primary" onclick="startAIAnalysis()">开始分析</button>
+          </div>
+        </div>
+        <!-- 加载中 -->
+        <div id="aiLoadingSection" style="display: none; text-align: center; padding: 40px;">
+          <div style="font-size: 32px; margin-bottom: 16px;">🤖</div>
+          <div style="font-size: 14px; color: var(--text-secondary);">AI正在分析中...</div>
+          <div style="font-size: 12px; color: var(--text-muted); margin-top: 8px;">预计需要1.5秒</div>
+        </div>
+        <!-- 结果区 -->
+        <div id="aiResultSection" style="display: none;">
+          <div id="aiSummary" style="font-size: 14px; font-weight: 500; margin-bottom: 16px; padding: 12px; background: var(--primary-light); border-radius: var(--radius);"></div>
+          <div id="aiResultCards"></div>
+          <div style="text-align: right; margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border-light);">
+            <button class="btn btn-default" onclick="exportAIReport()">📥 导出分析报告</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 详情弹窗 -->
+  <div class="modal-overlay" id="detailModal">
+    <div class="modal">
+      <div class="modal-header">
+        <span class="modal-title">Badcase详情</span>
+        <button class="modal-close" onclick="closeDetailModal()">×</button>
+      </div>
+      <div class="modal-body">
+        <div class="detail-left">
+          <div class="detail-product-title" id="detailTitle">商品名称</div>
+          <div class="detail-product-meta">
+            <div>类目：<span id="detailCategory">-</span></div>
+            <div>店铺：<span id="detailShop">-</span></div>
+            <div>商品ID：<span id="detailId">-</span></div>
+          </div>
+          <div class="detail-images" id="detailImages"></div>
+        </div>
+        <div class="detail-right">
+          <div class="detail-section">
+            <div class="detail-section-title">审核信息</div>
+            <div class="detail-info-row">
+              <span class="detail-info-label">AI审核结果：</span>
+              <span class="detail-info-value" id="detailAiResult">-</span>
+            </div>
+            <div class="detail-info-row">
+              <span class="detail-info-label">AI拒绝原因：</span>
+              <span class="detail-info-value" id="detailAiReason">-</span>
+            </div>
+            <div class="detail-info-row">
+              <span class="detail-info-label">标注员：</span>
+              <span class="detail-info-value" id="detailAnnotator">-</span>
+            </div>
+            <div class="detail-info-row">
+              <span class="detail-info-label">标注结果：</span>
+              <span class="detail-info-value" id="detailAnnotation">-</span>
+            </div>
+            <div class="detail-info-row">
+              <span class="detail-info-label">错误标签：</span>
+              <span class="detail-info-value" id="detailLabel">-</span>
+            </div>
+          </div>
+          <div class="detail-section">
+            <div class="detail-section-title">解决方案</div>
+            <textarea class="solution-input" id="solutionInput" placeholder="请输入解决方案，用于模型微调..."></textarea>
+            <button class="btn btn-primary" onclick="saveSolution()">💾 保存解决方案</button>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <div class="detail-nav-btns">
+          <button class="detail-nav-btn" id="detailPrevBtn" onclick="prevDetail()">← 上一条</button>
+          <button class="detail-nav-btn" id="detailNextBtn" onclick="nextDetail()">下一条 →</button>
+        </div>
+        <div style="font-size:12px;color:var(--text-secondary);" id="detailProgress">1 / 1</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 图片预览弹窗 -->
+  <div class="image-preview-overlay" id="imagePreview" onclick="closeImagePreview()">
+    <button class="image-preview-close" onclick="closeImagePreview()">×</button>
+    <button class="image-preview-nav" style="left:20px;" onclick="prevImage(event)">&#139;</button>
+    <img id="previewImg" src="" alt="">
+    <button class="image-preview-nav" style="right:20px;" onclick="nextImage(event)">&#155;</button>
+    <span class="image-preview-counter" id="imageCounter">1 / 1</span>
+  </div>
+
+  <script>
+    // 错误标签列表
+    const labelTags = ['特殊资质缺失', '水印', '马赛克', '盗图', '类目错放', '图文不一致', '销售属性错误', 'SKU图不一致', '关键属性不一致', '站外引流', '无关信息', '多主体', '商品清单', '品类词堆砌', '禁售商品', '标题无关词', 'AI生成', '书籍版权页', '其他'];
+
+    // Mock数据
+    const badcaseData = [];
+    const annotators = ['张三', '李四', '王五', '赵六', '钱七', '孙八'];
+    const categories = ['健身器材', '文具', '玩具', '手机配件', '服装鞋帽', '家电', '美妆', '数码'];
+    const shops = ['运动旗舰店', '得力文房旗舰店', '乐童玩具专营店', '数码配件专营店', 'Nike官方旗舰店'];
+    const instances = ['实例01', '实例02', '实例03', '实例04'];
+    const aiResults = ['违规', '合规'];
+
+    // 生成30条Mock数据
+    for (let i = 0; i < 30; i++) {
+      const label = labelTags[i % labelTags.length];
+      const hasSolution = Math.random() > 0.3;
+      const isExported = Math.random() > 0.6;
+      const daysAgo = Math.floor(Math.random() * 30);
+      const date = new Date();
+      date.setDate(date.getDate() - daysAgo);
+
+      badcaseData.push({
+        id: `PD${10000 + i}`,
+        name: `商品示例${10000 + i} - ${label}`,
+        category: categories[i % categories.length],
+        aiResult: aiResults[i % 2],
+        aiReason: i % 2 === 0 ? '检测到违禁内容' : '',
+        annotator: annotators[i % annotators.length],
+        annotation: '错误',
+        label: label,
+        solution: hasSolution ? `建议：${label}的正确判断方式应该是...` : '',
+        shop: shops[i % shops.length],
+        instance: instances[i % instances.length],
+        exported: isExported,
+        date: date.toISOString().split('T')[0]
+      });
+    }
+
+    // 状态
+    let selectedInstances = [''];
+    let currentPage = 1;
+    let pageSize = 10;
+    let filteredData = [...badcaseData];
+    let currentDetailIndex = 0;
+    let selectedIds = new Set();
+    let detailImageList = [];
+    let currentImageIndex = 0;
+
+    // 初始化
+    function init() {
+      // 加载错误标签下拉
+      const labelSelect = document.getElementById('labelFilter');
+      labelTags.forEach(label => {
+        labelSelect.innerHTML += `<option value="${label}">${label}</option>`;
+      });
+
+      // 设置日期默认最近30天
+      const today = new Date();
+      const monthAgo = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000);
+      document.getElementById('dateEnd').value = formatDate(today);
+      document.getElementById('dateStart').value = formatDate(monthAgo);
+
+      // 渲染表格
+      renderTable();
+      updateStats();
+    }
+
+    function formatDate(date) {
+      return date.toISOString().split('T')[0];
+    }
+
+    // ========== 实例筛选 ==========
+    window.selectInstance = function(instance) {
+      if (instance === '') {
+        selectedInstances = [''];
+      } else {
+        selectedInstances = selectedInstances.filter(i => i !== '');
+        const idx = selectedInstances.indexOf(instance);
+        if (idx >= 0) {
+          selectedInstances.splice(idx, 1);
+        } else {
+          selectedInstances.push(instance);
+        }
+        if (selectedInstances.length === 0) {
+          selectedInstances = [''];
+        }
+      }
+      updateInstanceButtons();
+    };
+
+    function updateInstanceButtons() {
+      document.querySelectorAll('#instanceBtns .btn').forEach(btn => {
+        if (btn.dataset.instance === '') {
+          btn.classList.toggle('active', selectedInstances.includes(''));
+        } else {
+          btn.classList.toggle('active', selectedInstances.includes(btn.dataset.instance));
+        }
+      });
+    }
+
+    // ========== 查询和重置 ==========
+    window.queryData = function() {
+      const label = document.getElementById('labelFilter').value;
+      const dateStart = document.getElementById('dateStart').value;
+      const dateEnd = document.getElementById('dateEnd').value;
+
+      filteredData = badcaseData.filter(item => {
+        if (label && item.label !== label) return false;
+        if (!selectedInstances.includes('')) {
+          if (!selectedInstances.includes(item.instance)) return false;
+        }
+        if (dateStart && item.date < dateStart) return false;
+        if (dateEnd && item.date > dateEnd) return false;
+        return true;
+      });
+
+      currentPage = 1;
+      selectedIds.clear();
+      renderTable();
+      updateStats();
+    };
+
+    window.resetFilter = function() {
+      document.getElementById('labelFilter').value = '';
+      selectedInstances = [''];
+      updateInstanceButtons();
+
+      const today = new Date();
+      const monthAgo = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000);
+      document.getElementById('dateEnd').value = formatDate(today);
+      document.getElementById('dateStart').value = formatDate(monthAgo);
+
+      queryData();
+    };
+
+    // ========== 渲染表格 ==========
+    function renderTable() {
+      const start = (currentPage - 1) * pageSize;
+      const end = Math.min(start + pageSize, filteredData.length);
+      const pageData = filteredData.slice(start, end);
+
+      const tbody = document.getElementById('tableBody');
+      const html = pageData.map((item, idx) => {
+        const globalIdx = start + idx;
+        const isSelected = selectedIds.has(item.id);
+        const solutionText = item.solution || '未填写';
+        const solutionClass = item.solution ? '' : 'tag-empty';
+        const exportClass = item.exported ? 'tag-exported' : 'tag-not-exported';
+        const exportText = item.exported ? '是' : '否';
+
+        return `
+          <tr>
+            <td><input type="checkbox" class="checkbox" ${isSelected ? 'checked' : ''} onchange="toggleSelect('${item.id}', event)"></td>
+            <td>${item.id}</td>
+            <td class="text-ellipsis" title="${item.name}">${item.name}</td>
+            <td>${item.category}</td>
+            <td>${item.aiResult}</td>
+            <td>${item.annotator}</td>
+            <td><span class="tag-error">${item.label}</span></td>
+            <td><span class="${solutionClass}" title="${item.solution}">${solutionText}</span></td>
+            <td>${item.instance}</td>
+            <td><span class="${exportClass}">${exportText}</span></td>
+            <td>
+              <button class="action-btn" onclick="openDetail(${globalIdx})">详情</button>
+              <div class="dropdown">
+                <button class="action-btn" onclick="toggleDropdown('${item.id}')">⋯</button>
+                <div class="dropdown-menu" id="dropdown-${item.id}">
+                  <div class="dropdown-item" onclick="exportSingle('${item.id}')">导出单条</div>
+                  <div class="dropdown-item danger" onclick="deleteItem('${item.id}')">删除</div>
+                </div>
+              </div>
+            </td>
+          </tr>
+        `;
+      }).join('');
+
+      tbody.innerHTML = html || '<tr><td colspan="10" style="text-align:center;padding:40px;color:var(--text-muted);">暂无数据</td></tr>';
+
+      updatePagination();
+    }
+
+    function updatePagination() {
+      const total = filteredData.length;
+      const totalPages = Math.ceil(total / pageSize) || 1;
+      document.getElementById('paginationInfo').textContent = `共 ${total} 条记录，第 ${currentPage}/${totalPages} 页`;
+      document.getElementById('prevBtn').disabled = currentPage === 1;
+      document.getElementById('nextBtn').disabled = currentPage === totalPages;
+      updateSelectAllState();
+    }
+
+    function updateStats() {
+      const total = filteredData.length;
+      const instances = new Set(filteredData.map(d => d.instance)).size;
+      const solutions = filteredData.filter(d => d.solution).length;
+      const exported = filteredData.filter(d => d.exported).length;
+
+      document.getElementById('statTotal').textContent = total;
+      document.getElementById('statInstances').textContent = instances;
+      document.getElementById('statSolutions').textContent = solutions;
+      document.getElementById('statExported').textContent = exported;
+    }
+
+    // ========== 分页 ==========
+    window.changePageSize = function() {
+      pageSize = parseInt(document.getElementById('pageSize').value);
+      currentPage = 1;
+      renderTable();
+    };
+
+    window.prevPage = function() {
+      if (currentPage > 1) {
+        currentPage--;
+        renderTable();
+      }
+    };
+
+    window.nextPage = function() {
+      const totalPages = Math.ceil(filteredData.length / pageSize);
+      if (currentPage < totalPages) {
+        currentPage++;
+        renderTable();
+      }
+    };
+
+    // ========== 选择 ==========
+    window.toggleSelectAll = function() {
+      const checked = document.getElementById('selectAll').checked;
+      const start = (currentPage - 1) * pageSize;
+      const pageData = filteredData.slice(start, start + pageSize);
+
+      pageData.forEach(item => {
+        if (checked) {
+          selectedIds.add(item.id);
+        } else {
+          selectedIds.delete(item.id);
+        }
+      });
+
+      document.getElementById('selectedCount').textContent = selectedIds.size;
+      renderTable();
+    };
+
+    window.toggleSelect = function(id, event) {
+      event.stopPropagation();
+      if (selectedIds.has(id)) {
+        selectedIds.delete(id);
+      } else {
+        selectedIds.add(id);
+      }
+      document.getElementById('selectedCount').textContent = selectedIds.size;
+
+      // 检查是否所有当前页都选中
+      updateSelectAllState();
+    };
+
+    function updateSelectAllState() {
+      const start = (currentPage - 1) * pageSize;
+      const pageData = filteredData.slice(start, start + pageSize);
+      const allSelected = pageData.every(item => selectedIds.has(item.id));
+      document.getElementById('selectAll').checked = allSelected;
+    }
+
+    // ========== 详情弹窗 ==========
+    window.openDetail = function(index) {
+      currentDetailIndex = index;
+      const item = filteredData[index];
+      if (!item) return;
+
+      document.getElementById('detailTitle').textContent = item.name;
+      document.getElementById('detailCategory').textContent = item.category;
+      document.getElementById('detailShop').textContent = item.shop;
+      document.getElementById('detailId').textContent = item.id;
+      document.getElementById('detailAiResult').textContent = item.aiResult;
+      document.getElementById('detailAiReason').textContent = item.aiReason || '-';
+      document.getElementById('detailAnnotator').textContent = item.annotator;
+      document.getElementById('detailAnnotation').textContent = item.annotation;
+      document.getElementById('detailLabel').innerHTML = `<span class="tag-error">${item.label}</span>`;
+      document.getElementById('solutionInput').value = item.solution || '';
+
+      // 渲染图片
+      renderDetailImages(item);
+
+      // 更新翻页按钮
+      updateDetailNav();
+
+      document.getElementById('detailModal').classList.add('active');
+    };
+
+    function renderDetailImages(item) {
+      detailImageList = [];
+      const container = document.getElementById('detailImages');
+
+      // 模拟各类型图片
+      const mainImages = [1, 2];
+      const detailImages = [3, 4];
+      const skuImages = [5];
+      const spuImages = [6];
+
+      let html = '';
+
+      if (mainImages.length > 0) {
+        html += '<div class="detail-thumbnail-row"><div class="detail-thumbnail-label">主图</div><div class="detail-thumbnail-wrapper">';
+        mainImages.forEach(n => {
+          const url = `https://picsum.photos/100/75?random=${item.id}${n}`;
+          detailImageList.push(url);
+          html += `<img class="detail-thumbnail-img" src="${url}" onclick="openImagePreview(${detailImageList.length - 1})">`;
+        });
+        html += '</div></div>';
+      }
+
+      if (detailImages.length > 0) {
+        html += '<div class="detail-thumbnail-row"><div class="detail-thumbnail-label">详情图</div><div class="detail-thumbnail-wrapper">';
+        detailImages.forEach(n => {
+          const url = `https://picsum.photos/100/75?random=${item.id}${n}`;
+          detailImageList.push(url);
+          html += `<img class="detail-thumbnail-img" src="${url}" onclick="openImagePreview(${detailImageList.length - 1})">`;
+        });
+        html += '</div></div>';
+      }
+
+      if (skuImages.length > 0) {
+        html += '<div class="detail-thumbnail-row"><div class="detail-thumbnail-label">SKU图</div><div class="detail-thumbnail-wrapper">';
+        skuImages.forEach(n => {
+          const url = `https://picsum.photos/100/75?random=${item.id}${n}`;
+          detailImageList.push(url);
+          html += `<img class="detail-thumbnail-img" src="${url}" onclick="openImagePreview(${detailImageList.length - 1})">`;
+        });
+        html += '</div></div>';
+      }
+
+      if (spuImages.length > 0) {
+        html += '<div class="detail-thumbnail-row"><div class="detail-thumbnail-label">SPU图</div><div class="detail-thumbnail-wrapper">';
+        spuImages.forEach(n => {
+          const url = `https://picsum.photos/100/75?random=${item.id}${n}`;
+          detailImageList.push(url);
+          html += `<img class="detail-thumbnail-img" src="${url}" onclick="openImagePreview(${detailImageList.length - 1})">`;
+        });
+        html += '</div></div>';
+      }
+
+      container.innerHTML = html || '<div style="color:var(--text-muted)">暂无图片</div>';
+    }
+
+    function updateDetailNav() {
+      const total = filteredData.length;
+      document.getElementById('detailProgress').textContent = `${currentDetailIndex + 1} / ${total}`;
+      document.getElementById('detailPrevBtn').disabled = currentDetailIndex === 0;
+      document.getElementById('detailNextBtn').disabled = currentDetailIndex === total - 1;
+    }
+
+    window.closeDetailModal = function() {
+      document.getElementById('detailModal').classList.remove('active');
+    };
+
+    window.prevDetail = function() {
+      if (currentDetailIndex > 0) {
+        openDetail(currentDetailIndex - 1);
+      }
+    };
+
+    window.nextDetail = function() {
+      if (currentDetailIndex < filteredData.length - 1) {
+        openDetail(currentDetailIndex + 1);
+      }
+    };
+
+    // ========== 保存解决方案 ==========
+    window.saveSolution = function() {
+      const item = filteredData[currentDetailIndex];
+      if (!item) return;
+
+      item.solution = document.getElementById('solutionInput').value;
+      showToast('解决方案已更新');
+      renderTable();
+      updateStats();
+    };
+
+    // ========== 图片预览 ==========
+    window.openImagePreview = function(idx) {
+      currentImageIndex = idx;
+      document.getElementById('previewImg').src = detailImageList[idx];
+      document.getElementById('imageCounter').textContent = `${idx + 1} / ${detailImageList.length}`;
+      document.getElementById('imagePreview').classList.add('active');
+    };
+
+    window.closeImagePreview = function() {
+      document.getElementById('imagePreview').classList.remove('active');
+    };
+
+    window.prevImage = function(e) {
+      e.stopPropagation();
+      if (currentImageIndex > 0) {
+        currentImageIndex--;
+        document.getElementById('previewImg').src = detailImageList[currentImageIndex];
+        document.getElementById('imageCounter').textContent = `${currentImageIndex + 1} / ${detailImageList.length}`;
+      }
+    };
+
+    window.nextImage = function(e) {
+      e.stopPropagation();
+      if (currentImageIndex < detailImageList.length - 1) {
+        currentImageIndex++;
+        document.getElementById('previewImg').src = detailImageList[currentImageIndex];
+        document.getElementById('imageCounter').textContent = `${currentImageIndex + 1} / ${detailImageList.length}`;
+      }
+    };
+
+    // ========== 下拉菜单 ==========
+    window.toggleDropdown = function(id) {
+      const dropdown = document.getElementById('dropdown-' + id);
+      document.querySelectorAll('.dropdown-menu').forEach(m => {
+        if (m !== dropdown) m.classList.remove('show');
+      });
+      dropdown.classList.toggle('show');
+    };
+
+    // 关闭下拉菜单
+    document.addEventListener('click', function(e) {
+      if (!e.target.closest('.dropdown')) {
+        document.querySelectorAll('.dropdown-menu').forEach(m => m.classList.remove('show'));
+      }
+    });
+
+    // ========== 导出 ==========
+    window.exportSingle = function(id) {
+      const item = badcaseData.find(d => d.id === id);
+      if (item) {
+        item.exported = true;
+        showToast(`已导出1条数据`);
+        renderTable();
+        updateStats();
+      }
+    };
+
+    window.exportSelected = function() {
+      if (selectedIds.size === 0) {
+        showToast('请先选择要导出的数据', true);
+        return;
+      }
+
+      const data = badcaseData.filter(d => selectedIds.has(d.id));
+      data.forEach(d => d.exported = true);
+
+      downloadCSV(data, `badcase_export_selected_${getToday()}.csv`);
+      showToast(`已导出 ${data.length} 条数据`);
+      selectedIds.clear();
+      document.getElementById('selectedCount').textContent = '0';
+      renderTable();
+      updateStats();
+    };
+
+    window.exportAll = function() {
+      const data = filteredData;
+      if (data.length === 0) {
+        showToast('没有可导出的数据', true);
+        return;
+      }
+
+      data.forEach(d => d.exported = true);
+
+      downloadCSV(data, `badcase_export_${getToday()}.csv`);
+      showToast(`已导出 ${data.length} 条数据`);
+      renderTable();
+      updateStats();
+    };
+
+    function downloadCSV(data, filename) {
+      const headers = ['商品ID', '商品名称', '类目', 'AI审核结果', '标注员', '错误标签', '解决方案', '实例', '标注时间'];
+      const rows = data.map(d => [
+        d.id,
+        d.name,
+        d.category,
+        d.aiResult,
+        d.annotator,
+        d.label,
+        d.solution || '',
+        d.instance,
+        d.date
+      ].map(v => `"${String(v).replace(/"/g, '""')}"`).join(','));
+
+      const csv = [headers.join(','), ...rows].join('\n');
+      const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+
+    function getToday() {
+      const d = new Date();
+      return `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;
+    }
+
+    // ========== AI智能分析 ==========
+    window.openAIModal = function() {
+      if (selectedIds.size === 0) {
+        alert('请先勾选至少一条Badcase');
+        return;
+      }
+      document.getElementById('aiSelectedCount').textContent = selectedIds.size;
+
+      // 显示配置区
+      document.getElementById('aiConfigSection').style.display = 'block';
+      document.getElementById('aiLoadingSection').style.display = 'none';
+      document.getElementById('aiResultSection').style.display = 'none';
+
+      document.getElementById('aiModal').classList.add('active');
+    };
+
+    window.closeAIModal = function() {
+      document.getElementById('aiModal').classList.remove('active');
+    };
+
+    window.startAIAnalysis = function() {
+      // 显示加载
+      document.getElementById('aiConfigSection').style.display = 'none';
+      document.getElementById('aiLoadingSection').style.display = 'block';
+
+      // 模拟AI分析
+      setTimeout(() => {
+        showAIResult();
+      }, 1500);
+    };
+
+    function showAIResult() {
+      document.getElementById('aiLoadingSection').style.display = 'none';
+      document.getElementById('aiResultSection').style.display = 'block';
+
+      // 统计选中的数据
+      const selectedData = filteredData.filter(d => selectedIds.has(d.id));
+
+      // 聚合错误标签
+      const labelCounts = {};
+      selectedData.forEach(d => {
+        labelCounts[d.label] = (labelCounts[d.label] || 0) + 1;
+      });
+
+      const labels = Object.keys(labelCounts).slice(0, 3);
+      document.getElementById('aiSummary').textContent = `共分析 ${selectedData.length} 条Badcase，识别到 ${labels.length} 类共性问题。`;
+
+      // 生成_mock分析结果卡片
+      const mockResults = labels.map(label => ({
+        label: label,
+        count: labelCounts[label],
+        description: `该类错误主要集中在${label}场景，经分析发现模型在处理此类场景时容易出现判断偏差。具体表现为对商品属性的识别不够准确，导致误判。`,
+        suggestion: `建议在提示词中增加针对${label}的明确判断规则，例如：请优先判断商品属性是否明确、是否符合平台规范等。`
+      }));
+
+      // 渲染卡片
+      const cardsHtml = mockResults.map((r, idx) => `
+        <div style="background: var(--white); border: 1px solid var(--border-light); border-radius: var(--radius-lg); padding: 16px; margin-bottom: 12px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+            <span style="font-weight: 600;">${r.label}</span>
+            <span style="background: var(--danger-light); color: var(--danger); padding: 2px 8px; border-radius: 3px; font-size: 12px;">涉及 ${r.count} 条</span>
+          </div>
+          <div style="font-size: 13px; color: var(--text-secondary); margin-bottom: 8px;">
+            <div style="font-weight: 500; color: var(--text-primary);">共性问题描述：</div>
+            <div>${r.description}</div>
+          </div>
+          <div style="font-size: 13px; color: var(--text-secondary); margin-bottom: 12px;">
+            <div style="font-weight: 500; color: var(--text-primary);">整改建议：</div>
+            <div>${r.suggestion}</div>
+          </div>
+          <button class="btn btn-sm btn-default" onclick="applySuggestion('${r.suggestion}')">应用此建议</button>
+        </div>
+      `).join('');
+
+      document.getElementById('aiResultCards').innerHTML = cardsHtml;
+    }
+
+    window.applySuggestion = function(suggestion) {
+      const selectedData = filteredData.filter(d => selectedIds.has(d.id));
+      selectedData.forEach(d => {
+        if (!d.solution) {
+          d.solution = suggestion;
+        }
+      });
+      showToast(`已为 ${selectedData.length} 条Badcase应用整改建议`);
+      renderTable();
+      updateStats();
+    };
+
+    window.exportAIReport = function() {
+      alert('分析报告导出功能开发中');
+    };
+
+    // ========== 删除 ==========
+    window.deleteItem = function(id) {
+      if (!confirm('确认从Badcase列表中移除此条记录？此操作不可恢复。')) {
+        return;
+      }
+
+      const idx = badcaseData.findIndex(d => d.id === id);
+      if (idx >= 0) {
+        badcaseData.splice(idx, 1);
+        filteredData = filteredData.filter(d => d.id !== id);
+        selectedIds.delete(id);
+
+        // 调整页码
+        const totalPages = Math.ceil(filteredData.length / pageSize);
+        if (currentPage > totalPages) currentPage = totalPages || 1;
+
+        showToast('已删除');
+        renderTable();
+        updateStats();
+      }
+    };
+
+    // ========== 通用函数 ==========
+    function showToast(msg, isError) {
+      const t = document.getElementById('toast');
+      t.textContent = msg;
+      t.style.background = isError ? 'var(--danger)' : 'var(--success)';
+      t.classList.add('show');
+      setTimeout(() => t.classList.remove('show'), 3000);
+    }
+
+    // 键盘事件
+    document.addEventListener('keydown', function(e) {
+      if (!document.getElementById('detailModal').classList.contains('active')) return;
+
+      if (e.key === 'ArrowLeft') prevDetail();
+      if (e.key === 'ArrowRight') nextDetail();
+      if (e.key === 'Escape') closeDetailModal();
+    });
+
+    // 初始化
+    init();
+  </script>
+</body>
+</html>
