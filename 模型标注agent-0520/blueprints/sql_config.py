@@ -365,7 +365,7 @@ def api_set_cookie():
     if config:
         config.value = cookie
     else:
-        config = Config(key='IDATA_COOKIE', value=cookie)
+        config = SqlConfig(key='IDATA_COOKIE', value=cookie)
         db.session.add(config)
 
     db.session.commit()
