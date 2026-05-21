@@ -271,7 +271,154 @@
       border-bottom-color: var(--primary);
     }
     .tab-content { display: none; }
+
+    /* category 筛选按钮组 */
+    .filter-btn {
+      padding: 5px 14px;
+      font-size: 13px;
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      background: var(--white);
+      color: var(--text-secondary);
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .filter-btn:hover { border-color: var(--primary); color: var(--primary); }
+    .filter-btn.active {
+      background: var(--primary);
+      border-color: var(--primary);
+      color: white;
+    }
+
+    .btn-sm {
+      padding: 4px 12px;
+      font-size: 12px;
+    }
+
+    /* pipeline add modal */
+    #pipelineAddModal .modal-body { padding-top: 8px; }
+    #pipelineAddTemplateId optgroup { font-style: normal; color: var(--text-secondary); }
     .tab-content.active { display: block; }
+
+    /* 取数管道配置 */
+    .pipeline-env-group {
+      margin-bottom: 28px;
+    }
+    .pipeline-env-title {
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--text-primary);
+      margin-bottom: 12px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--border-light);
+    }
+    .pipeline-steps {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .pipeline-step-card {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      background: var(--white);
+      border: 1px solid var(--border-light);
+      border-radius: var(--radius);
+      padding: 10px 14px;
+      transition: border-color 0.2s;
+    }
+    .pipeline-step-card:hover {
+      border-color: var(--primary);
+    }
+    .pipeline-step-order {
+      min-width: 32px;
+      height: 32px;
+      background: var(--primary);
+      color: #fff;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 13px;
+      font-weight: 600;
+      flex-shrink: 0;
+    }
+    .pipeline-step-order.disabled {
+      background: var(--text-muted);
+    }
+    .pipeline-step-info {
+      flex: 1;
+      min-width: 0;
+    }
+    .pipeline-step-name {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+    .pipeline-step-meta {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+    .pipeline-step-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .toggle-switch {
+      position: relative;
+      width: 36px;
+      height: 20px;
+      flex-shrink: 0;
+    }
+    .toggle-switch input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+    .toggle-slider {
+      position: absolute;
+      cursor: pointer;
+      inset: 0;
+      background-color: #ccc;
+      transition: 0.3s;
+      border-radius: 20px;
+    }
+    .toggle-slider:before {
+      position: absolute;
+      content: "";
+      height: 14px;
+      width: 14px;
+      left: 3px;
+      bottom: 3px;
+      background-color: white;
+      transition: 0.3s;
+      border-radius: 50%;
+    }
+    .toggle-switch input:checked + .toggle-slider {
+      background-color: var(--success);
+    }
+    .toggle-switch input:checked + .toggle-slider:before {
+      transform: translateX(16px);
+    }
+    .order-btn-group {
+      display: flex;
+      gap: 4px;
+    }
+    .order-btn {
+      padding: 2px 8px;
+      font-size: 11px;
+      background: #f0f0f0;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      cursor: pointer;
+      color: var(--text-secondary);
+    }
+    .order-btn:hover {
+      background: var(--primary);
+      color: #fff;
+      border-color: var(--primary);
+    }
 
     /* Cookie 配置 */
     .cookie-card {
@@ -342,19 +489,44 @@
     <!-- Tab切换 -->
     <div class="page-tabs">
       <button class="page-tab active" id="tabSql" onclick="switchTab('sql')">📋 SQL 模板</button>
+      <button class="page-tab" id="tabPipeline" onclick="switchTab('pipeline')">🔄 取数管道</button>
       <button class="page-tab" id="tabCookie" onclick="switchTab('cookie')">🔑 Cookie 管理</button>
     </div>
 
     <!-- SQL模板内容 -->
     <div id="contentSql" class="tab-content active">
     <div style="margin-bottom: 16px; padding: 14px 16px; background: #fef9e7; border-left: 3px solid #e67e22; border-radius: 6px; font-size: 13px; color: #666; line-height: 1.7;">
-      <strong>⚠️ 重要提醒：修改 SQL 模板时，请同时更新「云环境」和「乐采云环境」两个模板。</strong><br>
-      除主 SQL 外，系统还会自动运行 3 个辅助查询：COUNT(DISTINCT) 总数统计、GROUP BY 日期每日计数、违规原因 CASE WHEN 聚合。
+      <strong>⚠️ 重要提醒：修改 SQL 模板时，请同时更新「云环境」和「乐采云环境」两个模板。</strong>
+    </div>
+
+    <!-- 工具栏：筛选按钮组 + 新增按钮 -->
+    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; gap: 12px;">
+      <!-- category 筛选按钮组 -->
+      <div id="categoryFilterGroup" style="display: flex; gap: 6px; flex-wrap: wrap;">
+        <button class="filter-btn active" data-category="" onclick="filterByCategory('')">全部</button>
+        <button class="filter-btn" data-category="detail" onclick="filterByCategory('detail')">明细取数</button>
+        <button class="filter-btn" data-category="count" onclick="filterByCategory('count')">COUNT统计</button>
+        <button class="filter-btn" data-category="sample" onclick="filterByCategory('sample')">抽样</button>
+        <button class="filter-btn" data-category="reason" onclick="filterByCategory('reason')">违规原因</button>
+        <button class="filter-btn" data-category="daily" onclick="filterByCategory('daily')">每日分组</button>
+      </div>
+      <button class="btn btn-primary" onclick="openCreateModal()" style="white-space: nowrap;">+ 新增模板</button>
     </div>
 
     <div class="config-grid" id="configGrid">
       <div class="loading-state">加载中...</div>
     </div>
+    </div>
+
+    <!-- 取数管道内容 -->
+    <div id="contentPipeline" class="tab-content">
+      <div style="margin-bottom: 16px; padding: 14px 16px; background: #e8f5e9; border-left: 3px solid #2e7d32; border-radius: 6px; font-size: 13px; color: #444; line-height: 1.7;">
+        <strong>💡 取数管道说明</strong><br>
+        拉取数据时，系统按顺序执行以下 5 个步骤。每个步骤对应一条 SQL 模板，可独立启用/禁用。步骤 S3/S4 为合规/违规抽样，分别服务标注页两种标签筛选。
+      </div>
+      <div id="pipelineContainer">
+        <div class="loading-state">加载中...</div>
+      </div>
     </div>
 
     <!-- Cookie管理内容 -->
@@ -385,7 +557,7 @@
 
   <!-- 新增/编辑弹窗 -->
   <div class="modal-overlay" id="configModal">
-    <div class="modal" style="max-width: 720px;">
+    <div class="modal" style="width: 720px; max-width: 100%; min-width: 680px;">
       <div class="modal-header">
         <span class="modal-title" id="modalTitle">新建 SQL 配置</span>
         <button class="modal-close" onclick="closeConfigModal()">&times;</button>
@@ -408,6 +580,18 @@
         </div>
 
         <div class="modal-form-group">
+          <label class="modal-form-label">SQL 分类（category）<span class="required">*</span></label>
+          <select class="modal-form-select" id="configCategory">
+            <option value="detail">明细取数（S1 主查询）</option>
+            <option value="count">COUNT 统计（S2）</option>
+            <option value="sample">分层抽样（S3/S4）</option>
+            <option value="reason">违规原因聚合（S5）</option>
+            <option value="daily">每日分组统计（S6）</option>
+          </select>
+          <div style="font-size:12px;color:var(--text-muted);margin-top:4px;">管道模板（S2-S6）请选择对应分类；明细取数模板选择"明细取数"</div>
+        </div>
+
+        <div class="modal-form-group">
           <label class="modal-form-label">关联实例（默认全选）</label>
           <div class="checkbox-group" id="instanceCheckboxGroup">
             <!-- 动态生成 -->
@@ -416,14 +600,10 @@
 
         <div class="modal-form-group">
           <label class="modal-form-label">SQL 语句<span class="required">*</span></label>
-          <textarea class="modal-form-textarea" id="configSqlTemplate" placeholder="使用 ${参数名} 作为入参占位符" oninput="scanParams()"></textarea>
-          <div style="margin-top: 12px; padding: 12px; background: #f0f4ff; border-left: 3px solid var(--primary); border-radius: 4px; font-size: 12px; color: var(--text-secondary); line-height: 1.8;">
-            <strong style="color: var(--primary);">📋 此 SQL 还会自动运行以下辅助查询：</strong><br>
-            ① <b>COUNT 查询</b> — 获取线上原始总数（合规/违规分计），使用 COUNT(DISTINCT 审核id) 避免 LEFT JOIN 重复行<br>
-            ② <b>按日 COUNT 查询</b> — GROUP BY 创建日期 获取每日精确计数，用于 DailyStats 按日分配<br>
-            ③ <b>违规原因分布查询</b> — CASE WHEN 关键词映射为违规标签，按日期+标签分组统计，用于饼图<br>
-            <span style="color: #e67e22;">⚠️ 修改此 SQL 后，请同时更新云环境和乐采云环境两个模板</span>
+          <div id="sqlHintBanner" style="display:none; margin-bottom: 8px; padding: 8px 12px; background: #e8f4fd; border: 1px solid #b3d7fa; border-radius: 6px; font-size: 12px; color: #1a6fb3; line-height: 1.6;">
+            💡 此 SQL 模板包含系统自动注入的占位符（<code style="background:#d4e8ff;padding:1px 4px;border-radius:3px;">{detail_sql}</code> / <code style="background:#d4e8ff;padding:1px 4px;border-radius:3px;">{positions}</code>），引用源见右侧参数列表。
           </div>
+          <textarea class="modal-form-textarea" id="configSqlTemplate" placeholder="使用 ${参数名} 作为入参占位符，管道模板使用 {参数名} 作为系统注入占位符" oninput="scanParams()"></textarea>
         </div>
 
         <div class="modal-form-group">
@@ -445,10 +625,79 @@
           <label class="modal-form-label">模型B提示词（选填）</label>
           <textarea class="modal-form-textarea" id="modelbPrompt" placeholder="留空则使用默认提示词" style="min-height: 120px;"></textarea>
         </div>
+
+        <!-- 辅助工具折叠面板 -->
+        <div style="margin-top: 8px;">
+          <button class="btn btn-default" type="button" onclick="toggleHelperTools()" id="helperToolsToggleBtn" style="font-size:13px;">
+            🧰 辅助工具 ▾
+          </button>
+          <div id="helperToolsPanel" style="display:none; margin-top:12px; border:1px solid var(--border-light); border-radius:var(--radius); padding:14px; background:#fafafa;">
+            <div style="font-size:13px;font-weight:600;color:var(--text-primary);margin-bottom:10px;">占位符分析</div>
+            <div id="placeholderAnalysis" style="font-size:12px;color:var(--text-muted);margin-bottom:12px;min-height:20px;"></div>
+
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px;">
+              <div>
+                <div style="font-size:13px;font-weight:600;color:var(--text-primary);margin-bottom:6px;">批量替换</div>
+                <input type="text" class="modal-form-input" id="helperSearchStr" placeholder="查找内容" style="font-size:12px;margin-bottom:4px;">
+                <input type="text" class="modal-form-input" id="helperReplaceStr" placeholder="替换为" style="font-size:12px;margin-bottom:6px;">
+                <button class="btn btn-default btn-sm" onclick="helperBatchReplace()">执行替换</button>
+              </div>
+              <div>
+                <div style="font-size:13px;font-weight:600;color:var(--text-primary);margin-bottom:6px;">快速插入片段</div>
+                <select class="modal-form-select" id="helperSnippetSelect" onchange="helperInsertSnippet()" style="font-size:12px;margin-bottom:6px;">
+                  <option value="">选择片段插入...</option>
+                  <option value="COUNT(DISTINCT `审核id`)">COUNT(DISTINCT `审核id`)</option>
+                  <option value="ROW_NUMBER() OVER (ORDER BY MD5(t.`审核id`))">ROW_NUMBER() 随机排序</option>
+                  <option value="CASE WHEN t.`AI拒绝原因` LIKE '%%' THEN '' END">CASE WHEN 违规标签</option>
+                  <option value="FROM ({detail_sql}) t">FROM ({detail_sql}) t</option>
+                  <option value="WHERE tmp.rn IN ({positions})">WHERE rn IN ({positions})</option>
+                  <option value="GROUP BY `创建日期`, `AI审核结果`">GROUP BY 日期+结果</option>
+                </select>
+              </div>
+            </div>
+
+            <div>
+              <button class="btn btn-default btn-sm" onclick="helperFormatSql()" style="margin-right:6px;">✨ 格式化 SQL</button>
+              <span style="font-size:12px;color:var(--text-muted);">（仅美化缩进，不改变语义）</span>
+            </div>
+          </div>
+        </div>
       </div>
       <div class="modal-footer">
         <button class="btn btn-default" onclick="closeConfigModal()">取消</button>
         <button class="btn btn-primary" onclick="saveConfig()">保存</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 管道添加步骤弹窗 -->
+  <div class="modal-overlay" id="pipelineAddModal">
+    <div class="modal" style="max-width: 560px;">
+      <div class="modal-header">
+        <span class="modal-title">添加管道步骤</span>
+        <button class="modal-close" onclick="closePipelineAddModal()">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="modal-form-group">
+          <label class="modal-form-label">环境</label>
+          <div id="pipelineAddEnvLabel" style="font-size:14px;color:var(--text-primary);padding:6px 0;font-weight:500;"></div>
+        </div>
+        <div class="modal-form-group">
+          <label class="modal-form-label">SQL 模板<span class="required">*</span></label>
+          <select class="modal-form-select" id="pipelineAddTemplateId" onchange="onPipelineTemplateChange()">
+            <option value="">请选择 SQL 模板</option>
+          </select>
+          <div id="pipelineTemplatePreview" style="margin-top:8px;font-size:12px;color:var(--text-muted);min-height:18px;"></div>
+        </div>
+        <div class="modal-form-group">
+          <label class="modal-form-label">步骤名称（选填）</label>
+          <input type="text" class="modal-form-input" id="pipelineAddStepName" placeholder="如：COUNT总数、自定义聚合">
+        </div>
+        <div id="pipelineTemplateParams" style="margin-top:8px;"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-default" onclick="closePipelineAddModal()">取消</button>
+        <button class="btn btn-primary" onclick="submitPipelineAdd()">添加</button>
       </div>
     </div>
   </div>
@@ -471,6 +720,8 @@
     var currentConfig = null;
 
     // 加载配置列表
+    var allConfigs = [];  // 缓存所有配置
+
     function loadConfigs() {
       var grid = document.getElementById('configGrid');
       grid.innerHTML = '<div class="loading-state">加载中...</div>';
@@ -478,7 +729,8 @@
       fetch('/api/sql-config')
         .then(function(response) { return response.json(); })
         .then(function(data) {
-          renderConfigs(data.configs || []);
+          allConfigs = data.configs || [];
+          renderConfigs(allConfigs);
         })
         .catch(function(error) {
           showToast('加载失败: ' + error.message, true);
@@ -486,13 +738,35 @@
         });
     }
 
+    // category 筛选
+    var currentCategoryFilter = '';
+
+    function filterByCategory(category) {
+      currentCategoryFilter = category;
+      // 更新按钮高亮
+      document.querySelectorAll('.filter-btn').forEach(function(btn) {
+        btn.classList.toggle('active', btn.dataset.category === category);
+      });
+      // 筛选并渲染
+      var filtered = category ? allConfigs.filter(function(c) { return c.category === category; }) : allConfigs;
+      renderConfigs(filtered);
+    }
+
     function renderConfigs(configs) {
       var grid = document.getElementById('configGrid');
-      
+
       if (configs.length === 0) {
-        grid.innerHTML = '<div class="empty-state"><div class="icon">📋</div><div>暂无配置，请点击"新建配置"</div></div>';
+        grid.innerHTML = '<div class="empty-state"><div class="icon">📋</div><div>暂无配置' + (currentCategoryFilter ? '（当前分类下）' : '') + '</div></div>';
         return;
       }
+
+      var CATEGORY_MAP = {
+        'detail': { label: '明细取数', color: '#1976d2' },
+        'count':  { label: 'COUNT统计', color: '#388e3c' },
+        'sample': { label: '抽样', color: '#f57c00' },
+        'reason': { label: '违规原因', color: '#c62828' },
+        'daily':  { label: '每日分组', color: '#6a1b9a' }
+      };
 
       var html = '';
       configs.forEach(function(config) {
@@ -500,11 +774,16 @@
         if (sqlPreview.length > 150) {
           sqlPreview = sqlPreview.substring(0, 150) + '...';
         }
-        
+        var cat = config.category || 'detail';
+        var catInfo = CATEGORY_MAP[cat] || CATEGORY_MAP['detail'];
+
         html += '<div class="config-card">' +
           '<div class="config-card-header">' +
             '<div>' +
-              '<div class="config-name">' + config.name + '</div>' +
+              '<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">' +
+                '<div class="config-name">' + config.name + '</div>' +
+                '<span style="font-size:11px;padding:2px 8px;border-radius:10px;background:' + catInfo.color + '22;color:' + catInfo.color + ';border:1px solid ' + catInfo.color + '40;font-weight:500;">' + catInfo.label + '</span>' +
+              '</div>' +
               '<div class="config-meta">' +
                 '<span>' + config.env + '</span>' +
                 '<span>实例: ' + config.instances + '</span>' +
@@ -533,11 +812,14 @@
       document.getElementById('configId').value = '';
       document.getElementById('configName').value = '';
       document.getElementById('configEnv').value = '';
+      document.getElementById('configCategory').value = 'detail';
       document.getElementById('configSqlTemplate').value = '';
-      
+      document.getElementById('sqlHintBanner').style.display = 'none';
+
       renderInstanceCheckboxes('');
       renderParams([]);
-      
+      toggleHelperTools(false);
+
       document.getElementById('configModal').classList.add('active');
     }
 
@@ -561,13 +843,18 @@
           }
 
           currentConfig = config;
-          
+
           document.getElementById('modalTitle').textContent = '编辑 SQL 配置';
           document.getElementById('configId').value = config.id;
           document.getElementById('configName').value = config.name;
           document.getElementById('configEnv').value = config.env;
+          document.getElementById('configCategory').value = config.category || 'detail';
           document.getElementById('configSqlTemplate').value = config.sql_template;
-          
+
+          // 如果是管道模板（category != detail），显示提示横幅
+          var isPipelineTpl = ['count', 'sample', 'reason', 'daily'].indexOf(config.category || '') >= 0;
+          document.getElementById('sqlHintBanner').style.display = isPipelineTpl ? 'block' : 'none';
+
           renderInstanceCheckboxes(config.env);
           
           // 勾选实例
@@ -609,8 +896,12 @@
           document.getElementById('configId').value = '';
           document.getElementById('configName').value = config.name + ' (副本)';
           document.getElementById('configEnv').value = config.env;
+          document.getElementById('configCategory').value = config.category || 'detail';
           document.getElementById('configSqlTemplate').value = config.sql_template;
-          
+
+          var isPipelineTpl = ['count', 'sample', 'reason', 'daily'].indexOf(config.category || '') >= 0;
+          document.getElementById('sqlHintBanner').style.display = isPipelineTpl ? 'block' : 'none';
+
           renderInstanceCheckboxes(config.env);
           
           // 勾选实例（全选）
@@ -693,20 +984,29 @@
       document.getElementById('modelbEnabled').addEventListener('change', toggleModelbPrompt);
     });
 
-    // 扫描SQL中的参数
+    // 扫描SQL中的参数（支持 ${xxx} 和 {xxx} 两种格式）
     function scanParams() {
       var sql = document.getElementById('configSqlTemplate').value;
-      var pattern = /\$\{([^}]+)\}/g;
+      // ${xxx} 格式（用户参数）
+      var pattern1 = /\$\{([^}]+)\}/g;
+      // {xxx} 格式（系统注入参数，如 {detail_sql}）
+      var pattern2 = /(?<!\\)\{([^}]+)\}/g;
       var params = [];
       var match;
-      
-      while ((match = pattern.exec(sql)) !== null) {
+
+      while ((match = pattern1.exec(sql)) !== null) {
         if (params.indexOf(match[1]) === -1) {
           params.push(match[1]);
         }
       }
+      while ((match = pattern2.exec(sql)) !== null) {
+        if (params.indexOf(match[1]) === -1 && params.indexOf('$' + match[1]) === -1) {
+          // 系统注入参数，自动设置 system_injected=true
+          params.push(match[1]);
+        }
+      }
       
-      // 保留已有的参数配置
+      // 保留已有的参数配置（保留 system_injected 标记）
       var existingParams = [];
       var paramsArea = document.getElementById('paramsArea');
       var existingRows = paramsArea.querySelectorAll('.param-row');
@@ -714,10 +1014,12 @@
         var name = row.querySelector('.param-name').textContent;
         var defaultInput = row.querySelector('.param-default input');
         var requiredCheckbox = row.querySelector('.param-required input');
+        var sysInjected = row.dataset.systemInjected === 'true';
         existingParams.push({
           name: name,
           default: defaultInput ? defaultInput.value : '',
-          required: requiredCheckbox ? requiredCheckbox.checked : false
+          required: requiredCheckbox ? requiredCheckbox.checked : false,
+          system_injected: sysInjected
         });
       });
       
@@ -731,35 +1033,43 @@
         newParams.push({
           name: name,
           default: existing ? existing.default : '',
-          required: existing ? existing.required : (name === 'start_date' || name === 'end_date' || name === 'instance')
+          required: existing ? existing.required : (name === 'start_date' || name === 'end_date' || name === 'instance'),
+          system_injected: existing ? existing.system_injected : false
         });
       });
-      
+
       renderParams(newParams);
     }
 
     // 渲染参数输入区域
     function renderParams(params) {
       var container = document.getElementById('paramsArea');
-      
+
       if (params.length === 0) {
-        container.innerHTML = '<div style="font-size: 12px; color: var(--text-muted);">在SQL中输入${参数名}后自动识别</div>';
+        container.innerHTML = '<div style="font-size: 12px; color: var(--text-muted);">在SQL中输入${参数名}或{参数名}后自动识别</div>';
         return;
       }
-      
+
       var html = '';
       params.forEach(function(param) {
-        html += '<div class="param-row">' +
-          '<span class="param-name">' + param.name + '</span>' +
+        var isSys = param.system_injected;
+        var rowStyle = isSys ? 'background:#f0f0f0;border-radius:6px;padding:6px 8px;margin-bottom:6px;' : 'margin-bottom:4px;';
+        var namePrefix = isSys ? '<span style="font-size:11px;vertical-align:middle;margin-right:3px;" title="系统注入参数，无需用户填写">🔒</span>' : '';
+        var nameStyle = isSys ? 'color:#888;font-style:italic;' : 'color:var(--text-primary);';
+        var descText = isSys && param.description ? '<div style="font-size:11px;color:#888;margin-top:3px;">' + param.description + '</div>' : '';
+
+        html += '<div class="param-row" data-system-injected="' + (isSys ? 'true' : 'false') + '" style="' + rowStyle + '">' +
+          '<span class="param-name" style="' + nameStyle + '">' + namePrefix + param.name + '</span>' +
           '<div class="param-default">' +
-            '<input type="text" class="modal-form-input" value="' + (param.default || '') + '" placeholder="默认值">' +
+            '<input type="text" class="modal-form-input" value="' + (param.default || '') + '" placeholder="默认值"' + (isSys ? ' readonly style="background:#e8e8e8;"' : '') + '>' +
           '</div>' +
           '<label class="param-required">' +
-            '<input type="checkbox" ' + (param.required ? 'checked' : '') + '> 必填' +
+            '<input type="checkbox" ' + (param.required ? 'checked' : '') + (isSys ? ' disabled' : '') + '> 必填' +
           '</label>' +
+          descText +
         '</div>';
       });
-      
+
       container.innerHTML = html;
     }
 
@@ -781,23 +1091,28 @@
         instances.push(cb.value);
       });
       
-      // 收集参数定义
+      // 收集参数定义（保留 system_injected 标记）
       var params = [];
       var paramsArea = document.getElementById('paramsArea');
       paramsArea.querySelectorAll('.param-row').forEach(function(row) {
-        var name = row.querySelector('.param-name').textContent;
+        var nameEl = row.querySelector('.param-name');
+        // 去掉 🔒 图标后的实际参数名
+        var name = (nameEl.textContent || '').replace(/^🔒\s*/, '').trim();
         var defaultInput = row.querySelector('.param-default input');
         var requiredCheckbox = row.querySelector('.param-required input');
+        var sysInjected = row.dataset.systemInjected === 'true';
         params.push({
           name: name,
           default: defaultInput ? defaultInput.value : '',
-          required: requiredCheckbox ? requiredCheckbox.checked : false
+          required: requiredCheckbox ? requiredCheckbox.checked : false,
+          system_injected: sysInjected
         });
       });
       
       var requestData = {
         name: name,
         env: env,
+        category: document.getElementById('configCategory').value,
         instances: instances.join(','),
         sql_template: sqlTemplate,
         params_json: JSON.stringify(params),
@@ -851,6 +1166,141 @@
       if (tab === 'cookie') {
         loadCookieStatus();
       }
+      if (tab === 'pipeline') {
+        loadPipeline();
+      }
+    }
+
+    // ========== 取数管道配置 ==========
+    function loadPipeline() {
+      var container = document.getElementById('pipelineContainer');
+      container.innerHTML = '<div class="loading-state">加载中...</div>';
+
+      fetch('/api/fetch-pipeline')
+        .then(function(response) { return response.json(); })
+        .then(function(data) {
+          var pipelines = data.pipelines || {};
+          var envNames = ['云环境', '乐采云环境'];
+          var html = '';
+
+          envNames.forEach(function(env) {
+            var steps = pipelines[env] || [];
+            html += '<div class="pipeline-env-group">' +
+              '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">' +
+                '<div class="pipeline-env-title" style="margin-bottom:0;">' + env + '（' + steps.length + ' 步骤）</div>' +
+                '<button class="btn btn-default btn-sm" onclick="openPipelineAddModal(\'' + env + '\')">+ 添加步骤</button>' +
+              '</div>' +
+              '<div class="pipeline-steps">';
+
+            if (steps.length === 0) {
+              html += '<div style="font-size:13px;color:var(--text-muted);padding:8px 0;">暂无配置</div>';
+            }
+
+            steps.forEach(function(step) {
+              var orderClass = step.enabled ? '' : ' disabled';
+              html += '<div class="pipeline-step-card" id="step-card-' + step.id + '">' +
+                '<div class="pipeline-step-order' + orderClass + '">' + step.sort_order + '</div>' +
+                '<div class="pipeline-step-info">' +
+                  '<div class="pipeline-step-name">' + (step.step_name || '未命名步骤') + '</div>' +
+                  '<div class="pipeline-step-meta">' +
+                    'SQL: ' + (step.sql_name || '无') + ' | 分类: ' + (step.category || '-') +
+                  '</div>' +
+                '</div>' +
+                '<div class="pipeline-step-actions">' +
+                  '<label class="toggle-switch">' +
+                    '<input type="checkbox" ' + (step.enabled ? 'checked' : '') + ' onchange="togglePipeline(' + step.id + ', this.checked)">' +
+                    '<span class="toggle-slider"></span>' +
+                  '</label>' +
+                  '<div class="order-btn-group">' +
+                    '<button class="order-btn" onclick="moveStep(' + step.id + ', -1)" title="上移">↑</button>' +
+                    '<button class="order-btn" onclick="moveStep(' + step.id + ', 1)" title="下移">↓</button>' +
+                  '</div>' +
+                '</div>' +
+              '</div>';
+            });
+
+            html += '</div></div>';
+          });
+
+          container.innerHTML = html || '<div class="empty-state">暂无管道配置</div>';
+        })
+        .catch(function(error) {
+          container.innerHTML = '<div class="empty-state">加载失败: ' + error.message + '</div>';
+        });
+    }
+
+    function togglePipeline(pipelineId, enabled) {
+      fetch('/api/fetch-pipeline/' + pipelineId, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled: enabled })
+      })
+      .then(function(response) { return response.json(); })
+      .then(function(data) {
+        if (data.success) {
+          // 更新序号圆圈样式
+          var card = document.getElementById('step-card-' + pipelineId);
+          if (card) {
+            var orderEl = card.querySelector('.pipeline-step-order');
+            if (orderEl) {
+              orderEl.className = 'pipeline-step-order' + (enabled ? '' : ' disabled');
+            }
+          }
+        } else {
+          showToast(data.message || '更新失败', true);
+        }
+      })
+      .catch(function(error) {
+        showToast('更新失败: ' + error.message, true);
+      });
+    }
+
+    function moveStep(pipelineId, direction) {
+      // 获取当前排序列表
+      fetch('/api/fetch-pipeline')
+        .then(function(response) { return response.json(); })
+        .then(function(data) {
+          var pipelines = data.pipelines || {};
+          var envNames = ['云环境', '乐采云环境'];
+          var allSteps = [];
+          envNames.forEach(function(env) {
+            (pipelines[env] || []).forEach(function(s) {
+              if (s.id === pipelineId) {
+                s._env = env;
+              }
+              allSteps.push(s);
+            });
+          });
+
+          var currentStep = allSteps.find(function(s) { return s.id === pipelineId; });
+          if (!currentStep) return;
+
+          var envSteps = (pipelines[currentStep._env] || []).sort(function(a, b) { return a.sort_order - b.sort_order; });
+          var idx = envSteps.findIndex(function(s) { return s.id === pipelineId; });
+          var swapIdx = idx + direction;
+          if (swapIdx < 0 || swapIdx >= envSteps.length) return;
+
+          // 交换顺序
+          var updates = [
+            { id: envSteps[idx].id, sort_order: envSteps[swapIdx].sort_order },
+            { id: envSteps[swapIdx].id, sort_order: envSteps[idx].sort_order }
+          ];
+
+          return fetch('/api/fetch-pipeline/batch', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ updates: updates })
+          });
+        })
+        .then(function(response) { return response && response.json(); })
+        .then(function(data) {
+          if (data && data.success) {
+            loadPipeline(); // 重新加载
+          }
+        })
+        .catch(function(error) {
+          showToast('移动失败: ' + error.message, true);
+        });
     }
 
     // ========== Cookie 配置（从 modelb_config.html 迁移） ==========
@@ -929,6 +1379,202 @@
       })
       .catch(function(error) {
         showToast('连接失败: ' + error.message, true);
+      });
+    }
+
+    // ========== 辅助工具 ==========
+    function toggleHelperTools(forceShow) {
+      var panel = document.getElementById('helperToolsPanel');
+      var btn = document.getElementById('helperToolsToggleBtn');
+      var isOpen = panel.style.display !== 'none';
+      var nextState = forceShow !== undefined ? forceShow : !isOpen;
+      panel.style.display = nextState ? 'block' : 'none';
+      btn.textContent = nextState ? '🧰 辅助工具 ▲' : '🧰 辅助工具 ▾';
+      if (nextState) updatePlaceholderAnalysis();
+    }
+
+    function updatePlaceholderAnalysis() {
+      var sql = document.getElementById('configSqlTemplate').value || '';
+      var p1 = sql.match(/\$\{([^}]+)\}/g) || [];
+      var p2 = sql.match(/[^{]\\?\{([^}]+)\}/g) || [];
+      var container = document.getElementById('placeholderAnalysis');
+      if (p1.length === 0 && p2.length === 0) {
+        container.innerHTML = '<span style="color:#888;">未检测到占位符</span>';
+        return;
+      }
+      var lines = [];
+      var counts = {};
+      (sql.match(/\$\{([^}]+)\}/g) || []).forEach(function(p) {
+        counts[p] = (counts[p] || 0) + 1;
+      });
+      Object.keys(counts).forEach(function(p) {
+        lines.push('<code style="background:#e8f4fd;padding:1px 5px;border-radius:3px;margin-right:4px;">' + p + '</code> ×' + counts[p] + ' 次（用户参数）');
+      });
+      if (lines.length) {
+        container.innerHTML = lines.join('&nbsp;&nbsp;');
+      } else {
+        container.innerHTML = '<span style="color:#888;">未检测到 ${xxx} 格式占位符</span>';
+      }
+    }
+
+    function helperBatchReplace() {
+      var sqlEl = document.getElementById('configSqlTemplate');
+      var search = document.getElementById('helperSearchStr').value;
+      var replace = document.getElementById('helperReplaceStr').value;
+      if (!search) { showToast('请输入要查找的内容', true); return; }
+      var before = sqlEl.value;
+      var after = before.split(search).join(replace);
+      if (before === after) { showToast('未找到匹配内容', true); return; }
+      sqlEl.value = after;
+      scanParams();
+      showToast('已替换 ' + (before.split(search).length - 1) + ' 处');
+    }
+
+    function helperInsertSnippet() {
+      var sel = document.getElementById('helperSnippetSelect');
+      var val = sel.value;
+      if (!val) return;
+      var el = document.getElementById('configSqlTemplate');
+      var start = el.selectionStart;
+      var end = el.selectionEnd;
+      var before = el.value.substring(0, start);
+      var after = el.value.substring(end);
+      el.value = before + val + after;
+      el.selectionStart = el.selectionEnd = start + val.length;
+      el.focus();
+      scanParams();
+      sel.value = '';
+    }
+
+    function helperFormatSql() {
+      var el = document.getElementById('configSqlTemplate');
+      var sql = el.value;
+      // 简单美化：缩进关键字
+      var keywords = ['SELECT', 'FROM', 'WHERE', 'GROUP BY', 'ORDER BY', 'HAVING', 'AND', 'OR', 'ON', 'LEFT JOIN', 'INNER JOIN', 'JOIN', 'LIMIT', 'OFFSET', 'CASE', 'WHEN', 'THEN', 'ELSE', 'END', 'UNION'];
+      keywords.forEach(function(kw) {
+        var re = new RegExp('\\n' + kw + '\\b', 'gi');
+        sql = sql.replace(re, '\n' + kw);
+      });
+      el.value = sql.trim();
+      scanParams();
+      showToast('SQL 已格式化');
+    }
+
+    // ========== 管道添加步骤弹窗 ==========
+    var _pipelineAddEnv = '';
+
+    function openPipelineAddModal(env) {
+      _pipelineAddEnv = env;
+      document.getElementById('pipelineAddEnvLabel').textContent = env;
+      document.getElementById('pipelineAddStepName').value = '';
+      document.getElementById('pipelineTemplatePreview').innerHTML = '';
+      document.getElementById('pipelineTemplateParams').innerHTML = '';
+
+      // 加载所有 SQL 模板供选择
+      var tplSelect = document.getElementById('pipelineAddTemplateId');
+      tplSelect.innerHTML = '<option value="">加载中...</option>';
+
+      fetch('/api/sql-config')
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          var tpls = data.configs || [];
+          var CATEGORY_LABELS = { detail: '明细取数', count: 'COUNT统计', sample: '抽样', reason: '违规原因', daily: '每日分组' };
+          // 按 category 分组
+          var groups = {};
+          tpls.forEach(function(t) {
+            var cat = t.category || 'detail';
+            if (!groups[cat]) groups[cat] = [];
+            groups[cat].push(t);
+          });
+          var html = '<option value="">请选择 SQL 模板</option>';
+          Object.keys(groups).sort().forEach(function(cat) {
+            html += '<optgroup label="— ' + (CATEGORY_LABELS[cat] || cat) + ' —">';
+            groups[cat].forEach(function(t) {
+              html += '<option value="' + t.id + '">' + t.name + '</option>';
+            });
+            html += '</optgroup>';
+          });
+          tplSelect.innerHTML = html;
+        })
+        .catch(function() {
+          tplSelect.innerHTML = '<option value="">加载失败</option>';
+        });
+
+      document.getElementById('pipelineAddModal').classList.add('active');
+    }
+
+    function closePipelineAddModal() {
+      document.getElementById('pipelineAddModal').classList.remove('active');
+    }
+
+    function onPipelineTemplateChange() {
+      var tplId = document.getElementById('pipelineAddTemplateId').value;
+      var preview = document.getElementById('pipelineTemplatePreview');
+      var paramsDiv = document.getElementById('pipelineTemplateParams');
+      preview.innerHTML = '';
+      paramsDiv.innerHTML = '';
+
+      if (!tplId) return;
+
+      var tpl = (allConfigs || []).find(function(c) { return c.id == tplId; });
+      if (tpl) {
+        var sql = tpl.sql_template || '';
+        preview.innerHTML = '<span style="color:#888;">' + sql.substring(0, 120) + (sql.length > 120 ? '...' : '') + '</span>';
+        // 自动填入步骤名
+        if (!document.getElementById('pipelineAddStepName').value) {
+          document.getElementById('pipelineAddStepName').value = tpl.name;
+        }
+        // 显示系统注入参数
+        if (tpl.params_json) {
+          try {
+            var params = JSON.parse(tpl.params_json);
+            if (params.length) {
+              var sysParams = params.filter(function(p) { return p.system_injected; });
+              if (sysParams.length) {
+                paramsDiv.innerHTML = '<div style="font-size:12px;color:#888;background:#f5f5f5;padding:8px;border-radius:4px;margin-top:6px;">' +
+                  '<strong>系统注入参数：</strong>' +
+                  sysParams.map(function(p) {
+                    return '<div style="margin-left:8px;margin-top:3px;">🔒 <code>' + p.name + '</code> — ' + (p.description || '系统自动注入') + '</div>';
+                  }).join('') + '</div>';
+              }
+            }
+          } catch(e) {}
+        }
+      }
+    }
+
+    function submitPipelineAdd() {
+      var tplId = document.getElementById('pipelineAddTemplateId').value;
+      var stepName = document.getElementById('pipelineAddStepName').value.trim();
+
+      if (!tplId) {
+        showToast('请选择 SQL 模板', true);
+        return;
+      }
+
+      var body = {
+        env: _pipelineAddEnv,
+        sql_template_id: parseInt(tplId),
+        step_name: stepName
+      };
+
+      fetch('/api/fetch-pipeline', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      })
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        if (data.success) {
+          showToast('管道步骤已添加');
+          closePipelineAddModal();
+          loadPipeline();
+        } else {
+          showToast(data.message || '添加失败', true);
+        }
+      })
+      .catch(function(err) {
+        showToast('添加失败: ' + err.message, true);
       });
     }
 

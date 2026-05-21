@@ -115,6 +115,7 @@ class SqlTemplate(db.Model):
     instances = db.Column(db.String(500))
     api_url = db.Column(db.String(500))
     sql_text = db.Column(db.Text, nullable=False)
+    category = db.Column(db.String(50), default='detail', comment='类型：detail/count/sample/reason/daily')
     params_json = db.Column(db.Text)
     modelb_enabled = db.Column(db.Boolean, default=False)  # 是否启用模型B互检
     modelb_prompt = db.Column(db.Text)  # 模型B使用的提示词（如果为空则复用原始提示词）
@@ -132,6 +133,21 @@ class Annotation(db.Model):
     is_submitted = db.Column(db.Boolean, default=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+class FetchPipeline(db.Model):
+    """取数管道配置表 — 定义各环境的 SQL 执行顺序"""
+    __tablename__ = 'fetch_pipeline'
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    env = db.Column(db.String(50), nullable=False, comment='环境名：云环境/乐采云环境')
+    sort_order = db.Column(db.Integer, nullable=False, default=0, comment='执行序号，1→2→3...')
+    sql_template_id = db.Column(db.Integer, db.ForeignKey('sql_template.id'), nullable=False, comment='关联的SQL模板')
+    step_name = db.Column(db.String(100), comment='步骤名，如"COUNT总数"、"合规抽样"')
+    enabled = db.Column(db.Boolean, default=True, comment='是否启用此步骤')
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    sql_template = db.relationship('SqlTemplate', backref='pipelines')
+
 
 class QcRecord(db.Model):
     """质检修正记录表"""

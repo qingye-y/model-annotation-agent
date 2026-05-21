@@ -1061,9 +1061,12 @@
       progressPollingTimer = setInterval(function() {
         getModelBProgress(batchId, function(progress) {
           if (progress.status !== 'running') {
+            // 互检已停止（completed / aborted）：停止轮询，刷新面板 + 主表 badge
             clearInterval(progressPollingTimer);
             progressPollingTimer = null;
             if (expandedBatchId === batchId) showDetail(batchId);
+            // 刷新主表批次列表，使 badge 状态同步（防止 detail 面板关闭时 badge 不更新）
+            loadBatches();
           } else {
             var el = document.querySelector('.diff-meta');
             if (el && el.innerHTML.indexOf('互检进度') >= 0) {
@@ -1739,11 +1742,13 @@
       var reviewStatus = cached.review_status || '未互检';
       var confirmMsg = '';
       var endpoint = '';
+      var isReviewAbort = false;
 
       if (reviewStatus === '互检中') {
         // 互检进行中 → 调用互检中止端点
         confirmMsg = '确认中止互检？中止后线程将在当前条处理完毕后停止。';
         endpoint = '/api/model-review/abort/' + batchId;
+        isReviewAbort = true;
       } else if (batchStatus === 'running' || batchStatus === 'processing') {
         // 取数进行中 → 调用取数中止端点
         confirmMsg = '确认中止数据拉取任务？中止后任务状态将变为失败。';
@@ -1759,7 +1764,36 @@
         .then(function(data) {
           if (data.success) {
             showToast(data.message || '中止信号已发送');
-            loadBatches();
+            if (isReviewAbort) {
+              // 轮询等待中止完成（review_status 从 running 变为 aborted/completed）
+              var abortPollTimer = null;
+              var pollCount = 0;
+              abortPollTimer = setInterval(function() {
+                pollCount++;
+                fetch('/api/model-review/status/' + batchId)
+                  .then(function(res) { return res.json(); })
+                  .then(function(progress) {
+                    // status 为 'running' 表示仍在运行；其他值（aborted/completed/not_found）表示已停止
+                    if (progress.status !== 'running') {
+                      clearInterval(abortPollTimer);
+                      // 更新缓存中的状态，防止重复触发中止
+                      _batchStatusCache[batchId] = { status: cached.status, review_status: progress.status === 'completed' ? '已互检' : '互检中止' };
+                      loadBatches();
+                    } else if (pollCount >= 30) {
+                      // 超时保护（60秒）
+                      clearInterval(abortPollTimer);
+                      showToast('中止状态轮询超时，请刷新页面查看最新状态', true);
+                      loadBatches();
+                    }
+                  })
+                  .catch(function() {
+                    pollCount++;
+                  });
+              }, 2000);
+            } else {
+              // 取数中止：直接刷新列表
+              loadBatches();
+            }
           } else {
             showToast(data.message || '中止失败', true);
           }
@@ -1891,6 +1925,7 @@
 
     let fetchCurrentEnv = "云环境";
     let fetchCurrentTemplates = [];
+
 
     function loadFetchTemplates(env, selectedTemplateId, lastPreference) {
       var select = document.getElementById('templateSelect');

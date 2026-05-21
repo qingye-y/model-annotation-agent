@@ -82,10 +82,13 @@ def api_sql_config_list():
     """
     env = request.args.get('env', '')
     modelb_enabled = request.args.get('modelb_enabled', '')
+    category = request.args.get('category', '')
     
     query = SqlTemplate.query
     if env:
         query = query.filter(SqlTemplate.env == env)
+    if category:
+        query = query.filter(SqlTemplate.category == category)
     if modelb_enabled != '':
         query = query.filter(SqlTemplate.modelb_enabled == (modelb_enabled == 'true'))
     
@@ -101,6 +104,7 @@ def api_sql_config_list():
             'api_url': c.api_url,
             'sql_template': c.sql_text,
             'params_json': c.params_json,
+            'category': c.category or 'detail',
             'modelb_enabled': c.modelb_enabled or False,
             'modelb_prompt': c.modelb_prompt or '',
             'created_at': c.created_at.strftime('%Y-%m-%d %H:%M:%S') if c.created_at else '',
@@ -126,6 +130,7 @@ def api_sql_config_detail(id):
         'api_url': config.api_url,
         'sql_text': config.sql_text,
         'params_json': config.params_json,
+        'category': config.category or 'detail',
         'modelb_enabled': config.modelb_enabled or False,
         'modelb_prompt': config.modelb_prompt or '',
         'created_at': config.created_at.strftime('%Y-%m-%d %H:%M:%S') if config.created_at else '',
@@ -144,6 +149,7 @@ def api_sql_config_create():
     api_url = data.get('api_url', '')
     sql_text = data.get('sql_template', '')
     params_json = data.get('params_json', '[]')
+    category = data.get('category', 'detail')
     modelb_enabled = data.get('modelb_enabled', False)
     modelb_prompt = data.get('modelb_prompt', '')
     
@@ -165,6 +171,7 @@ def api_sql_config_create():
         api_url=api_url,
         sql_text=sql_text,
         params_json=params_json,
+        category=category,
         modelb_enabled=modelb_enabled,
         modelb_prompt=modelb_prompt
     )
@@ -207,6 +214,8 @@ def api_sql_config_update(id):
         config.modelb_enabled = data['modelb_enabled']
     if 'modelb_prompt' in data:
         config.modelb_prompt = data['modelb_prompt']
+    if 'category' in data:
+        config.category = data['category']
     
     config.updated_at = datetime.utcnow()
     db.session.commit()
@@ -549,90 +558,8 @@ def api_config_put(key):
 
 # ====== 模型B 配置接口 ======
 
-@sql_config_bp.route('/api/config/modelb', methods=['GET'])
-@login_required
-def api_config_modelb_get():
-    """获取模型B完整配置"""
-    keys = ['MODELB_API_URL', 'MODELB_API_KEY', 'MODELB_MODEL_NAME', 'MODELB_SUPPLIER']
-    result = {
-        'is_configured': False,
-        'api_url': '',
-        'model_name': '',
-        'supplier': ''
-    }
-
-    for key in keys:
-        config = SqlConfig.query.filter_by(key=key).first()
-        if config and config.value:
-            result['is_configured'] = True
-            if key == 'MODELB_API_URL':
-                result['api_url'] = config.value
-            elif key == 'MODELB_MODEL_NAME':
-                result['model_name'] = config.value
-            elif key == 'MODELB_SUPPLIER':
-                result['supplier'] = config.value
-
-    return jsonify(result)
-
-
-@sql_config_bp.route('/api/config/modelb', methods=['POST'])
-@login_required
-def api_config_modelb_save():
-    """保存模型B配置"""
-    data = request.get_json()
-    if not data:
-        return jsonify({'success': False, 'message': '无效请求'})
-
-    save_keys = {
-        'MODELB_API_URL': data.get('api_url', ''),
-        'MODELB_MODEL_NAME': data.get('model_name', ''),
-        'MODELB_SUPPLIER': data.get('supplier', ''),
-        'MODELB_API_KEY': data.get('api_key', '')
-    }
-
-    for key, value in save_keys.items():
-        if value is None:
-            value = ''
-        config = SqlConfig.query.filter_by(key=key).first()
-        if config:
-            config.value = value
-            config.updated_at = datetime.utcnow()
-        else:
-            config = Config(key=key, value=value)
-            db.session.add(config)
-
-    db.session.commit()
-
-    return jsonify({
-        'success': True,
-        'message': '配置已保存',
-        'is_configured': bool(save_keys.get('MODELB_API_KEY')),
-        'supplier': save_keys.get('MODELB_SUPPLIER'),
-        'model_name': save_keys.get('MODELB_MODEL_NAME')
-    })
-
-
-@sql_config_bp.route('/api/config/modelb-test', methods=['POST'])
-@login_required
-def api_config_modelb_test():
-    """测试模型B连接"""
-    data = request.get_json()
-    if not data:
-        return jsonify({'success': False, 'message': '无效请求'})
-
-    api_url = data.get('api_url', '')
-    api_key = data.get('api_key', '')
-    model_name = data.get('model_name', '')
-
-    if not api_url or not api_key or not model_name:
-        return jsonify({'success': False, 'message': '请填写完整的 API 配置'})
-
-    # 简单测试：直接返回成功
-    # 实际项目中这里可以调用 API 的 /models 接口来验证连接
-    return jsonify({
-        'success': True,
-        'message': '连接测试成功（此为模拟测试，请确保 API 配置正确）'
-    })
+# ====== 模型B配置（已迁移到 model_review.py） ======
+# 以下路由由 model_review_bp 统一处理，避免重复路由冲突
 
 
 # ========== 实例规则关联配置 ==========
@@ -773,3 +700,152 @@ def api_save_user_preference(key):
     db.session.commit()
 
     return jsonify({'success': True, 'message': '偏好已保存'})
+
+
+# ========== 取数管道配置 API ==========
+
+@sql_config_bp.route('/api/fetch-pipeline', methods=['GET'])
+@login_required
+def api_fetch_pipeline_list():
+    """获取取数管道配置（按环境分组）
+
+    返回格式：
+    {
+        "pipelines": {
+            "云环境": [
+                { "id": 1, "step_name": "COUNT总数", "sort_order": 1, "enabled": true,
+                  "sql_template_id": 10, "category": "count", "sql_name": "取数-COUNT总数统计" },
+                ...
+            ],
+            "乐采云环境": [...]
+        }
+    }
+    """
+    from models import FetchPipeline
+
+    pipelines = FetchPipeline.query.order_by(
+        FetchPipeline.env, FetchPipeline.sort_order
+    ).all()
+
+    result = {}
+    for p in pipelines:
+        env_label = p.env
+        if env_label not in result:
+            result[env_label] = []
+        tpl = p.sql_template
+        result[env_label].append({
+            'id': p.id,
+            'step_name': p.step_name,
+            'sort_order': p.sort_order,
+            'enabled': p.enabled,
+            'sql_template_id': p.sql_template_id,
+            'category': tpl.category if tpl else None,
+            'sql_name': tpl.name if tpl else None,
+        })
+
+    return jsonify({'pipelines': result})
+
+
+@sql_config_bp.route('/api/fetch-pipeline', methods=['POST'])
+@login_required
+def api_fetch_pipeline_create():
+    """新增管道步骤
+
+    请求体：{ "env": "云环境", "sql_template_id": 10, "step_name": "自定义步骤", "sort_order": 6 }
+    """
+    from models import FetchPipeline
+
+    data = request.get_json() or {}
+    env = data.get('env', '')
+    sql_template_id = data.get('sql_template_id')
+    step_name = data.get('step_name', '')
+    sort_order = data.get('sort_order')
+
+    if not env or not sql_template_id:
+        return jsonify({'success': False, 'message': '环境 和 SQL模板 不能为空'}), 400
+
+    # 自动设置为最大 sort_order + 1（如果未指定）
+    if sort_order is None:
+        max_order = db.session.query(db.func.max(FetchPipeline.sort_order))\
+            .filter_by(env=env).scalar() or 0
+        sort_order = max_order + 1
+
+    pipe = FetchPipeline(
+        env=env,
+        sql_template_id=int(sql_template_id),
+        step_name=step_name,
+        sort_order=int(sort_order),
+        enabled=True
+    )
+    db.session.add(pipe)
+    db.session.commit()
+
+    return jsonify({'success': True, 'id': pipe.id, 'message': '管道步骤已创建'})
+
+
+@sql_config_bp.route('/api/fetch-pipeline/<int:pipeline_id>', methods=['PUT'])
+@login_required
+def api_fetch_pipeline_update(pipeline_id):
+    """更新单个管道步骤（顺序/启用状态/名称）
+
+    请求体：{ "sort_order": 1, "enabled": true, "step_name": "COUNT总数" }
+    """
+    from models import FetchPipeline
+
+    data = request.get_json() or {}
+    pipeline = FetchPipeline.query.get(pipeline_id)
+    if not pipeline:
+        return jsonify({'success': False, 'message': '管道步骤不存在'}), 404
+
+    if 'sort_order' in data:
+        pipeline.sort_order = int(data['sort_order'])
+    if 'enabled' in data:
+        pipeline.enabled = bool(data['enabled'])
+    if 'step_name' in data:
+        pipeline.step_name = data['step_name']
+
+    pipeline.updated_at = datetime.utcnow()
+    db.session.commit()
+
+    return jsonify({'success': True, 'message': '管道步骤已更新'})
+
+
+@sql_config_bp.route('/api/fetch-pipeline/batch', methods=['PUT'])
+@login_required
+def api_fetch_pipeline_batch_update():
+    """批量更新管道配置
+
+    请求体：{
+        "updates": [
+            { "id": 1, "sort_order": 1, "enabled": true },
+            { "id": 2, "sort_order": 2, "enabled": false }
+        ]
+    }
+    """
+    from models import FetchPipeline
+
+    data = request.get_json() or {}
+    updates = data.get('updates', [])
+    if not updates:
+        return jsonify({'success': False, 'message': 'updates 列表不能为空'}), 400
+
+    updated_count = 0
+    for item in updates:
+        pipeline_id = item.get('id')
+        if not pipeline_id:
+            continue
+        pipeline = FetchPipeline.query.get(pipeline_id)
+        if not pipeline:
+            continue
+        if 'sort_order' in item:
+            pipeline.sort_order = int(item['sort_order'])
+        if 'enabled' in item:
+            pipeline.enabled = bool(item['enabled'])
+        if 'step_name' in item:
+            pipeline.step_name = item['step_name']
+        pipeline.updated_at = datetime.utcnow()
+        updated_count += 1
+
+    db.session.commit()
+
+    return jsonify({'success': True, 'message': f'已更新 {updated_count} 条管道配置'})

@@ -34,6 +34,13 @@ def get_modelb_config():
     else:
         config['model_name'] = 'gpt-4'
     
+    # 获取并发数量（默认1，串行）
+    concurrency = SqlConfig.query.filter_by(key='MODELB_CONCURRENCY').first()
+    try:
+        config['concurrency'] = int(concurrency.value) if concurrency and concurrency.value else 1
+    except (ValueError, TypeError):
+        config['concurrency'] = 1
+    
     return config
 
 
@@ -64,6 +71,19 @@ AI原审核结果：{ai_result}
 
 请返回严格的JSON格式：{{"result": "合规/违规", "reason": "简短的拒绝原因（不超过20字）", "detail": "详细的审核说明"}}。如果审核通过，reason和detail可省略。不要输出任何其他评论性文字。"""
 
+    # 统计传入的图片数量
+    image_count = 0
+    for field in ['main_image', 'detail_image', 'sku_image']:
+        val = product_data.get(field, '')
+        if val:
+            image_count += len([u for u in val.split(',') if u.strip() and u.strip().startswith('http')])
+
+    if image_count > 0:
+        main_count = len([u for u in product_data.get('main_image','').split(',') if u.strip() and u.strip().startswith('http')]) if product_data.get('main_image') else 0
+        detail_count = len([u for u in product_data.get('detail_image','').split(',') if u.strip() and u.strip().startswith('http')]) if product_data.get('detail_image') else 0
+        sku_count = len([u for u in product_data.get('sku_image','').split(',') if u.strip() and u.strip().startswith('http')]) if product_data.get('sku_image') else 0
+        prompt += f"\n\n⚠️ 请结合以上{image_count}张商品图片（主图{main_count}张 + 详情图{detail_count}张 + SKU图{sku_count}张）进行审核判断。注意图片中的商品信息、文字、水印、广告等细节。"
+
     return prompt
 
 
@@ -89,16 +109,42 @@ def call_modelb(product_data, prompt_template, api_config):
         # Mock 模式
         return mock_modelb_result(product_data)
     
-    # 构建 API 请求
+    # 收集所有图片 URL（主图 + 详情图 + SKU图，spu图不传）
+    images = []
+    for field in ['main_image', 'detail_image', 'sku_image']:
+        val = product_data.get(field, '')
+        if not val:
+            continue
+        for u in val.split(','):
+            u = u.strip()
+            if u and u.startswith('http'):
+                images.append(u)
+
+    # 构建 API 请求 — 图文混合 content
+    if images:
+        # 带图模式：content 为数组，含 text + image_url
+        content = [{"type": "text", "text": prompt}]
+        for img_url in images:
+            content.append({
+                "type": "image_url",
+                "image_url": {"url": img_url}
+            })
+        system_content = "你是一个商品审核专家，负责判断商品是否合规。请结合所有图片仔细检查商品的主图、详情图、SKU图。只需返回JSON，不要输出其他内容。"
+    else:
+        # 无图模式：content 为纯文本
+        content = prompt
+        system_content = "你是一个商品审核专家，负责判断商品是否合规。只需返回JSON，不要输出其他内容。"
+
     messages = [
-        {"role": "system", "content": "你是一个商品审核专家，负责判断商品是否合规。只需返回JSON，不要输出其他内容。"},
-        {"role": "user", "content": prompt}
+        {"role": "system", "content": system_content},
+        {"role": "user", "content": content}
     ]
-    
+
     payload = {
         "model": api_config.get('model_name', 'gpt-4'),
         "messages": messages,
-        "temperature": 0.1
+        "temperature": 0.1,
+        "max_tokens": 500
     }
     
     headers = {
@@ -112,7 +158,7 @@ def call_modelb(product_data, prompt_template, api_config):
             api_config['api_url'],
             json=payload,
             headers=headers,
-            timeout=60
+            timeout=120  # 带图时需更长超时
         )
         resp.raise_for_status()
 
@@ -125,8 +171,19 @@ def call_modelb(product_data, prompt_template, api_config):
             # 尝试解析 JSON 格式的返回
             import json as json_mod
             import re
-            # 匹配 JSON 格式 {...}
-            json_match = re.search(r'\{[^{}]*\}', content, re.DOTALL)
+            # 1. 先剥离 <think>...</think> 和 ```json...``` 等包裹
+            clean_content = content
+            # 去掉 <think>...</think> 块
+            clean_content = re.sub(r'<think>.*?</think>', '', clean_content, flags=re.DOTALL)
+            # 去掉 ```json ... ``` 包裹
+            clean_content = re.sub(r'```(?:json)?\s*', '', clean_content)
+            clean_content = re.sub(r'```', '', clean_content)
+            clean_content = clean_content.strip()
+            # 2. 匹配 JSON：找第一个 {...} 且有 result 字段
+            json_match = re.search(r'\{[^{}]*"result"\s*:\s*"[^"]*"[^{}]*\}', clean_content, re.DOTALL)
+            if not json_match:
+                # 回退：找大括号块（支持换行内的简短JSON）
+                json_match = re.search(r'\{[^{}]+"result"[^{}]+\}', clean_content, re.DOTALL)
             if json_match:
                 try:
                     json_data = json_mod.loads(json_match.group())
@@ -167,7 +224,7 @@ def call_modelb(product_data, prompt_template, api_config):
                 api_config['api_url'], 
                 json=payload, 
                 headers=headers, 
-                timeout=60
+                timeout=120
             )
             resp.raise_for_status()
             result = resp.json()
@@ -351,12 +408,13 @@ def convert_rule_to_prompt(rule_content, instance_code):
 
 
 def run_modelb_review(batch_id):
-    """异步执行模型B互检
+    """异步执行模型B互检（支持并发）
     
     对指定批次的所有 RawData 记录调用模型B
+    并发数从 SqlConfig MODELB_CONCURRENCY 读取，默认 1（串行）
     """
-    # 需要在线程中创建应用上下文
     from app import app
+    from concurrent.futures import ThreadPoolExecutor, as_completed
     
     with app.app_context():
         print(f"[ModelB] 开始互检批次 {batch_id}")
@@ -367,8 +425,10 @@ def run_modelb_review(batch_id):
             print(f"[ModelB] 批次 {batch_id} 不存在")
             return
         
-        # 获取模型B配置
+        # 获取模型B配置（含并发数）
         api_config = get_modelb_config()
+        concurrency = api_config.get('concurrency', 1)
+        print(f"[ModelB] 并发数: {concurrency}")
         
         # 获取该批次下所有未互检的记录
         pending_records = RawData.query.filter_by(
@@ -377,7 +437,6 @@ def run_modelb_review(batch_id):
         ).all()
         
         total = len(pending_records)
-        inconsistent_count = 0
         
         if total == 0:
             print(f"[ModelB] 批次 {batch_id} 无需互检的数据")
@@ -393,74 +452,157 @@ def run_modelb_review(batch_id):
         instance_code = fetch_log.instances.split(',')[0] if fetch_log.instances else ''
         prompt_template = get_prompt_template(batch_id, instance_code)
         
-        # 逐条处理
-        for i, record in enumerate(pending_records):
-            # 每次处理前检查中止标志（重新查询确保拿到最新值）
-            fetch_log = FetchLog.query.filter_by(batch_id=batch_id).first()
-            if fetch_log and fetch_log.abort_flag:
-                print(f"[ModelB] 批次 {batch_id} 收到中止信号，在第 {i+1}/{total} 条停止")
-                fetch_log.review_status = 'aborted'
-                fetch_log.abort_flag = False  # 清除标志
-                db.session.commit()
-                return
-
-            try:
-                # 构建商品数据
-                product_data = {
-                    'product_name': record.product_name or '',
-                    'category': record.category or '',
-                    'shop_name': record.shop_name or '',
-                    'main_image': record.main_image or '',
-                    'ai_result': record.ai_result or '合规',
-                    'ai_reject_reason': record.ai_reject_reason or '',
-                    'ai_explain': record.ai_explain or '',
-                    'instance_code': record.instance_code or ''
-                }
-                
-                # 调用模型B
-                result = call_modelb(product_data, prompt_template, api_config)
-                
-                if 'error' in result:
-                    # 调用失败，使用默认结果
-                    record.modelb_result = record.ai_result
-                    record.modelb_reason = result.get('error', '调用失败')
-                    record.modelb_consistent = True
-                else:
-                    # 设置结果
-                    record.modelb_result = result.get('result', record.ai_result)
-                    record.modelb_reason = result.get('reason', '')[:200]  # 简短原因，最多200字
-                    record.modelb_detail = result.get('detail', '')[:2000]  # 详细说明，最多2000字
-                    
-                    # 判断是否一致
-                    record.modelb_consistent = (record.modelb_result == record.ai_result)
-                    
-                    if not record.modelb_consistent:
-                        inconsistent_count += 1
-                
-                record.modelb_reviewed = True
-                db.session.commit()
-                
-                # 每处理10条打印进度
-                if (i + 1) % 10 == 0:
-                    print(f"[ModelB] 批次 {batch_id} 进度: {i+1}/{total}")
+        # 将记录转为 dict 列表（脱离 session），供工作线程使用
+        record_dicts = []
+        for rec in pending_records:
+            record_dicts.append({
+                'id': rec.id,
+                'product_name': rec.product_name or '',
+                'category': rec.category or '',
+                'shop_name': rec.shop_name or '',
+                'main_image': rec.main_image or '',
+                'detail_image': rec.detail_image or '',
+                'sku_image': rec.sku_image or '',
+                'ai_result': rec.ai_result or '合规',
+                'ai_reject_reason': rec.ai_reject_reason or '',
+                'ai_explain': rec.ai_explain or '',
+                'instance_code': rec.instance_code or ''
+            })
+        
+        # 工作函数：单条记录处理
+        def _review_single(rec_dict, batch_id, prompt_template, api_config):
+            """处理单条记录（在独立线程中执行，拥有独立 DB session）"""
+            from app import app as flask_app
+            from models import db as worker_db, RawData as WorkerRawData
             
-            except Exception as e:
-                print(f"[ModelB] 处理记录 {record.id} 失败: {e}")
-                record.modelb_result = record.ai_result
-                record.modelb_reason = f"处理异常: {str(e)}"
-                record.modelb_consistent = True
-                record.modelb_reviewed = True
-                db.session.commit()
+            with flask_app.app_context():
+                rec_id = rec_dict['id']
+                try:
+                    product_data = {
+                        'product_name': rec_dict['product_name'],
+                        'category': rec_dict['category'],
+                        'shop_name': rec_dict['shop_name'],
+                        'main_image': rec_dict['main_image'],
+                        'detail_image': rec_dict.get('detail_image', ''),
+                        'sku_image': rec_dict.get('sku_image', ''),
+                        'ai_result': rec_dict['ai_result'],
+                        'ai_reject_reason': rec_dict['ai_reject_reason'],
+                        'ai_explain': rec_dict['ai_explain'],
+                        'instance_code': rec_dict['instance_code']
+                    }
+                    
+                    # 调用模型B
+                    result = call_modelb(product_data, prompt_template, api_config)
+                    
+                    # 写入数据库（独立 session）
+                    record = WorkerRawData.query.get(rec_id)
+                    if record and not record.modelb_reviewed:
+                        if 'error' in result:
+                            record.modelb_result = record.ai_result
+                            record.modelb_reason = result.get('error', '调用失败')
+                            record.modelb_consistent = True
+                        else:
+                            record.modelb_result = result.get('result', record.ai_result)
+                            record.modelb_reason = result.get('reason', '')[:200]
+                            record.modelb_detail = result.get('detail', '')[:2000]
+                            record.modelb_consistent = (record.modelb_result == record.ai_result)
+                        
+                        record.modelb_reviewed = True
+                        worker_db.session.commit()
+                        
+                        return {
+                            'id': rec_id,
+                            'consistent': record.modelb_consistent
+                        }
+                    return None
+                
+                except Exception as e:
+                    print(f"[ModelB] 线程处理记录 {rec_id} 失败: {e}")
+                    try:
+                        with flask_app.app_context():
+                            record = WorkerRawData.query.get(rec_id)
+                            if record and not record.modelb_reviewed:
+                                record.modelb_result = record.ai_result
+                                record.modelb_reason = f"处理异常: {str(e)}"
+                                record.modelb_consistent = True
+                                record.modelb_reviewed = True
+                                worker_db.session.commit()
+                    except:
+                        pass
+                    return None
+        
+        # 并发执行（concurrency=1 时实际退化为串行）
+        inconsistent_count = 0
+        completed = 0
+        
+        if concurrency <= 1:
+            # 串行模式（原逻辑）
+            for i, rec_dict in enumerate(record_dicts):
+                # 检查中止信号：先 expire 确保从 DB 读到最新值
+                db.session.expire_all()
+                fetch_log_check = FetchLog.query.filter_by(batch_id=batch_id).first()
+                if fetch_log_check and fetch_log_check.abort_flag:
+                    print(f"[ModelB] 批次 {batch_id} 收到中止信号，在第 {i+1}/{total} 条停止")
+                    fetch_log_check.review_status = 'aborted'
+                    fetch_log_check.abort_flag = False
+                    db.session.commit()
+                    return
+                
+                result = _review_single(rec_dict, batch_id, prompt_template, api_config)
+                if result:
+                    completed += 1
+                    if not result.get('consistent', True):
+                        inconsistent_count += 1
+                    if completed % 10 == 0:
+                        print(f"[ModelB] 批次 {batch_id} 进度: {completed}/{total}")
+        else:
+            # 并发模式
+            with ThreadPoolExecutor(max_workers=concurrency) as executor:
+                future_map = {}
+                for rec_dict in record_dicts:
+                    future = executor.submit(_review_single, rec_dict, batch_id, prompt_template, api_config)
+                    future_map[future] = rec_dict['id']
+                
+                for future in as_completed(future_map):
+                    # 每条完成后检查中止信号
+                    db.session.expire_all()
+                    fetch_log_check = FetchLog.query.filter_by(batch_id=batch_id).first()
+                    if fetch_log_check and fetch_log_check.abort_flag:
+                        print(f"[ModelB] 批次 {batch_id} 收到中止信号，取消剩余 {len(record_dicts) - completed} 条")
+                        fetch_log_check.review_status = 'aborted'
+                        fetch_log_check.abort_flag = False
+                        db.session.commit()
+                        # 取消未完成的任务
+                        for f in future_map:
+                            if not f.done():
+                                f.cancel()
+                        return
+                    
+                    result = future.result()
+                    if result:
+                        completed += 1
+                        if not result.get('consistent', True):
+                            inconsistent_count += 1
+                        if completed % 10 == 0:
+                            print(f"[ModelB] 批次 {batch_id} 进度: {completed}/{total}")
         
         # 更新批次统计
-        fetch_log.inconsistent_count = inconsistent_count
-        fetch_log.review_status = 'completed'
-        db.session.commit()
-
+        fetch_log_final = FetchLog.query.filter_by(batch_id=batch_id).first()
+        if fetch_log_final:
+            # 重新精确统计不一致数
+            actual_inconsistent = RawData.query.filter_by(
+                fetch_batch_id=batch_id,
+                modelb_reviewed=True,
+                modelb_consistent=False
+            ).count()
+            fetch_log_final.inconsistent_count = actual_inconsistent or inconsistent_count
+            fetch_log_final.review_status = 'completed'
+            db.session.commit()
+        
         # 写入 DailyStats 的不一致数据
-        update_daily_stats_inconsistency(fetch_log)
-
-        print(f"[ModelB] 批次 {batch_id} 互检完成，共 {inconsistent_count} 条不一致")
+        update_daily_stats_inconsistency(fetch_log_final or fetch_log)
+        
+        print(f"[ModelB] 批次 {batch_id} 互检完成，共 {actual_inconsistent if 'actual_inconsistent' in dir() else inconsistent_count} 条不一致")
 
 
 # ========== API 接口 ==========
@@ -518,6 +660,8 @@ def api_abort_review(batch_id):
 
     将 abort_flag 设为 True，run_modelb_review 线程在下一条处理前检测到标志后停止
     """
+    # expire 缓存确保读到 DB 最新值
+    db.session.expire_all()
     fetch_log = FetchLog.query.filter_by(batch_id=batch_id).first()
     if not fetch_log:
         return jsonify({"success": False, "message": "批次不存在"}), 404
@@ -542,11 +686,13 @@ def api_review_status(batch_id):
         "total": N,
         "reviewed": M,
         "inconsistent": K,
-        "status": "running/completed",
+        "status": "running/completed/aborted",
         "model_name": "MiniMax-M2.7",
         "prompt_info": "通用默认"
     }
     """
+    # expire_all 确保读到 DB 最新值（worker 线程已更新的 review_status）
+    db.session.expire_all()
     fetch_log = FetchLog.query.filter_by(batch_id=batch_id).first()
     if not fetch_log:
         return jsonify({
@@ -709,11 +855,16 @@ def api_modelb_get():
     api_key_cfg = SqlConfig.query.filter_by(key='MODELB_API_KEY').first()
     model_name_cfg = SqlConfig.query.filter_by(key='MODELB_MODEL_NAME').first()
     supplier_cfg = SqlConfig.query.filter_by(key='MODELB_SUPPLIER').first()
+    concurrency_cfg = SqlConfig.query.filter_by(key='MODELB_CONCURRENCY').first()
     
     api_url = api_url_cfg.value if api_url_cfg else ''
     api_key = api_key_cfg.value if api_key_cfg else ''
     model_name = model_name_cfg.value if model_name_cfg else ''
     supplier = supplier_cfg.value if supplier_cfg else ''
+    try:
+        concurrency = int(concurrency_cfg.value) if concurrency_cfg and concurrency_cfg.value else 1
+    except (ValueError, TypeError):
+        concurrency = 1
     
     # 判断是否已经配置（以 api_key 是否有值为准）
     is_configured = bool(api_key)
@@ -731,6 +882,7 @@ def api_modelb_get():
         "api_key": "***",
         "model_name": model_name,
         "supplier": supplier,
+        "concurrency": concurrency,
         "is_configured": is_configured,
         "masked_key": masked_key
     })
@@ -753,6 +905,7 @@ def api_modelb_set():
     api_key = data.get('api_key', '').strip()
     model_name = data.get('model_name', '').strip()
     supplier = data.get('supplier', '').strip()
+    concurrency = data.get('concurrency')
     
     if not api_url:
         return jsonify({"success": False, "message": "API 地址不能为空"}), 400
@@ -779,6 +932,18 @@ def api_modelb_set():
         cfg_supplier.value = supplier
     else:
         db.session.add(SqlConfig(key='MODELB_SUPPLIER', value=supplier))
+    
+    # 保存并发数量
+    if concurrency is not None:
+        try:
+            concurrency_val = str(int(concurrency))
+        except (ValueError, TypeError):
+            concurrency_val = '1'
+        cfg_concurrency = SqlConfig.query.filter_by(key='MODELB_CONCURRENCY').first()
+        if cfg_concurrency:
+            cfg_concurrency.value = concurrency_val
+        else:
+            db.session.add(SqlConfig(key='MODELB_CONCURRENCY', value=concurrency_val))
     
     # 保存 API Key（仅当传入值非空时）
     cfg_key = SqlConfig.query.filter_by(key='MODELB_API_KEY').first()
@@ -812,5 +977,6 @@ def api_modelb_set():
         "is_configured": is_configured,
         "masked_key": masked_key,
         "supplier": supplier,
-        "model_name": model_name
+        "model_name": model_name,
+        "concurrency": concurrency if concurrency is not None else 1
     })

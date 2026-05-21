@@ -30,7 +30,6 @@ from blueprints.sql_config import sql_config_bp
 from blueprints.model_review import model_review_bp
 from blueprints.prompt_rules import prompt_rules_bp, init_default_rules
 from blueprints.analysis import analysis_bp
-
 app.register_blueprint(auth_bp)
 app.register_blueprint(data_fetch_bp)
 app.register_blueprint(dashboard_bp)
@@ -192,6 +191,13 @@ with app.app_context():
         except:
             pass
 
+        # 检查并添加 sql_template 的 category 列
+        try:
+            db.session.execute(text("ALTER TABLE sql_template ADD COLUMN category VARCHAR(50) DEFAULT 'detail'"))
+            print("已添加列 category")
+        except:
+            pass
+
         db.session.commit()
     except Exception as e:
         print(f"数据库迁移检查完成: {e}")
@@ -209,6 +215,196 @@ with app.app_context():
 
     # 初始化默认提示词规则文件
     init_default_rules()
+
+    # ========== 初始化取数管道SQL模板（S2-S6）==========
+    from models import SqlTemplate, FetchPipeline
+
+    PIPELINE_SQLS = {
+        'count': {
+            'name': '取数-COUNT总数统计',
+            'category': 'count',
+            'sql_text': """SELECT `AI审核结果`, COUNT(DISTINCT `审核id`) as cnt
+FROM ({detail_sql}) t
+WHERE 1=1
+GROUP BY `AI审核结果`"""
+        },
+        'daily': {
+            'name': '取数-每日分组COUNT',
+            'category': 'daily',
+            'sql_text': """SELECT `创建日期`, `AI审核结果`, COUNT(DISTINCT `审核id`) as cnt
+FROM ({detail_sql}) t
+GROUP BY `创建日期`, `AI审核结果`
+ORDER BY `创建日期`"""
+        },
+        'sample_compliant': {
+            'name': '取数-合规数据翻页抽样',
+            'category': 'sample',
+            'sql_text': """SELECT * FROM (
+  SELECT t.*, ROW_NUMBER() OVER (ORDER BY MD5(t.`审核id`)) as rn
+  FROM ({detail_sql}) t
+  WHERE t.`AI审核结果` = '合规'
+) tmp
+WHERE tmp.rn IN ({positions})"""
+        },
+        'sample_non_compliant': {
+            'name': '取数-违规数据翻页抽样',
+            'category': 'sample',
+            'sql_text': """SELECT * FROM (
+  SELECT t.*, ROW_NUMBER() OVER (ORDER BY MD5(t.`审核id`)) as rn
+  FROM ({detail_sql}) t
+  WHERE t.`AI审核结果` = '违规'
+) tmp
+WHERE tmp.rn IN ({positions})"""
+        },
+        'reason': {
+            'name': '取数-违规原因分布聚合',
+            'category': 'reason',
+            'sql_text': """SELECT `创建日期`, violation_tag, SUM(cnt) as cnt
+FROM (
+  SELECT `审核id`, `创建日期`,
+    CASE
+    WHEN t.`AI拒绝原因` LIKE '%国旗%' OR t.`AI拒绝原因` LIKE '%党徽%' OR t.`AI拒绝原因` LIKE '%国徽%'
+      OR t.`AI拒绝原因` LIKE '%党旗%' OR t.`AI拒绝原因` LIKE '%资质%'
+      OR t.`AI拒绝原因` LIKE '%需提供%' OR t.`AI拒绝原因` LIKE '%批准%'
+      OR t.`AI拒绝原因` LIKE '%文件%' THEN '特殊资质缺失'
+    WHEN t.`AI拒绝原因` LIKE '%水印%' OR t.`AI拒绝原因` LIKE '%商贸%'
+      OR t.`AI拒绝原因` LIKE '%商城%' OR t.`AI拒绝原因` LIKE '%贸易%'
+      OR t.`AI拒绝原因` LIKE '%科技%' OR t.`AI拒绝原因` LIKE '%智汇选%' THEN '水印'
+    WHEN t.`AI拒绝原因` LIKE '%马赛克%' THEN '马赛克'
+    WHEN t.`AI拒绝原因` LIKE '%盗图%' THEN '盗图'
+    WHEN t.`AI拒绝原因` LIKE '%类目错放%' OR t.`AI拒绝原因` LIKE '%类目%'
+      OR t.`AI拒绝原因` LIKE '%末级%' OR t.`AI拒绝原因` LIKE '%匹配%' THEN '类目错放'
+    WHEN t.`AI拒绝原因` LIKE '%图文%' OR t.`AI拒绝原因` LIKE '%不一致%'
+      OR t.`AI拒绝原因` LIKE '%不符%' OR t.`AI拒绝原因` LIKE '%一致%'
+      OR t.`AI拒绝原因` LIKE '%实际%' THEN '图文不一致'
+    WHEN t.`AI拒绝原因` LIKE '%销售属性%' OR t.`AI拒绝原因` LIKE '%属性%'
+      OR t.`AI拒绝原因` LIKE '%销售%' OR t.`AI拒绝原因` LIKE '%数量%'
+      OR t.`AI拒绝原因` LIKE '%颜色%' THEN '销售属性错误'
+    WHEN t.`AI拒绝原因` LIKE '%张图%' OR t.`AI拒绝原因` LIKE '%sku%'
+      OR t.`AI拒绝原因` LIKE '%配件%' THEN 'SKU图不一致'
+    WHEN t.`AI拒绝原因` LIKE '%参数%' OR t.`AI拒绝原因` LIKE '%规格%'
+      OR t.`AI拒绝原因` LIKE '%型号%' OR t.`AI拒绝原因` LIKE '%尺寸%' THEN '关键属性不一致'
+    WHEN t.`AI拒绝原因` LIKE '%引流%' OR t.`AI拒绝原因` LIKE '%京东%'
+      OR t.`AI拒绝原因` LIKE '%旗舰店%' OR t.`AI拒绝原因` LIKE '%淘宝%'
+      OR t.`AI拒绝原因` LIKE '%天猫%' OR t.`AI拒绝原因` LIKE '%联系方式%'
+      OR t.`AI拒绝原因` LIKE '%微信号%' OR t.`AI拒绝原因` LIKE '%电话%'
+      OR t.`AI拒绝原因` LIKE '%抖音%' OR t.`AI拒绝原因` LIKE '%二维码%'
+      OR t.`AI拒绝原因` LIKE '%优惠%' OR t.`AI拒绝原因` LIKE '%客服%'
+      OR t.`AI拒绝原因` LIKE '%积分%' OR t.`AI拒绝原因` LIKE '%促销%'
+      OR t.`AI拒绝原因` LIKE '%供应链%' THEN '站外引流'
+    WHEN t.`AI拒绝原因` LIKE '%无关%' THEN '无关信息'
+    WHEN t.`AI拒绝原因` LIKE '%多主体%' OR t.`AI拒绝原因` LIKE '%主体%'
+      OR t.`AI拒绝原因` LIKE '%多个%' OR t.`AI拒绝原因` LIKE '%未以%'
+      OR t.`AI拒绝原因` LIKE '%为主%' OR t.`AI拒绝原因` LIKE '%不明%' THEN '多主体'
+    WHEN t.`AI拒绝原因` LIKE '%清单%' OR t.`AI拒绝原因` LIKE '%表格%' THEN '商品清单'
+    WHEN t.`AI拒绝原因` LIKE '%堆砌%' OR t.`AI拒绝原因` LIKE '%混放%' THEN '品类词堆砌'
+    WHEN t.`AI拒绝原因` LIKE '%禁售%' OR t.`AI拒绝原因` LIKE '%限制%'
+      OR t.`AI拒绝原因` LIKE '%当前%' OR t.`AI拒绝原因` LIKE '%网超%'
+      OR t.`AI拒绝原因` LIKE '%消防%' OR t.`AI拒绝原因` LIKE '%雨衣%'
+      OR t.`AI拒绝原因` LIKE '%乐器%' OR t.`AI拒绝原因` LIKE '%证书%'
+      OR t.`AI拒绝原因` LIKE '%定制%' OR t.`AI拒绝原因` LIKE '%垃圾桶%' THEN '禁售商品'
+    WHEN t.`AI拒绝原因` LIKE '%词语%' OR t.`AI拒绝原因` LIKE '%违禁词%'
+      OR t.`AI拒绝原因` LIKE '%生僻字%' OR t.`AI拒绝原因` LIKE '%繁体字%'
+      OR t.`AI拒绝原因` LIKE '%字符%' OR t.`AI拒绝原因` LIKE '%乱码%'
+      OR t.`AI拒绝原因` LIKE '%数字串%' OR t.`AI拒绝原因` LIKE '%字符串%'
+      OR t.`AI拒绝原因` LIKE '%特殊符号%' OR t.`AI拒绝原因` LIKE '%意义%' THEN '标题无关词'
+    WHEN t.`AI拒绝原因` LIKE '%ai生成%' OR t.`AI拒绝原因` LIKE '%疑似虚假%'
+      OR t.`AI拒绝原因` LIKE '%虚假%' THEN 'AI生成'
+    WHEN t.`AI拒绝原因` LIKE '%版权页%' OR t.`AI拒绝原因` LIKE '%书籍%'
+      OR t.`AI拒绝原因` LIKE '%isbn%' OR t.`AI拒绝原因` LIKE '%出版%' THEN '书籍版权页'
+    ELSE '其他'
+  END as violation_tag,
+    COUNT(*) as cnt
+  FROM ({detail_sql}) t
+  WHERE t.`AI审核结果` = '违规'
+  GROUP BY `审核id`, `创建日期`, violation_tag
+) tagged
+GROUP BY `创建日期`, violation_tag
+ORDER BY `创建日期`, cnt DESC"""
+        }
+    }
+
+    # 插入模板（幂等）
+    for key, info in PIPELINE_SQLS.items():
+        existing = SqlTemplate.query.filter_by(name=info['name']).first()
+        if not existing:
+            template = SqlTemplate(
+                name=info['name'],
+                env='云环境',
+                instances='ZJWC,HWCS,HNLCWC,YNLCY,GXLCY',
+                api_url='',
+                sql_text=info['sql_text'],
+                category=info['category']
+            )
+            db.session.add(template)
+            db.session.flush()
+            PIPELINE_SQLS[key]['_id'] = template.id
+            print(f"已创建管道SQL模板: {info['name']} (id={template.id})")
+        else:
+            PIPELINE_SQLS[key]['_id'] = existing.id
+
+    # 插入管道配置（幂等）
+    PIPELINE_STEPS = [
+        {'env': '云环境', 'order': 1, 'key': 'count', 'name': 'COUNT总数'},
+        {'env': '云环境', 'order': 2, 'key': 'daily', 'name': '每日分组COUNT'},
+        {'env': '云环境', 'order': 3, 'key': 'sample_compliant', 'name': '合规抽样'},
+        {'env': '云环境', 'order': 4, 'key': 'sample_non_compliant', 'name': '违规抽样'},
+        {'env': '云环境', 'order': 5, 'key': 'reason', 'name': '违规原因聚合'},
+        {'env': '乐采云环境', 'order': 1, 'key': 'count', 'name': 'COUNT总数'},
+        {'env': '乐采云环境', 'order': 2, 'key': 'daily', 'name': '每日分组COUNT'},
+        {'env': '乐采云环境', 'order': 3, 'key': 'sample_compliant', 'name': '合规抽样'},
+        {'env': '乐采云环境', 'order': 4, 'key': 'sample_non_compliant', 'name': '违规抽样'},
+        {'env': '乐采云环境', 'order': 5, 'key': 'reason', 'name': '违规原因聚合'},
+    ]
+    for step in PIPELINE_STEPS:
+        existing_pipe = FetchPipeline.query.filter_by(
+            env=step['env'], sort_order=step['order']
+        ).first()
+        if not existing_pipe:
+            pipe = FetchPipeline(
+                env=step['env'],
+                sort_order=step['order'],
+                sql_template_id=PIPELINE_SQLS[step['key']]['_id'],
+                step_name=step['name'],
+                enabled=True
+            )
+            db.session.add(pipe)
+            print(f"已创建管道步骤: {step['env']} - {step['name']}")
+
+    db.session.commit()
+    print("取数管道初始化完成")
+
+    # ========== §10 params_json 迁移：补充管道模板的系统注入参数 ==========
+    import json as json_lib
+    pipeline_tpls = SqlTemplate.query.filter(
+        SqlTemplate.category.in_(['count', 'daily', 'sample', 'reason']),
+        (SqlTemplate.params_json == None) | (SqlTemplate.params_json == '') | (SqlTemplate.params_json == '[]')
+    ).all()
+
+    for tpl in pipeline_tpls:
+        # 找到对应的 S1 明细模板（同环境）
+        detail_tpl = SqlTemplate.query.filter(
+            SqlTemplate.category == 'detail',
+            SqlTemplate.env == tpl.env
+        ).first()
+        detail_ref = f"商品审核数据取数-{tpl.env}(id={detail_tpl.id})" if detail_tpl else "S1明细模板"
+
+        params = [
+            {"name": "detail_sql", "required": True, "system_injected": True,
+             "description": f"← 引用模板「{detail_ref}」的展开SQL，系统自动注入"}
+        ]
+
+        if tpl.category == 'sample':
+            params.append(
+                {"name": "positions", "required": True, "system_injected": True,
+                 "description": "← 系统计算的随机抽样行号列表，格式：1,15,23,44,..."}
+            )
+
+        tpl.params_json = json_lib.dumps(params, ensure_ascii=False)
+        print(f"已补充params_json: {tpl.name} (id={tpl.id})")
+
+    db.session.commit()
+    print("管道模板params_json迁移完成")
 
     # 初始化默认实例规则关联配置
     from models import SqlConfig

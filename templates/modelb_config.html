@@ -232,6 +232,21 @@
         <input type="text" class="form-input" id="modelbModelName" placeholder="选择供应商后自动填充，可手动修改" style="max-width: 300px;">
       </div>
 
+      <div class="form-group">
+        <label>互检并发数量</label>
+        <select class="form-select" id="modelbConcurrency" style="max-width: 120px;">
+          <option value="1">1（串行，默认）</option>
+          <option value="2">2</option>
+          <option value="3">3</option>
+          <option value="5">5</option>
+          <option value="8">8</option>
+          <option value="10">10</option>
+          <option value="15">15</option>
+          <option value="20">20</option>
+        </select>
+        <div class="form-hint">同时调用模型B的线程数。设为1为串行逐条检查；设过高可能触发 API 限流。</div>
+      </div>
+
       <div class="form-actions">
         <button class="btn btn-default" onclick="testModelB()">测试连接</button>
         <button class="btn btn-primary" onclick="saveModelB()">保存配置</button>
@@ -319,6 +334,9 @@
           if (data.model_name) {
             document.getElementById('modelbModelName').value = data.model_name;
           }
+          if (data.concurrency !== undefined) {
+            document.getElementById('modelbConcurrency').value = data.concurrency;
+          }
           if (data.supplier) {
             document.getElementById('modelbProvider').value = data.supplier;
           } else if (data.api_url) {
@@ -358,7 +376,8 @@
           api_url: apiUrl,
           api_key: apiKey,
           model_name: modelName,
-          supplier: provider
+          supplier: provider,
+          concurrency: parseInt(document.getElementById('modelbConcurrency').value) || 1
         })
       })
       .then(function(r) { return r.json(); })

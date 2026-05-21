@@ -35,6 +35,78 @@ def replace_params(sql_template, params):
     return sql
 
 
+def get_pipeline_sqls(env):
+    """读取指定环境的取数管道配置（FetchPipeline + SqlTemplate），按 sort_order 返回已启用的 SQL 列表
+
+    Args:
+        env: 环境名（云环境 / 乐采云环境）
+
+    Returns:
+        List[dict] — 每步信息：{id, step_name, sort_order, enabled, sql_template_id, sql_text, category}
+    """
+    from models import FetchPipeline, SqlTemplate
+
+    pipelines = FetchPipeline.query.filter_by(env=env, enabled=True)\
+        .order_by(FetchPipeline.sort_order).all()
+
+    result = []
+    for p in pipelines:
+        tpl = p.sql_template
+        result.append({
+            'id': p.id,
+            'step_name': p.step_name,
+            'sort_order': p.sort_order,
+            'enabled': p.enabled,
+            'sql_template_id': p.sql_template_id,
+            'sql_text': tpl.sql_text if tpl else None,
+            'category': tpl.category if tpl else None,
+        })
+    return result
+
+
+def get_pipeline_sql_by_category(env, category):
+    """按 category 查单条管道 SQL
+
+    Args:
+        env: 环境名
+        category: SQL 类别（count/daily/sample/reason/detail）
+
+    Returns:
+        dict — {sql_text, category} 或 None
+    """
+    from models import FetchPipeline, SqlTemplate
+
+    p = FetchPipeline.query.join(SqlTemplate)\
+        .filter(FetchPipeline.env == env,
+                FetchPipeline.enabled == True,
+                SqlTemplate.category == category)\
+        .order_by(FetchPipeline.sort_order).first()
+
+    if not p or not p.sql_template:
+        return None
+    return {
+        'sql_text': p.sql_template.sql_text,
+        'category': p.sql_template.category,
+    }
+
+
+def replace_pipeline_params(sql_template, **kwargs):
+    """统一替换管道 SQL 模板中的占位符
+
+    Args:
+        sql_template: 原始 SQL 模板字符串（含 {detail_sql} / {positions} 等占位符）
+        **kwargs: key=value 占位符键值对
+
+    Returns:
+        替换后的 SQL 字符串
+    """
+    result = sql_template
+    for key, val in kwargs.items():
+        placeholder = '{' + key + '}'
+        result = result.replace(placeholder, str(val))
+    return result
+
+
 def build_sql(instance, start_date, end_date):
     """构建完整的 SQL 查询语句"""
     from models import SqlTemplate
@@ -693,7 +765,7 @@ def ping_idata(env, instance):
 
 def fetch_data_from_idata(env, instance, start_date, end_date, sample_percent, excluded_audit_ids=None):
     """核心函数：从 iData 拉取数据，使用窗口函数翻页，随机抽样，返回结果
-    
+
     Args:
         excluded_audit_ids: 已抽取的审核ID集合，用于增量抽样（排除已抽取的数据）
     """
@@ -709,19 +781,28 @@ def fetch_data_from_idata(env, instance, start_date, end_date, sample_percent, e
     excluded_sql = f"AND `审核id` NOT IN ({excluded_ids_str})" if excluded_ids_str else ""
     
     # 格式化日期（去除连字符，转为 YYYYMMDD）
-    # 格式化日期（去除连字符，转为 YYYYMMDD）
     start_date_fmt = start_date.replace('-', '').replace('/', '') if start_date else ''
     end_date_fmt = end_date.replace('-', '').replace('/', '') if end_date else ''
+
+    # 获取基础 detail SQL（从 SqlTemplate 或备用逻辑）
     detail_sql = build_sql(instance, start_date_fmt, end_date_fmt)
     # 重要修复（v2）：COUNT 查询必须用 COUNT(DISTINCT `审核id`) 而非 COUNT(*)，
     # 因为 detail_sql 中的 LEFT JOIN dwd_itm_audit_reject_detail_y 会让同一 app_id
     # 产生多条记录（同一审核单有多条驳回详情），COUNT(*) 把重复行也计入。
     # 验证结论：COUNT(DISTINCT app_id) = 5,588，完全对齐 iData 基准。
     # 增量抽样：排除已抽取的审核ID
-    count_sql = f"""SELECT `AI审核结果`, COUNT(DISTINCT `审核id`) as cnt
-        FROM ({detail_sql}) t
-        WHERE 1=1 {excluded_sql}
-        GROUP BY `AI审核结果`"""
+    # ========== S2: COUNT 总数统计（从管道读取）==========
+    count_template = get_pipeline_sql_by_category(env, 'count')
+    if count_template:
+        count_sql = replace_pipeline_params(count_template['sql_text'], detail_sql=detail_sql)
+        # 注入 excluded_sql（替换 WHERE 1=1 后的位置）
+        count_sql = count_sql.replace('WHERE 1=1', f'WHERE 1=1 {excluded_sql}')
+    else:
+        # 兜底：使用原有硬编码逻辑
+        count_sql = f"""SELECT `AI审核结果`, COUNT(DISTINCT `审核id`) as cnt
+            FROM ({detail_sql}) t
+            WHERE 1=1 {excluded_sql}
+            GROUP BY `AI审核结果`"""
 
     total_count = 0
     original_compliant = 0
@@ -835,15 +916,27 @@ def fetch_data_from_idata(env, instance, start_date, end_date, sample_percent, e
         for i in range(0, len(compliant_positions), batch_size):
             batch_positions = compliant_positions[i:i+batch_size]
             batch_pos_str = ','.join(map(str, batch_positions))
-            compliant_sql = f"""SELECT * FROM (
-              SELECT t.*, ROW_NUMBER() OVER (ORDER BY MD5(t.`审核id`)) as rn
-              FROM (
-                {detail_sql}
-              ) t
-              WHERE 1=1 {excluded_sql}
-                AND t.`AI审核结果` = '合规'
-            ) tmp
-            WHERE tmp.rn IN ({batch_pos_str})"""
+            # ========== S3: 合规数据抽样（从管道读取）==========
+            sample_tpl_c = get_pipeline_sql_by_category(env, 'sample')
+            if sample_tpl_c:
+                compliant_sql = replace_pipeline_params(
+                    sample_tpl_c['sql_text'],
+                    detail_sql=detail_sql,
+                    positions=batch_pos_str
+                )
+                # 注入 excluded_sql
+                compliant_sql = compliant_sql.replace('WHERE 1=1', f'WHERE 1=1 {excluded_sql}')
+            else:
+                # 兜底
+                compliant_sql = f"""SELECT * FROM (
+                  SELECT t.*, ROW_NUMBER() OVER (ORDER BY MD5(t.`审核id`)) as rn
+                  FROM (
+                    {detail_sql}
+                  ) t
+                  WHERE 1=1 {excluded_sql}
+                    AND t.`AI审核结果` = '合规'
+                ) tmp
+                WHERE tmp.rn IN ({batch_pos_str})"""
 
             try:
                 rows_c = execute_sql_query(compliant_sql, instance, env)
@@ -870,15 +963,27 @@ def fetch_data_from_idata(env, instance, start_date, end_date, sample_percent, e
         for i in range(0, len(non_compliant_positions), batch_size):
             batch_positions = non_compliant_positions[i:i+batch_size]
             batch_pos_str = ','.join(map(str, batch_positions))
-            non_compliant_sql = f"""SELECT * FROM (
-              SELECT t.*, ROW_NUMBER() OVER (ORDER BY MD5(t.`审核id`)) as rn
-              FROM (
-                {detail_sql}
-              ) t
-              WHERE 1=1 {excluded_sql}
-                AND t.`AI审核结果` = '违规'
-            ) tmp
-            WHERE tmp.rn IN ({batch_pos_str})"""
+            # ========== S4: 违规数据抽样（从管道读取）==========
+            sample_tpl_n = get_pipeline_sql_by_category(env, 'sample')
+            if sample_tpl_n:
+                non_compliant_sql = replace_pipeline_params(
+                    sample_tpl_n['sql_text'],
+                    detail_sql=detail_sql,
+                    positions=batch_pos_str
+                )
+                # 注入 excluded_sql
+                non_compliant_sql = non_compliant_sql.replace('WHERE 1=1', f'WHERE 1=1 {excluded_sql}')
+            else:
+                # 兜底
+                non_compliant_sql = f"""SELECT * FROM (
+                  SELECT t.*, ROW_NUMBER() OVER (ORDER BY MD5(t.`审核id`)) as rn
+                  FROM (
+                    {detail_sql}
+                  ) t
+                  WHERE 1=1 {excluded_sql}
+                    AND t.`AI审核结果` = '违规'
+                ) tmp
+                WHERE tmp.rn IN ({batch_pos_str})"""
 
             try:
                 rows_n = execute_sql_query(non_compliant_sql, instance, env)
@@ -1025,7 +1130,13 @@ def fetch_error_reasons_online(env, instance, start_date, end_date, max_records=
     # 产生多条记录（同一审核单有多条驳回详情），简单 COUNT(*) 会把重复行也计入，
     # 导致违规原因统计虚高（实测发现 YNLCY/GXLCY 20260518 的 reasons_sum = 2 × non_compliant_count）。
     # 进一步修复：不用 DISTINCT，而是显式 GROUP BY，确保每个违规记录对每个标签只计1。
-    agg_sql = f"""SELECT `创建日期`, violation_tag, SUM(cnt) as cnt
+    # ========== S5: 违规原因聚合（从管道读取）==========
+    reason_tpl = get_pipeline_sql_by_category(env, 'reason')
+    if reason_tpl:
+        agg_sql = replace_pipeline_params(reason_tpl['sql_text'], detail_sql=detail_sql)
+    else:
+        # 兜底：使用原有硬编码逻辑（本地 case_when 变量嵌入）
+        agg_sql = f"""SELECT `创建日期`, violation_tag, SUM(cnt) as cnt
 FROM (
   SELECT `审核id`, `创建日期`,
     {case_when} as violation_tag,

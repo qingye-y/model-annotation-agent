@@ -16,7 +16,8 @@ from services.fetch_service import (
     get_idata_cookie, build_sql, execute_sql_query, replace_params,
     extract_violation_keywords, extract_error_reason,
     generate_daily_stats, update_daily_stats_inconsistency,
-    get_instance_rule_mapping, fetch_data_from_idata, fetch_data_with_template
+    get_instance_rule_mapping, fetch_data_from_idata, fetch_data_with_template,
+    get_pipeline_sql_by_category, replace_pipeline_params
 )
 from services.utils import to_beijing_time
 
@@ -285,15 +286,21 @@ def api_data_fetch():
         inst_error_reasons = all_error_reasons.get(instance, {})
         
         # 额外查询 iData 按日 GROUP BY 的精确计数（避免比例分配导致的误差）
+        # ========== S6: 每日分组 COUNT（从管道读取）==========
         daily_counts = None
         try:
             detail_sql = build_sql(instance, _start, _end)
-            daily_count_sql = f"""
-                SELECT `创建日期`, `AI审核结果`, COUNT(DISTINCT `审核id`) as cnt
-                FROM ({detail_sql}) t
-                GROUP BY `创建日期`, `AI审核结果`
-                ORDER BY `创建日期`
-            """
+            daily_tpl = get_pipeline_sql_by_category(env, 'daily')
+            if daily_tpl:
+                daily_count_sql = replace_pipeline_params(daily_tpl['sql_text'], detail_sql=detail_sql)
+            else:
+                # 兜底：使用原有硬编码逻辑
+                daily_count_sql = f"""
+                    SELECT `创建日期`, `AI审核结果`, COUNT(DISTINCT `审核id`) as cnt
+                    FROM ({detail_sql}) t
+                    GROUP BY `创建日期`, `AI审核结果`
+                    ORDER BY `创建日期`
+                """
             daily_result = execute_sql_query(daily_count_sql, instance, env)
             if isinstance(daily_result, list) and daily_result:
                 daily_counts = {}
@@ -648,6 +655,35 @@ def api_task_batch_items(batch_id):
             RawData.product_id.ilike(f'%{keyword}%') |
             RawData.ai_reject_reason.ilike(f'%{keyword}%')
         )
+
+    # 互检状态筛选
+    review_status = request.args.get('review_status', '')
+    if review_status == 'reviewed':
+        filtered_query = filtered_query.filter(RawData.modelb_reviewed == True)
+    elif review_status == 'not_reviewed':
+        filtered_query = filtered_query.filter(RawData.modelb_reviewed == False)
+
+    # AB差异筛选
+    diff_status = request.args.get('diff_status', '')
+    if diff_status == 'consistent':
+        filtered_query = filtered_query.filter(RawData.modelb_consistent == True)
+    elif diff_status == 'a_pass_b_reject':
+        filtered_query = filtered_query.filter(
+            RawData.ai_result.in_(['合规', '1', 'PASS']),
+            RawData.modelb_result.in_(['违规', '0', 'REJECT'])
+        )
+    elif diff_status == 'a_reject_b_pass':
+        filtered_query = filtered_query.filter(
+            RawData.ai_result.in_(['违规', '0', 'REJECT']),
+            RawData.modelb_result.in_(['合规', '1', 'PASS'])
+        )
+
+    # 模型B审核结果筛选
+    modelb_result = request.args.get('modelb_result', '')
+    if modelb_result == '合规':
+        filtered_query = filtered_query.filter(RawData.modelb_result.in_(['合规', '1', 'PASS']))
+    elif modelb_result == '违规':
+        filtered_query = filtered_query.filter(RawData.modelb_result.in_(['违规', '0', 'REJECT']))
 
     total = filtered_query.count()
     items_query = filtered_query.order_by(RawData.id.desc()).offset((page - 1) * per_page).limit(per_page)
