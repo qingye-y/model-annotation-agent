@@ -274,6 +274,23 @@ def api_data_fetch():
     log.original_total = sum(all_original_totals.values())
     db.session.commit()
 
+    # 清理僵尸 FetchLog：RawData 已被本次拉取清空但 FetchLog 仍存在的旧批次
+    from sqlalchemy import not_
+    orphan_batches = db.session.query(FetchLog.batch_id).filter(
+        FetchLog.batch_id != batch_id,
+        ~FetchLog.batch_id.in_(
+            db.session.query(RawData.fetch_batch_id).filter(RawData.fetch_batch_id.isnot(None)).distinct()
+        )
+    ).all()
+    for ob in orphan_batches:
+        orphan_id = ob[0]
+        orphan_log = FetchLog.query.filter_by(batch_id=orphan_id).first()
+        if orphan_log and orphan_log.source == 'fetch':
+            print(f"[DEBUG 清理] 已删除僵尸批次 {orphan_id}（RawData 已被清空）")
+            db.session.delete(orphan_log)
+    if orphan_batches:
+        db.session.commit()
+
     print(f"[DEBUG 审计] FetchLog 最终写入: batch={batch_id}, original_total={log.original_total}, "
           f"total_fetched={log.total_fetched}, skipped={total_skipped}, "
           f"compliant={total_compliant}, non_compliant={total_non_compliant}")
@@ -447,6 +464,7 @@ def api_task_batches():
     end_date = request.args.get('end_date', '')
     instances = request.args.get('instances', '')
     rule = request.args.get('rule', '')
+    review_status_filter = request.args.get('review_status', '')  # v1.2: 跳转优化
 
     # 如果指定了规则，从映射中获取实例列表
     if rule and not instances:
@@ -497,6 +515,12 @@ def api_task_batches():
                 filters.append(FetchLog.instances.like('%' + inst + '%'))
             query = query.filter(or_(*filters))
 
+    # v1.2: 互检状态筛选（跳转优化）
+    if review_status_filter == 'completed':
+        query = query.filter(FetchLog.review_status == 'completed')
+    elif review_status_filter == 'pending':
+        query = query.filter(FetchLog.review_status != 'completed')
+
     batches = query.order_by(FetchLog.fetch_time.desc()).all()
     
     result = []
@@ -514,7 +538,8 @@ def api_task_batches():
             'pending': '未互检',
             'running': '互检中',
             'completed': '已互检',
-            'failed': '互检失败'
+            'failed': '互检失败',
+            'aborted': '互检中止'
         }
         review_status = review_status_map.get(db_review_status, '未互检')
         
@@ -536,7 +561,11 @@ def api_task_batches():
             "data_start_date": b.data_start_date or '',
             "data_end_date": b.data_end_date or '',
             "reviewed_count": reviewed_count,
-            "total_items": total_items
+            "total_items": total_items,
+            # v1.4 任务调度模块
+            "task_generated": bool(b.task_generated),
+            "task_generate_time": b.task_generate_time or '',
+            "task_sample_percent": b.task_sample_percent or 5.0,
         })
     
     return jsonify({"batches": result})
@@ -577,7 +606,11 @@ def api_task_batch_summary(batch_id):
         "original_compliant": log.original_compliant or 0,
         "original_non_compliant": log.original_non_compliant or 0,
         "total_items": total_items,
-        "reviewed_count": reviewed_count
+        "reviewed_count": reviewed_count,
+        # v1.4 任务调度模块
+        "task_generated": bool(log.task_generated),
+        "task_generate_time": log.task_generate_time or '',
+        "task_sample_percent": log.task_sample_percent or 5.0,
     })
 
 

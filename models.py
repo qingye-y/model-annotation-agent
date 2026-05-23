@@ -13,6 +13,8 @@ class User(UserMixin, db.Model):
     name = db.Column(db.String(100))
     daily_quota = db.Column(db.Integer, default=200)
     is_active = db.Column(db.Boolean, default=True)
+    # v1.1.0: 标注员绑定规则，JSON数组，如 ["水印违规","类目错放","合规抽检"]
+    bound_rules = db.Column(db.Text)
 
 class RawData(db.Model):
     __tablename__ = 'raw_data'
@@ -77,6 +79,9 @@ class FetchLog(db.Model):
     data_start_date = db.Column(db.String(10))  # 数据覆盖的开始日期，格式 YYYYMMDD
     data_end_date = db.Column(db.String(10))    # 数据覆盖的结束日期，格式 YYYYMMDD
     skipped_duplicates = db.Column(db.Integer, default=0)
+    task_generated = db.Column(db.Boolean, default=False)       # 是否已生成标注任务（v1.4）
+    task_generate_time = db.Column(db.String(30))               # 生成时间（v1.4）
+    task_sample_percent = db.Column(db.Float, default=5.0)      # 抽检比例（v1.4）
 
 class DailyStats(db.Model):
     __tablename__ = 'daily_stats'
@@ -166,3 +171,21 @@ class QcRecord(db.Model):
     batch_id = db.Column(db.String(100))  # 质检批次号
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class DispatchLog(db.Model):
+    """任务分配记录表（v1.1.0）"""
+    __tablename__ = 'dispatch_log'
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    admin_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    rule_name = db.Column(db.String(100), nullable=False, comment='规则名，如"水印违规"、"合规抽检"')
+    annotator_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    count = db.Column(db.Integer, nullable=False, comment='分配数量')
+    assign_method = db.Column(db.String(20), comment='平均分配 / 按额度比例')
+    data_type = db.Column(db.String(20), comment='不一致数据 / 一致性抽检')
+    batch_id = db.Column(db.String(100), comment='关联 FetchLog 批次')
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    admin = db.relationship('User', foreign_keys=[admin_id], backref='dispatch_logs')
+    annotator = db.relationship('User', foreign_keys=[annotator_id], backref='received_dispatches')
+

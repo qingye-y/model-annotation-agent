@@ -570,7 +570,7 @@ def api_get_instance_rule_mapping():
     """获取实例规则关联配置"""
     config = SqlConfig.query.filter_by(key='INSTANCE_RULE_MAPPING').first()
     
-    # 默认映射（兜底）
+    # 默认映射（兜底，不含 .md 后缀）
     default_mapping = {
         "ZJWC": "浙江网超审核规则",
         "HWCS": "浙江乐采网超审核规则",
@@ -587,7 +587,13 @@ def api_get_instance_rule_mapping():
     else:
         mapping = default_mapping
     
-    return jsonify({'mapping': mapping})
+    # 归一化：去掉 .md/.txt 后缀保证格式统一
+    import re as _re
+    normalized = {}
+    for inst, rule in mapping.items():
+        normalized[inst] = _re.sub(r'\.(md|txt)$', '', rule)
+    
+    return jsonify({'mapping': normalized})
 
 
 @sql_config_bp.route('/api/config/instance-rule-mapping', methods=['PUT'])
@@ -604,14 +610,20 @@ def api_update_instance_rule_mapping():
     if not isinstance(mapping, dict):
         return jsonify({'success': False, 'message': 'mapping 必须是对象'}), 400
     
+    # 归一化：去掉 .md/.txt 后缀
+    import re as _re
+    normalized = {}
+    for inst, rule in mapping.items():
+        normalized[inst] = _re.sub(r'\.(md|txt)$', '', rule)
+    
     config = SqlConfig.query.filter_by(key='INSTANCE_RULE_MAPPING').first()
     if config:
-        config.value = json.dumps(mapping, ensure_ascii=False)
+        config.value = json.dumps(normalized, ensure_ascii=False)
         config.updated_at = datetime.utcnow()
     else:
-        config = Config(
+        config = SqlConfig(
             key='INSTANCE_RULE_MAPPING',
-            value=json.dumps(mapping, ensure_ascii=False)
+            value=json.dumps(normalized, ensure_ascii=False)
         )
         db.session.add(config)
     

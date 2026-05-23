@@ -155,6 +155,28 @@
     .confirm-box .btn-ok { padding: 8px 20px; border: none; border-radius: var(--radius); background: var(--danger); color: #fff; cursor: pointer; font-size: 13px; }
     .confirm-box .btn-ok:hover { opacity: 0.9; }
 
+    /* ====== 弹窗通用样式（v1.4 生成标注任务） ====== */
+    .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.45); display: flex; align-items: center; justify-content: center; z-index: 9999; opacity: 0; visibility: hidden; transition: opacity 0.25s; }
+    .modal-overlay.active { opacity: 1; visibility: visible; }
+    .modal-overlay .modal { background: #fff; border-radius: 10px; box-shadow: 0 8px 32px rgba(0,0,0,0.2); min-width: 420px; max-width: 90vw; overflow: hidden; }
+    .modal-overlay .modal-header { display: flex; align-items: center; justify-content: space-between; padding: 16px 20px; border-bottom: 1px solid var(--border-light); background: #fafbfc; }
+    .modal-overlay .modal-title { font-size: 15px; font-weight: 600; color: var(--text-primary); }
+    .modal-overlay .modal-close { background: none; border: none; font-size: 20px; cursor: pointer; color: var(--text-muted); line-height: 1; padding: 0; }
+    .modal-overlay .modal-close:hover { color: var(--text-primary); }
+    .modal-overlay .modal-body { padding: 20px; }
+    .modal-overlay .modal-footer { padding: 12px 20px; border-top: 1px solid var(--border-light); display: flex; justify-content: flex-end; gap: 8px; }
+    .modal-overlay .form-group { margin-bottom: 14px; }
+    .modal-overlay .form-group label { display: block; font-size: 13px; font-weight: 500; color: var(--text-primary); margin-bottom: 4px; }
+    .modal-overlay .form-input, .modal-overlay .form-select { width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius); font-size: 13px; box-sizing: border-box; }
+    .modal-overlay .form-input:focus, .modal-overlay .form-select:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 2px rgba(37,99,235,0.15); }
+    .modal-overlay .btn { padding: 8px 16px; border-radius: var(--radius); font-size: 13px; cursor: pointer; border: 1px solid var(--border); background: #fff; }
+    .modal-overlay .btn-primary { background: var(--primary); color: #fff; border-color: var(--primary); }
+    .modal-overlay .btn-primary:hover { background: var(--primary-hover); }
+    .modal-overlay .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+    .modal-overlay .required { color: var(--danger); }
+    .modal-overlay .btn-default { background: #fff; color: var(--text-primary); }
+    .modal-overlay .btn-default:hover { background: #f5f5f5; }
+
     /* ====== 自定义 Tooltip ====== */
     .cell-tooltip {
       position: fixed;
@@ -304,6 +326,56 @@
     </div>
   </div>
 
+  <!-- 生成标注任务弹窗（v2.0 — 自动关联规则） -->
+  <div class="modal-overlay" id="generateModal">
+    <div class="modal">
+      <div class="modal-header">
+        <span class="modal-title">📋 生成标注任务</span>
+        <button class="modal-close" onclick="closeModal('generateModal')">×</button>
+      </div>
+      <div class="modal-body">
+        <!-- 批次信息 -->
+        <div style="background:#f8f9fa;border-radius:6px;padding:10px 12px;margin-bottom:16px;font-size:13px;color:var(--text-secondary);">
+          批次：<strong id="genBatchId" style="color:var(--text-primary);"></strong>
+          <span id="genBatchInstances" style="margin-left:12px;"></span>
+        </div>
+        <!-- 抽检方式 -->
+        <div class="form-group">
+          <label>抽检方式 <span class="required">*</span></label>
+          <div style="display:flex;flex-direction:column;gap:8px;margin-top:6px;">
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:normal;">
+              <input type="radio" name="genSampleMode" value="inconsistent" checked style="width:16px;height:16px;">
+              <span><strong>仅不一致数据</strong>（A/B模型判定不一致的数据，100%全量进入）</span>
+            </label>
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:normal;">
+              <input type="radio" name="genSampleMode" value="consistent" style="width:16px;height:16px;">
+              <span><strong>仅一致性数据</strong>（A/B模型判定一致的数据）</span>
+            </label>
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:normal;">
+              <input type="radio" name="genSampleMode" value="both" style="width:16px;height:16px;">
+              <span><strong>全部</strong>（不一致100% + 一致数据按比例）</span>
+            </label>
+          </div>
+        </div>
+        <!-- 一致性数据抽检比例（仅 consistent/both 时显示）-->
+        <div class="form-group" id="genPercentRow" style="display:none;">
+          <label>一致性数据抽检比例（%）</label>
+          <input type="number" class="form-input" id="genSamplePercent" value="5" min="0" max="100" step="0.1" style="width:120px;">
+          <span style="font-size:12px;color:var(--text-muted);margin-left:8px;">100 = 全量抽取</span>
+        </div>
+        <!-- 自动规则预览 -->
+        <div style="background:#f0f0ff;border-left:3px solid var(--primary);padding:10px 12px;border-radius:4px;font-size:12px;color:var(--text-secondary);line-height:1.7;" id="genRulePreview">
+          <strong>将自动生成以下规则的任务：</strong>
+          <div id="genRulePreviewList" style="margin-top:6px;color:var(--text-primary);"></div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-default" onclick="closeModal('generateModal')">取消</button>
+        <button class="btn-primary" id="genSubmitBtn" onclick="confirmGenerateTask()">确认生成</button>
+      </div>
+    </div>
+  </div>
+
   <script>
     // ====== 全局状态 ======
     var BATCH_ID = null;
@@ -311,6 +383,7 @@
     var allInstances = [];
     var batchStatus = null;      // 来自 FetchLog.status
     var batchReviewStatus = null; // 来自 FetchLog.review_status（已映射为中文）
+    var batchTaskGenerated = false; // 来自 FetchLog.task_generated（v1.4）
     var isReviewRunning = false; // 互检进行中（轮询状态）
     var currentItems = [];
 
@@ -386,6 +459,28 @@
 
       // 删除按钮（始终显示）
       html += '<button class="btn-action delete" onclick="deleteBatch()">🗑 删除</button>';
+
+      // 导出数据（仅在数据拉取完成时显示）
+      if (isCompleted) {
+        html += '<div class="export-dropdown">';
+        html += '<button class="btn-action default" onclick="toggleExportMenu(event)" style="border:1px solid var(--border);">📥 导出数据 ▾</button>';
+        html += '<div class="export-menu" id="exportMenu">';
+        html += '<div class="export-menu-item" onclick="downloadExport(\'raw\')"><div class="export-menu-title">📄 原始数据</div><div class="export-menu-sub">导出该批次的全部原始数据</div></div>';
+        html += '<div class="export-menu-item" onclick="downloadExport(\'violation\')"><div class="export-menu-title">⚠️ 违规数据</div><div class="export-menu-sub">导出被标记为违规的数据</div></div>';
+        html += '<div class="export-menu-item" onclick="downloadExport(\'review\')"><div class="export-menu-title">🔄 互检差异</div><div class="export-menu-sub">导出AB模型互检存在差异的数据</div></div>';
+        html += '</div>';
+        html += '</div>';
+      }
+
+      // 生成标注任务按钮（v1.4，仅在互检完成后显示）
+      if (isCompleted) {
+        if (batchTaskGenerated) {
+          html += '<button class="btn-action" style="background:#6f42c1;color:#fff;border:none;" onclick="goToDispatchCenter()">📋 查看任务池</button>';
+          html += '<button class="btn-action review" onclick="openGenerateModalForDetail()">🔁 重新抽取</button>';
+        } else if (reviewStatus === '已互检') {
+          html += '<button class="btn-action review" onclick="openGenerateModalForDetail()">📋 生成标注任务</button>';
+        }
+      }
 
       bar.innerHTML = html;
     }
@@ -492,6 +587,215 @@
           showToast('删除失败', 'error');
         });
     }
+
+    // ====== 跳转任务调度中心（v1.4）=========
+    function goToDispatchCenter() {
+      window.location.href = '/dispatch_center.html';
+    }
+
+    // ====== 生成标注任务弹窗（v1.4）=========
+    // 复用 model_task.html 的 generateModal（两页共享同一 DOM id）
+    // 以下为 batch_detail.html 的配套函数
+
+    function openGenerateModalForDetail() {
+      // 填充批次信息（summaryData 已有 instances）
+      var insts = summaryData && summaryData.instances ? summaryData.instances : '';
+
+      var genBatchIdEl = document.getElementById('genBatchId');
+      var genBatchInstancesEl = document.getElementById('genBatchInstances');
+      var genRuleSelect = document.getElementById('genRuleSelect');
+      var genInstanceSelect = document.getElementById('genInstanceSelect');
+      var genSamplePercent = document.getElementById('genSamplePercent');
+
+      if (genBatchIdEl) genBatchIdEl.textContent = BATCH_ID;
+      if (genBatchInstancesEl) genBatchInstancesEl.textContent = insts ? '实例：' + insts : '';
+
+      if (genInstanceSelect) {
+        genInstanceSelect.innerHTML = '<option value="">全部实例</option>';
+        if (insts) {
+          insts.split(',').forEach(function(inst) {
+            inst = inst.trim();
+            if (inst) genInstanceSelect.innerHTML += '<option value="' + inst + '">' + inst + '</option>';
+          });
+        }
+      }
+
+      if (genRuleSelect) {
+        genRuleSelect.innerHTML = '<option value="">— 选择规则 —</option>';
+        fetch('/api/prompt-rules')
+          .then(function(res) { return res.json(); })
+          .then(function(data) {
+            var rules = Array.isArray(data) ? data : [];
+            rules.forEach(function(r) {
+              var name = r.name || r;
+              genRuleSelect.innerHTML += '<option value="' + name + '">' + name + '</option>';
+            });
+          })
+          .catch(function() {});
+      }
+
+      // 默认抽检比例（来自 summaryData 或默认 5%）
+      if (genSamplePercent) {
+        genSamplePercent.value = summaryData && summaryData.task_sample_percent ? summaryData.task_sample_percent : 5;
+      }
+
+      // 重置按钮
+      var btn = document.getElementById('genSubmitBtn');
+      if (btn) { btn.disabled = false; btn.textContent = '确认生成'; }
+
+      openModal('generateModal');
+    }
+
+    // ====== 生成任务弹窗（v2.0 — 自动规则关联）======
+    var _genRules = [];      // 规则列表
+    var _genInstances = [];  // 当前批次实例
+    var _genRuleMap = {};    // { ruleName: [instances] }
+
+    function inferRuleForInstance(inst) {
+      var lower = inst.toLowerCase();
+      if (inst === 'ZJWC') return '浙江网超审核规则';
+      if (inst === 'HWCS') return '浙江乐采网超审核规则';
+      // 其余乐采云实例
+      return '其他乐采网超审核规则';
+    }
+
+    function buildRulePreview() {
+      var mode = document.querySelector('input[name="genSampleMode"]:checked');
+      mode = mode ? mode.value : 'inconsistent';
+      var percent = parseFloat((document.getElementById('genSamplePercent') || {}).value) || 5;
+      var previewList = document.getElementById('genRulePreviewList');
+      if (!previewList) return;
+      var modeText = { 'inconsistent': '不一致数据(100%)', 'consistent': '一致性数据(' + percent + '%)', 'both': '不一致(100%)+一致(' + percent + '%)' };
+      var allRules = _genRules.map(function(r) { return r.name || r; });
+      var html = allRules.map(function(rule) {
+        var insts = _genRuleMap[rule] || [];
+        return '<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">' +
+          '<span style="background:var(--primary);color:#fff;font-size:11px;padding:1px 8px;border-radius:3px;white-space:nowrap;">' + rule + '</span>' +
+          '<span style="color:var(--text-muted);font-size:12px;">' + (insts.length > 0 ? insts.join(', ') : '无适用实例') + '</span>' +
+          '<span style="color:var(--text-muted);font-size:12px;margin-left:auto;">' + modeText[mode] + '</span>' +
+          '</div>';
+      }).join('');
+      previewList.innerHTML = html || '<span style="color:var(--text-muted);">无有效规则</span>';
+    }
+
+    function openGenerateModalForDetail() {
+      var insts = summaryData && summaryData.instances ? summaryData.instances : '';
+      _genInstances = insts ? insts.split(',').map(function(s) { return s.trim(); }).filter(Boolean) : [];
+
+      var genBatchIdEl = document.getElementById('genBatchId');
+      var genBatchInstancesEl = document.getElementById('genBatchInstances');
+      if (genBatchIdEl) genBatchIdEl.textContent = BATCH_ID;
+      if (genBatchInstancesEl) genBatchInstancesEl.textContent = insts ? '实例：' + insts : '';
+
+      // 加载规则列表并构建映射
+      fetch('/api/prompt-rules')
+        .then(function(res) { return res.json(); })
+        .then(function(data) {
+          _genRules = Array.isArray(data) ? data : [];
+          _genRuleMap = {};
+          _genRules.forEach(function(r) { _genRuleMap[r.name || r] = []; });
+          _genInstances.forEach(function(inst) {
+            var rule = inferRuleForInstance(inst);
+            if (_genRuleMap[rule] !== undefined) {
+              _genRuleMap[rule].push(inst);
+            } else {
+              // 未匹配归入第一规则
+              var first = _genRules.length > 0 ? (_genRules[0].name || _genRules[0]) : null;
+              if (first) _genRuleMap[first].push(inst);
+            }
+          });
+          buildRulePreview();
+        })
+        .catch(function() { _genRules = []; buildRulePreview(); });
+
+      // 默认选中"仅不一致"
+      document.querySelectorAll('input[name="genSampleMode"]').forEach(function(r) {
+        r.checked = (r.value === 'inconsistent');
+      });
+
+      // 比例行默认隐藏
+      var percentRow = document.getElementById('genPercentRow');
+      if (percentRow) percentRow.style.display = 'none';
+
+      // 监听变化
+      document.querySelectorAll('input[name="genSampleMode"]').forEach(function(r) {
+        r.onchange = function() {
+          var pr = document.getElementById('genPercentRow');
+          if (pr) pr.style.display = (this.value === 'inconsistent') ? 'none' : 'block';
+          buildRulePreview();
+        };
+      });
+      var spEl = document.getElementById('genSamplePercent');
+      if (spEl) spEl.oninput = buildRulePreview;
+
+      if (spEl) spEl.value = (summaryData && summaryData.task_sample_percent) ? summaryData.task_sample_percent : 5;
+
+      var btn = document.getElementById('genSubmitBtn');
+      if (btn) { btn.disabled = false; btn.textContent = '确认生成'; }
+
+      openModal('generateModal');
+    }
+
+    function confirmGenerateTask() {
+      var modeRadio = document.querySelector('input[name="genSampleMode"]:checked');
+      var mode = modeRadio ? modeRadio.value : 'inconsistent';
+      var samplePercent = parseFloat((document.getElementById('genSamplePercent') || {}).value) || 5;
+
+      if (_genRules.length === 0) { showToast('规则加载中，请稍候', 'error'); return; }
+
+      var btn = document.getElementById('genSubmitBtn');
+      btn.disabled = true;
+      btn.textContent = '生成中…';
+
+      // 遍历所有规则，并行请求
+      var allRules = _genRules.map(function(r) { return r.name || r; });
+      var promises = allRules.map(function(ruleName) {
+        var instsForRule = _genRuleMap[ruleName] || [];
+        var instance = instsForRule.length > 0 ? instsForRule[0] : null;
+        var percent = (mode === 'inconsistent') ? 0 : samplePercent;
+        return fetch('/api/dispatch/generate-tasks', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            batch_id: BATCH_ID,
+            rule_name: ruleName,
+            instance: instance,
+            sample_percent: percent,
+            data_mode: mode
+          })
+        }).then(function(res) { return res.json(); });
+      });
+
+      Promise.all(promises).then(function(results) {
+        var totalInc = 0, totalCons = 0, okCount = 0;
+        var errors = [];
+        results.forEach(function(data, i) {
+          if (data.success) {
+            totalInc += data.inconsistent_count || 0;
+            totalCons += data.sampled_count || 0;
+            okCount++;
+          } else {
+            errors.push(allRules[i] + ':' + (data.error || '失败'));
+          }
+        });
+        var modeLabel = { 'inconsistent': '不一致', 'consistent': '一致', 'both': '全量' }[mode];
+        var msg = '完成：' + okCount + '个规则，共进 ' + (totalInc + totalCons) + ' 条（不一致' + totalInc + ' + 一致' + totalCons + '）';
+        if (errors.length > 0) msg += '；部分失败：' + errors.join('；');
+        showToast(msg);
+        closeModal('generateModal');
+        loadSummary();
+        btn.disabled = false;
+        btn.textContent = '确认生成';
+      }).catch(function(err) {
+        showToast('请求失败', 'error');
+        btn.disabled = false;
+        btn.textContent = '确认生成';
+      });
+    }
+
+    // 弹窗控制函数（v1.4）
+    function openModal(id) { var el = document.getElementById(id); if (el) el.classList.add('active'); }
+    function closeModal(id) { var el = document.getElementById(id); if (el) el.classList.remove('active'); }
 
 
     function loadSummary() {
@@ -600,6 +904,7 @@
       // 存储状态并渲染操作按钮
       batchStatus = data.status || '';
       batchReviewStatus = reviewStatus;
+      batchTaskGenerated = data.task_generated || false;
       renderActionButtons();
     }
 
@@ -905,7 +1210,8 @@
     });
 
     // ====== 导出功能 ======
-    function toggleExportMenu() {
+    function toggleExportMenu(e) {
+      if (e) e.stopPropagation();
       var menu = document.getElementById('exportMenu');
       if (menu) menu.style.display = menu.style.display === 'block' ? 'none' : 'block';
     }

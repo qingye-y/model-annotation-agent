@@ -638,15 +638,16 @@
       document.getElementById('editInstanceCode').value = instanceCode;
       document.getElementById('editInstanceEnv').value = config.env;
 
-      // 填充规则下拉框
+      // 填充规则下拉框（去掉 .md/.txt 后缀）
       var ruleSelect = document.getElementById('editInstanceRule');
-      var currentRule = instanceRuleMapping[instanceCode] || '';
+      var currentRule = (instanceRuleMapping[instanceCode] || '').replace(/\.(md|txt)$/i, '');
       ruleSelect.innerHTML = '<option value="">未关联</option>';
-      ruleSelect.innerHTML += currentRules.map(function(r) {
-        return '<option value="' + escapeHtml(r.name) + '"' +
-          (r.name === currentRule ? ' selected' : '') + '>' +
-          escapeHtml(r.name) + '</option>';
-      }).join('');
+      currentRules.forEach(function(r) {
+        var ruleName = (r.name || '').replace(/\.(md|txt)$/i, '');
+        ruleSelect.innerHTML += '<option value="' + escapeHtml(ruleName) + '"' +
+          (ruleName === currentRule ? ' selected' : '') + '>' +
+          escapeHtml(ruleName) + '</option>';
+      });
 
       document.getElementById('editInstanceModal').classList.add('active');
     }

@@ -850,25 +850,6 @@
       background: var(--danger);
       box-shadow: 0 4px 12px rgba(231, 76, 60, 0.3);
     }
-
-    /* ====== v2 分组视图 ====== */
-    .breadcrumb { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-secondary); margin-bottom: 12px; }
-    .breadcrumb .btn-back { padding: 4px 10px; font-size: 12px; background: var(--white); border: 1px solid var(--border); border-radius: var(--radius); cursor: pointer; }
-    .breadcrumb .btn-back:hover { border-color: var(--primary); color: var(--primary); }
-    .breadcrumb .sep { color: var(--border); }
-    .group-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; }
-    .group-card { background: var(--white); border-radius: var(--radius-lg); box-shadow: var(--shadow); padding: 14px 16px; cursor: pointer; transition: all 0.2s; border-left: 3px solid var(--primary); }
-    .group-card:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.1); transform: translateY(-1px); }
-    .group-card .gc-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px; }
-    .group-card .gc-rule { font-size: 14px; font-weight: 600; color: var(--text-primary); }
-    .group-card .gc-date { font-size: 12px; color: var(--text-muted); }
-    .group-card .gc-stats { display: flex; gap: 16px; font-size: 13px; }
-    .group-card .gc-stat-pending { color: var(--warning); font-weight: 600; }
-    .group-card .gc-stat-annotated { color: var(--success); }
-    .group-card .gc-stat-total { color: var(--text-secondary); }
-    .group-card .gc-arrow { font-size: 18px; color: var(--primary); }
-    .group-card.pending-heavy { border-left-color: var(--warning); }
-    .group-card.done { border-left-color: var(--success); opacity: 0.75; }
   </style>
 </head>
 <body>
@@ -881,24 +862,6 @@
       <div class="page-title">✏️ 标注任务</div>
       <span class="text-sm text-secondary" id="pageUpdateTime">数据更新时间：加载中...</span>
     </div>
-
-    <!-- v2 面包屑导航 -->
-    <div class="breadcrumb" id="breadcrumbNav" style="display:none;">
-      <button class="btn-back" onclick="backToGroups()">← 返回任务列表</button>
-      <span class="sep">|</span>
-      <span id="breadcrumbTitle" style="font-weight:500;color:var(--text-primary);"></span>
-    </div>
-
-    <!-- v2 第一层：任务分组列表 -->
-    <div id="viewGroups">
-      <div class="stats-summary" id="groupStats">
-        <span style="font-size:13px;color:var(--text-secondary);">加载中...</span>
-      </div>
-      <div class="group-grid" id="groupGrid"></div>
-    </div>
-
-    <!-- v2 第二层：商品明细（原内容包裹） -->
-    <div id="viewDetail" style="display:none;">
 
     <!-- 筛选栏 -->
     <div class="filter-bar">
@@ -1108,10 +1071,6 @@
       </div>
     </div>
   </div>
-  </div>
-
-  <!-- v2 关闭 viewDetail -->
-  </div>
 
   <!-- 图片预览弹窗 -->
   <div class="image-preview-overlay" id="imagePreview">
@@ -1222,19 +1181,12 @@
             return;
           }
           apiData = res.items || [];
+          filteredData = [...apiData];
           totalItems = res.total || apiData.length;
           // 提取去重规则和实例
           extractFilterOptions();
-
-          if (currentGroupKey) {
-            // 在明细视图中，重新筛选当前组
-            filteredData = [...apiData]; // fallback
-            renderTable();
-            updateStats();
-          } else {
-            // 默认显示分组视图
-            renderGroupView();
-          }
+          renderTable();
+          updateStats();
           document.getElementById('pageUpdateTime').textContent =
             '数据更新时间：' + new Date().toLocaleString('zh-CN');
         })
@@ -1263,110 +1215,6 @@
         credentials: 'same-origin',
         body: JSON.stringify({ raw_data_id: rawDataId, result, error_tag: errorTag, note })
       });
-    }
-
-    // =====================================================================
-    // v2 分组视图逻辑
-    // =====================================================================
-
-    let currentGroupKey = null;  // 当前选中的分组键 "rule_name||data_date"
-
-    /** 将 apiData 按 规则+数据日期 聚合为分组 */
-    function aggregateGroups() {
-      const groups = {};
-      apiData.forEach(t => {
-        const rule = t.rule_name || '未分类';
-        const date = (t.data_date || '未知日期').replace(/[\/-]/g, '/').slice(0, 10);
-        const key = rule + '||' + date;
-        if (!groups[key]) {
-          groups[key] = { rule_name: rule, data_date: date, total: 0, pending: 0, annotated: 0, correct: 0, error: 0, ignore: 0, items: [] };
-        }
-        groups[key].total++;
-        groups[key].items.push(t);
-        if (!t.check_result) groups[key].pending++;
-        else {
-          groups[key].annotated++;
-          if (t.check_result === 'correct') groups[key].correct++;
-          else if (t.check_result === 'error') groups[key].error++;
-          else groups[key].ignore++;
-        }
-      });
-      return Object.values(groups).sort((a, b) => b.total - a.total);
-    }
-
-    /** 渲染分组视图 */
-    function renderGroupView() {
-      showView('groups');
-      document.getElementById('breadcrumbNav').style.display = 'none';
-
-      const groups = aggregateGroups();
-      const grid = document.getElementById('groupGrid');
-      const statArea = document.getElementById('groupStats');
-
-      const totalPending = groups.reduce((s, g) => s + g.pending, 0);
-      const totalAnnotated = groups.reduce((s, g) => s + g.annotated, 0);
-      statArea.innerHTML = '<div class="stats-group"><div class="stats-item"><span class="label">分组数：</span><span class="num">' + groups.length + '</span></div><div class="stats-item"><span class="divider">|</span><span class="label">待标注：</span><span class="num" style="color:var(--warning);">' + totalPending + '</span></div><div class="stats-item"><span class="divider">|</span><span class="label">已标注：</span><span class="num" style="color:var(--success);">' + totalAnnotated + '</span></div></div>';
-
-      if (groups.length === 0) {
-        grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--text-muted);">暂无标注任务</div>';
-        return;
-      }
-
-      let html = '';
-      groups.forEach(g => {
-        const key = encodeURIComponent(g.rule_name + '||' + g.data_date);
-        const cls = g.pending === 0 ? 'done' : (g.pending > g.annotated ? 'pending-heavy' : '');
-        html += '<div class="group-card ' + cls + '" onclick="enterGroup(\'' + key + '\')">';
-        html += '<div class="gc-header">';
-        html += '<div><div class="gc-rule">' + g.rule_name + '</div><div class="gc-date">📅 ' + g.data_date + '</div></div>';
-        html += '<div class="gc-arrow">▶</div>';
-        html += '</div>';
-        html += '<div class="gc-stats">';
-        html += '<span class="gc-stat-pending">⏳ ' + g.pending + ' 待标注</span>';
-        html += '<span class="gc-stat-annotated">✅ ' + g.annotated + ' 已标注</span>';
-        html += '<span class="gc-stat-total">共 ' + g.total + ' 条</span>';
-        html += '</div></div>';
-      });
-      grid.innerHTML = html;
-    }
-
-    /** 进入分组 → 展示该组下的商品明细 */
-    function enterGroup(key) {
-      currentGroupKey = decodeURIComponent(key);
-      const [rule, date] = currentGroupKey.split('||');
-
-      // 筛选当前组的数据
-      filteredData = apiData.filter(t => {
-        const tRule = t.rule_name || '未分类';
-        const tDate = (t.data_date || '').replace(/[\/-]/g, '/').slice(0, 10);
-        return tRule === rule && tDate === date;
-      });
-
-      // 显示面包屑
-      document.getElementById('breadcrumbTitle').textContent = rule + ' · ' + date;
-      document.getElementById('breadcrumbNav').style.display = 'flex';
-      showView('detail');
-
-      // 渲染表格
-      currentPage = 1;
-      updateStats();
-      renderTable();
-      renderPagination();
-      document.getElementById('pageUpdateTime').textContent = '共 ' + filteredData.length + ' 条任务';
-    }
-
-    /** 返回分组列表 */
-    function backToGroups() {
-      currentGroupKey = null;
-      filteredData = [];
-      renderGroupView();
-      document.getElementById('pageUpdateTime').textContent = '数据更新时间：加载中...';
-    }
-
-    /** 切换视图 */
-    function showView(view) {
-      document.getElementById('viewGroups').style.display = (view === 'groups') ? '' : 'none';
-      document.getElementById('viewDetail').style.display = (view === 'detail') ? '' : 'none';
     }
 
     // =====================================================================

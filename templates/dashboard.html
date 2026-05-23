@@ -1524,7 +1524,7 @@
         var startDate = startDateObj.toISOString().slice(0, 10);
 
         // 构建 URL 参数
-        var params = '?start_date=' + startDate + '&end_date=' + endDate;
+        var params = '?start_date=' + startDate + '&end_date=' + endDate + '&review_status=completed';
 
         if (window.parent && window.parent.document) {
           var iframe = window.parent.document.querySelector('iframe');

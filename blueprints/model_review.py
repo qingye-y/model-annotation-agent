@@ -144,7 +144,7 @@ def call_modelb(product_data, prompt_template, api_config):
         "model": api_config.get('model_name', 'gpt-4'),
         "messages": messages,
         "temperature": 0.1,
-        "max_tokens": 500
+        "max_tokens": 1000  # 需足够容量容纳 <think>推理 + JSON 结果
     }
     
     headers = {
@@ -171,7 +171,7 @@ def call_modelb(product_data, prompt_template, api_config):
             # 尝试解析 JSON 格式的返回
             import json as json_mod
             import re
-            # 1. 先剥离 <think>...</think> 和 ```json...``` 等包裹
+            
             clean_content = content
             # 去掉 <think>...</think> 块
             clean_content = re.sub(r'<think>.*?</think>', '', clean_content, flags=re.DOTALL)
@@ -179,39 +179,86 @@ def call_modelb(product_data, prompt_template, api_config):
             clean_content = re.sub(r'```(?:json)?\s*', '', clean_content)
             clean_content = re.sub(r'```', '', clean_content)
             clean_content = clean_content.strip()
-            # 2. 匹配 JSON：找第一个 {...} 且有 result 字段
-            json_match = re.search(r'\{[^{}]*"result"\s*:\s*"[^"]*"[^{}]*\}', clean_content, re.DOTALL)
-            if not json_match:
-                # 回退：找大括号块（支持换行内的简短JSON）
-                json_match = re.search(r'\{[^{}]+"result"[^{}]+\}', clean_content, re.DOTALL)
-            if json_match:
-                try:
-                    json_data = json_mod.loads(json_match.group())
-                    modelb_result = json_data.get('result', '')
-                    modelb_reason = json_data.get('reason', '')
-                    modelb_detail = json_data.get('detail', '')
-                    if modelb_result in ['合规', '违规']:
-                        return {
-                            "result": modelb_result,
-                            "reason": modelb_reason[:50] if modelb_reason else '',  # 简短原因，不超过50字
-                            "detail": modelb_detail[:1000] if modelb_detail else ''  # 详细说明，最多1000字
-                        }
-                except:
-                    pass
+            
+            # 尝试直接解析整个 clean_content 为 JSON
+            modelb_result = None
+            modelb_reason = ''
+            modelb_detail = ''
+            json_parsed = False
+            
+            # 方法1：尝试找最外层 JSON 块（支持嵌套 {}）
+            # 从第一个 '{' 开始，找匹配的 '}'
+            start_idx = clean_content.find('{')
+            if start_idx >= 0:
+                depth = 0
+                for i in range(start_idx, len(clean_content)):
+                    ch = clean_content[i]
+                    if ch == '{':
+                        depth += 1
+                    elif ch == '}':
+                        depth -= 1
+                        if depth == 0:
+                            json_str = clean_content[start_idx:i+1]
+                            try:
+                                json_data = json_mod.loads(json_str)
+                                modelb_result = json_data.get('result', '')
+                                modelb_reason = json_data.get('reason', '')
+                                modelb_detail = json_data.get('detail', '')
+                                json_parsed = True
+                            except:
+                                pass
+                            break
+            
+            # 方法2：回退 — 正则找简单的 JSON
+            if not json_parsed:
+                json_match = re.search(r'\{[^{}]*"result"\s*:\s*"[^"]*"[^{}]*\}', clean_content, re.DOTALL)
+                if not json_match:
+                    json_match = re.search(r'\{[^{}]+"result"[^{}]+\}', clean_content, re.DOTALL)
+                if json_match:
+                    try:
+                        json_data = json_mod.loads(json_match.group())
+                        modelb_result = json_data.get('result', '')
+                        modelb_reason = json_data.get('reason', '')
+                        modelb_detail = json_data.get('detail', '')
+                        json_parsed = True
+                    except:
+                        pass
+            
+            if json_parsed and modelb_result in ['合规', '违规']:
+                return {
+                    "result": modelb_result,
+                    "reason": modelb_reason[:200] if modelb_reason else '',
+                    "detail": modelb_detail[:2000] if modelb_detail else ''
+                }
 
             # JSON解析失败，使用文本判断
+            # 先用 clean_content（已去 <think> 和 ```）
+            fallback_text = clean_content
+            
+            # 如果响应开头是 prompt 回音（model 有时会先复述 prompt），截掉
+            # 特征：开头是 "这是一位用户要求" 或 "你是" 等非 JSON 文本，找 JSON 或关键词之后截断
+            if fallback_text and ('违规' in fallback_text or '合规' in fallback_text):
+                # 找到第一个真正有意义的关键词位置作为起点
+                for kw in ['result', '审核结果', '判断']:
+                    idx = fallback_text.find(kw)
+                    if idx > 0:
+                        fallback_text = fallback_text[idx:]
+                        break
+            
             # 判断结果
-            if '合规' in content and '违规' not in content:
+            if '违规' in fallback_text and '合规' not in fallback_text:
+                modelb_result = '违规'
+            elif '合规' in fallback_text and '违规' not in fallback_text:
                 modelb_result = '合规'
-            elif '违规' in content:
+            elif '违规' in fallback_text:
                 modelb_result = '违规'
             else:
                 modelb_result = '合规'  # 默认合规
 
             return {
                 "result": modelb_result,
-                "reason": content[:50],  # 简短截取
-                "detail": content[:1000]  # 详细说明
+                "reason": fallback_text[:200] if fallback_text else '',
+                "detail": fallback_text[:2000] if fallback_text else ''
             }
         else:
             return {"error": "API返回格式异常"}
@@ -439,8 +486,14 @@ def run_modelb_review(batch_id):
         total = len(pending_records)
         
         if total == 0:
-            print(f"[ModelB] 批次 {batch_id} 无需互检的数据")
-            fetch_log.review_status = 'completed'
+            # 区分：真正无待互检数据 vs RawData 已被清理（僵尸批次）
+            total_raw = RawData.query.filter_by(fetch_batch_id=batch_id).count()
+            if total_raw == 0:
+                print(f"[ModelB] 批次 {batch_id} RawData 已被清理，跳过互检")
+                fetch_log.review_status = 'failed'
+            else:
+                print(f"[ModelB] 批次 {batch_id} 无需互检的数据（均已互检完毕）")
+                fetch_log.review_status = 'completed'
             db.session.commit()
             return
         

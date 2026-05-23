@@ -725,13 +725,19 @@ def update_daily_stats_inconsistency(fetch_log):
 def get_instance_rule_mapping():
     """从配置中获取实例与规则的映射关系"""
     from models import SqlConfig
+    import re as _re
 
     config = SqlConfig.query.filter_by(key='INSTANCE_RULE_MAPPING').first()
     if not config or not config.value:
         return {}
 
     try:
-        return json.loads(config.value)
+        mapping = json.loads(config.value)
+        # 归一化：去掉 .md/.txt 后缀
+        normalized = {}
+        for inst, rule in mapping.items():
+            normalized[inst] = _re.sub(r'\.(md|txt)$', '', rule)
+        return normalized
     except:
         return {}
 

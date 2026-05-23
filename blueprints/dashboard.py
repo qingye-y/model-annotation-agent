@@ -2,7 +2,7 @@
 from flask import Blueprint, jsonify, request
 from models import db, RawData, FetchLog, User, Annotation, SqlTemplate, SqlConfig, DailyStats
 from datetime import datetime, timedelta
-from sqlalchemy import func, text, case
+from sqlalchemy import func, text, case, or_
 import requests
 import json
 
@@ -159,7 +159,25 @@ def api_dashboard_stats():
 
     # 计算总体违规率和不一致率
     violation_rate = round(non_compliant_count / total_count * 100, 2) if total_count > 0 else 0
-    inconsistent_rate = round(inconsistent_count / total_count * 100, 2) if total_count > 0 else 0
+
+    # 机审不一致率：改用 FetchLog 口径（已完成互检批次，A/B模型判定不一致比例）
+    # 筛选业务日期与查询范围有重叠的批次
+    fetch_query = FetchLog.query.filter(FetchLog.review_status == 'completed')
+    if start_date and end_date:
+        fetch_query = fetch_query.filter(
+            FetchLog.data_start_date <= end_date,
+            FetchLog.data_end_date >= start_date
+        )
+    if instance_list:
+        inst_filters = [FetchLog.instances.like('%' + inst + '%') for inst in instance_list]
+        fetch_query = fetch_query.filter(or_(*inst_filters))
+    fetch_batches = fetch_query.all()
+    fl_total = 0
+    fl_inconsistent = 0
+    for fb in fetch_batches:
+        fl_total += fb.total_fetched or 0
+        fl_inconsistent += fb.inconsistent_count or 0
+    inconsistent_rate = round(fl_inconsistent / fl_total * 100, 2) if fl_total > 0 else 0
 
     # ====== 构建日期范围内的完整 by_date 数组（补零）======
     date_range = []
@@ -223,6 +241,7 @@ def api_dashboard_stats():
     # 打印诊断日志
     print(f"[看板统计] 筛选条件：日期={start_date}~{end_date}, 实例={instance_list}")
     print(f"[看板统计] DailyStats 汇总：审核总数={total_count}, 合规={compliant_count}, 违规={non_compliant_count}, 记录数={record_count}")
+    print(f"[看板统计] FetchLog 口径：审核总数={fl_total}, 不一致={fl_inconsistent}, 不一致率={inconsistent_rate}%")
     print(f"[看板统计] 违规原因标签数={len(violation_reason_map)}, top10={len(top_violation_reasons)}")
 
     # 构建返回数据

@@ -230,8 +230,17 @@
         </div>
         <div class="filter-item">
           <label>审核规则</label>
-          <select class="form-select" id="filterRule">
+          <select class="form-select" id="filterRule" onchange="loadBatches()">
             <option value="">全部规则</option>
+          </select>
+        </div>
+        <div class="filter-item">
+          <label>互检状态</label>
+          <select class="form-select" id="filterReviewStatus">
+            <option value="">全部</option>
+            <option value="pending">待互检</option>
+            <option value="running">互检中</option>
+            <option value="completed">已完成</option>
           </select>
         </div>
         <button class="btn-query" onclick="loadBatches()">查询</button>
@@ -241,6 +250,7 @@
         <button class="btn-trigger" onclick="openGetDataModal()">获取线上数据</button>
         <button class="btn-trigger" style="background: var(--success);" onclick="openUploadModal()"><span>📤</span> 上传文件机审</button>
         <button class="btn-reset" style="border-color: var(--danger); color: var(--danger);" onclick="clearAllBatches()">🗑 清空全部历史</button>
+        <button class="btn-trigger" style="background:var(--success);" onclick="openExportAllModal()">📤 全部导出</button>
         <div class="status-indicator" id="taskStatusIndicator"><span class="status-dot" id="taskStatusDot"></span><span id="taskStatusText">加载中...</span></div>
       </div>
     </div>
@@ -248,7 +258,7 @@
     <div class="card">
       <div class="table-wrapper" style="overflow-x: auto;">
         <table class="batch-table" style="min-width: 900px;">
-          <thead><tr><th style="min-width:80px;max-width:100px;">批次号</th><th style="text-align:center;">来源</th><th style="text-align:center;">环境</th><th style="width:65px;max-width:80px;text-align:center;">实例</th><th style="width:40px;"><div class="th-with-tip">抽样<span class="th-tip-btn">?<div class="th-tip-popup"><strong>怎么抽的？</strong><br><br>系统采用分层随机抽样：合规数据按此比例随机抽取，违规数据也按此比例随机抽取，保证本地样本的违规率与线上一致，不会出现「运气不好抽不到违规」的情况。<br><br>第二次拉取时，系统自动排除已抽取的数据，从剩余池继续抽样，实现增量覆盖。</div></span></div></th><th style="width:60px;text-align:center;">审核总数</th><th style="width:50px;text-align:center;">合规</th><th style="width:50px;text-align:center;">违规</th><th style="width:50px;text-align:center;">抽样数</th><th style="width:70px;">数据日期</th><th style="width:85px;">拉取时间</th><th style="text-align:center;">状态</th><th style="width:55px;text-align:center;">互检进度</th><th style="width:85px;">操作</th></tr></thead>
+          <thead><tr><th style="min-width:80px;max-width:100px;">批次号</th><th style="text-align:center;">来源</th><th style="text-align:center;">环境</th><th style="width:65px;max-width:80px;text-align:center;">实例</th><th style="width:40px;"><div class="th-with-tip">抽样<span class="th-tip-btn">?<div class="th-tip-popup"><strong>怎么抽的？</strong><br><br>系统采用分层随机抽样：合规数据按此比例随机抽取，违规数据也按此比例随机抽取，保证本地样本的违规率与线上一致，不会出现「运气不好抽不到违规」的情况。<br><br>第二次拉取时，系统自动排除已抽取的数据，从剩余池继续抽样，实现增量覆盖。</div></span></div></th><th style="width:60px;text-align:center;">审核总数</th><th style="width:50px;text-align:center;">合规</th><th style="width:50px;text-align:center;">违规</th><th style="width:50px;text-align:center;">抽样数</th><th style="width:70px;">数据日期</th><th style="width:85px;">拉取时间</th><th style="text-align:center;">状态</th><th style="width:55px;text-align:center;">互检进度</th><th style="width:90px;text-align:center;">操作</th></tr></thead>
           <tbody id="batchTableBody"></tbody>
         </table>
       </div>
@@ -262,32 +272,78 @@
     <div class="detail-panel" id="detailPanel"><div class="detail-content" id="detailContent"></div></div>
   </div>
 
-  <!-- 生成标注任务弹窗 -->
+  <!-- 生成标注任务弹窗 v1.4 -->
   <div class="modal-overlay" id="generateModal">
     <div class="modal">
       <div class="modal-header">
-        <span class="modal-title">生成标注任务 - 抽样配置</span>
+        <span class="modal-title">生成标注任务</span>
         <button class="modal-close" onclick="closeModal('generateModal')">×</button>
       </div>
-      <div class="modal-body">
+      <div class="modal-body" style="min-width:400px;">
+        <!-- 批次信息预览 -->
+        <div style="background:#f8f9fa;border-radius:6px;padding:10px 12px;margin-bottom:16px;font-size:13px;color:var(--text-secondary);">
+          批次号 <strong id="genBatchId" style="color:var(--text-primary);"></strong>
+          <span id="genBatchInstances" style="margin-left:12px;"></span>
+        </div>
+        <!-- 抽取模式 -->
         <div class="form-group">
-          <label>预设规则选择</label>
-          <div style="display: flex; align-items: center;">
-            <select class="form-select" id="presetRuleSelect" onchange="loadPresetRule()"></select>
-            <span class="preset-link" onclick="saveAsNewPreset()" style="margin-left: 12px;">💾 保存为预设</span>
+          <label>抽取方式 <span class="required">*</span></label>
+          <div style="display:flex;flex-direction:column;gap:8px;margin-top:6px;">
+            <label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;font-weight:normal;">
+              <input type="radio" name="genSampleMode" value="inconsistent" checked style="margin-top:2px;">
+              <span><strong>仅不一致数据</strong>：A/B 审核结果不一致的记录，100% 全部进入标注池</span>
+            </label>
+            <label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;font-weight:normal;">
+              <input type="radio" name="genSampleMode" value="consistent" style="margin-top:2px;">
+              <span><strong>仅一致性抽检</strong>：A/B 审核结果一致的数据</span>
+            </label>
+            <label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;font-weight:normal;">
+              <input type="radio" name="genSampleMode" value="both" style="margin-top:2px;">
+              <span><strong>全部</strong>：不一致数据 100% + 一致性抽检数据</span>
+            </label>
           </div>
         </div>
-        <div style="font-size: 13px; font-weight: 500; margin-bottom: 8px; color: var(--text-primary);">各类型抽取配置</div>
-        <div class="extract-grid" id="extractGrid"></div>
-        <div class="form-group">
-          <label>实例筛选</label>
-          <div class="instance-checkboxes" id="instanceCheckboxes"></div>
+        <!-- 抽样比例（仅 consistent/both 时显示） -->
+        <div class="form-group" id="genPercentRow" style="display:none;">
+          <label>一致性数据抽样比例（%）</label>
+          <div style="display:flex;align-items:center;gap:8px;margin-top:6px;">
+            <input type="number" id="genSamplePercent" value="5" min="1" max="100" style="width:80px;padding:6px 10px;border:1px solid var(--border);border-radius:4px;font-size:13px;">
+            <span style="color:var(--text-secondary);font-size:13px;">%（从一致性数据中随机抽取）</span>
+          </div>
         </div>
-        <div class="preview-text" id="previewText">预计将生成标注任务约 0 条</div>
+        <div class="preview-text" id="genPreviewText">请选择抽取方式</div>
       </div>
       <div class="modal-footer">
         <button class="btn btn-default" onclick="closeModal('generateModal')">取消</button>
         <button class="btn btn-primary" onclick="confirmGenerate()">确认生成</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 导出弹窗 -->
+  <div class="modal-overlay" id="exportModal">
+    <div class="modal">
+      <div class="modal-header">
+        <span class="modal-title">选择导出类型</span>
+        <button class="modal-close" onclick="closeModal('exportModal')">×</button>
+      </div>
+      <div class="modal-body" style="min-width:320px;">
+        <div id="exportModalBatchInfo" style="background:#f8f9fa;border-radius:6px;padding:10px 12px;margin-bottom:16px;font-size:13px;color:var(--text-secondary);display:none;"></div>
+        <p style="color:var(--text-secondary);font-size:13px;margin-bottom:12px;">请选择要导出的数据类型：</p>
+        <div style="display:flex;flex-direction:column;gap:8px;">
+          <button class="btn" style="justify-content:flex-start;padding:10px 14px;text-align:left;border:1px solid var(--border);border-radius:6px;background:#fff;cursor:pointer;font-size:13px;width:100%;" onclick="confirmExport('raw')">
+            📊 <strong>原始全量数据</strong> — 导出批次中所有原始审核记录
+          </button>
+          <button class="btn" style="justify-content:flex-start;padding:10px 14px;text-align:left;border:1px solid var(--border);border-radius:6px;background:#fff;cursor:pointer;font-size:13px;width:100%;" onclick="confirmExport('violation')">
+            ⚠️ <strong>违规数据</strong> — 仅导出被判定为违规的记录
+          </button>
+          <button class="btn" style="justify-content:flex-start;padding:10px 14px;text-align:left;border:1px solid var(--border);border-radius:6px;background:#fff;cursor:pointer;font-size:13px;width:100%;" onclick="confirmExport('review')">
+            🔍 <strong>互检差异数据</strong> — 导出Model A/B审核结果不一致的记录
+          </button>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-default" onclick="closeModal('exportModal')">取消</button>
       </div>
     </div>
   </div>
@@ -519,6 +575,12 @@
       if (newBatchId) {
         loadBatchesWithNewBatch();
       }
+
+      // v1.4: 监听生成标注弹窗的 radio 切换
+      document.querySelectorAll('input[name="genSampleMode"]').forEach(function(r) {
+        r.addEventListener('change', updateGenPreview);
+      });
+      document.getElementById('genSamplePercent').addEventListener('input', updateGenPreview);
     }
 
     // 加载批次数据（带new_batch参数）
@@ -628,8 +690,8 @@
         var rulesData = results[0] || [];
         var mappingData = results[1] || {};
 
-        // 提取规则名称
-        availableRules = rulesData.map(function(r) { return r.name; });
+        // 提取规则名称（去掉 .md / .txt 后缀）
+        availableRules = rulesData.map(function(r) { return (r.name || '').replace(/\.(md|txt)$/i, ''); });
 
         // 填充规则筛选下拉框
         var ruleSelect = document.getElementById('filterRule');
@@ -702,6 +764,7 @@
       var source = document.getElementById('filterSource').value;
       var status = document.getElementById('filterStatus').value;
       var rule = document.getElementById('filterRule').value;
+      var reviewStatus = document.getElementById('filterReviewStatus').value;
 
       if (startDate) params.append('start_date', startDate);
       if (endDate) params.append('end_date', endDate);
@@ -709,6 +772,7 @@
       if (status && status !== 'all') params.append('status', status);
       if (selectedInstances.length > 0) params.append('instances', selectedInstances.join(','));
       if (rule) params.append('rule', rule);
+      if (reviewStatus) params.append('review_status', reviewStatus);
 
       fetch('/api/task-batches?' + params.toString())
         .then(function(res) { return res.json(); })
@@ -862,12 +926,14 @@
           if (!hasMatch) return false;
         }
         if (source && batch.source !== source) return false;
-        // 规则筛选
+        // 规则筛选：兼容 mapping 值有无 .md 后缀的两种情况
         if (selectedRule) {
           var batchInstances = batch.instances || [];
           if (!Array.isArray(batchInstances)) batchInstances = batchInstances.toString().split(',');
-          // 检查该批次是否有任何一个实例关联了选定的规则
-          var hasRule = batchInstances.some(function(inst) { return instanceRuleMapping[inst] === selectedRule; });
+          var hasRule = batchInstances.some(function(inst) {
+            var instRule = (instanceRuleMapping[inst] || '').replace(/\.(md|txt)$/i, '');
+            return instRule === selectedRule;
+          });
           if (!hasRule) return false;
         }
         return true;
@@ -1243,93 +1309,51 @@
       if (modal) modal.remove();
     };
     
-    function toggleExportMenu(batchId) {
-      // 关闭其他下拉菜单
-      document.querySelectorAll('.export-menu').forEach(function(menu) {
-        if (menu.id !== 'exportMenu_' + batchId) {
-          menu.style.display = 'none';
-        }
-      });
-      // 切换当前菜单
-      var menu = document.getElementById('exportMenu_' + batchId);
-      if (!menu) return;
-      
-      if (menu.style.display === 'block') {
+    function closeAllMoreMenus() {
+      document.querySelectorAll('.more-menu').forEach(function(menu) {
         menu.style.display = 'none';
-        return;
-      }
-      
-      // 先显示再测量（确保能拿到真实高度）
-      menu.style.display = 'block';
-      menu.style.visibility = 'hidden';
-      
-      // 检测菜单是否会超出页面底部
-      var menuBtn = menu.previousElementSibling;
-      var menuRect = menu.getBoundingClientRect();
-      var btnRect = menuBtn ? menuBtn.getBoundingClientRect() : null;
-      var viewportHeight = window.innerHeight;
-      var cardBottom = 0;
-      
-      // 找到最近的 .card 容器
-      var card = menu.closest('.card');
-      if (card) {
-        cardBottom = card.getBoundingClientRect().bottom;
-      }
-      
-      // 判断方向：菜单底部超出页面底部或卡片底部时向上翻折
-      var menuBottom = menuRect.bottom;
-      var threshold = Math.min(viewportHeight - 10, cardBottom > 0 ? cardBottom - 8 : viewportHeight - 10);
-      
-      if (menuBottom > threshold && btnRect) {
-        // 向上弹出
-        menu.style.top = 'auto';
-        menu.style.bottom = '100%';
+      });
+    }
+
+    var _currentExportBatchId = null;  // null = 导出全部批次
+
+    function openExportModal(batchId) {
+      _currentExportBatchId = batchId;
+      closeAllMoreMenus();
+      var modal = document.getElementById('exportModal');
+      var info = document.getElementById('exportModalBatchInfo');
+      if (batchId) {
+        info.style.display = 'block';
+        info.textContent = '批次号：' + batchId;
       } else {
-        // 向下弹出
-        menu.style.top = '100%';
-        menu.style.bottom = 'auto';
+        info.style.display = 'none';
       }
-      
-      menu.style.visibility = 'visible';
+      modal.classList.add('active');
     }
 
-    function downloadExport(batchId, type) {
-      // 关闭下拉菜单
-      var menu = document.getElementById('exportMenu_' + batchId);
-      if (menu) menu.style.display = 'none';
-
-      // 构建下载URL
-      var url = '/api/data-fetch/download/' + batchId + '?type=' + type;
-
-      // 创建下载链接
-      var link = document.createElement('a');
-      link.href = url;
-      
-      // 根据类型设置文件名
-      var filenames = {
-        'raw': batchId + '_raw.csv',
-        'violation': batchId + '_violation.csv',
-        'review': batchId + '_review.csv'
-      };
-      link.download = filenames[type] || batchId + '_export.csv';
-      
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
+    function openExportAllModal() {
+      openExportModal(null);
     }
 
-    // 点击其他地方关闭下拉菜单（但点击"更多"按钮本身或菜单时不关闭）
+    function confirmExport(type) {
+      closeModal('exportModal');
+      if (_currentExportBatchId) {
+        downloadExport(_currentExportBatchId, type);
+      } else {
+        exportAllBatches(type);
+      }
+    }
+
+    // 点击其他地方关闭下拉菜单
     document.addEventListener('click', function(e) {
-      if (!e.target.closest('.export-dropdown') && !e.target.closest('.more-btn') && !e.target.closest('.more-menu')) {
-        document.querySelectorAll('.export-menu, .more-menu').forEach(function(menu) {
-          menu.style.display = 'none';
-        });
+      if (!e.target.closest('.more-btn') && !e.target.closest('.more-menu')) {
+        closeAllMoreMenus();
       }
     });
 
     function toggleMoreMenu(batchId) {
       // 关闭其他下拉菜单
-      document.querySelectorAll('.more-menu, .export-menu').forEach(function(menu) {
+      document.querySelectorAll('.more-menu').forEach(function(menu) {
         if (menu.id !== 'moreMenu_' + batchId) {
           menu.style.display = 'none';
         }
@@ -1337,6 +1361,40 @@
       var menu = document.getElementById('moreMenu_' + batchId);
       if (!menu) return;
       menu.style.display = menu.style.display === 'block' ? 'none' : 'block';
+    }
+
+    // 导出单个批次（per-row）
+    function downloadExport(batchId, type) {
+      var labels = { raw: '原始全量', violation: '违规数据', review: '互检差异' };
+      showToast('正在导出 ' + (labels[type] || type) + '，请稍候...');
+      var url = '/api/data-fetch/download/' + batchId + '?type=' + type;
+      var filenames = { raw: batchId + '_raw.csv', violation: batchId + '_violation.csv', review: batchId + '_review.csv' };
+      var link = document.createElement('a');
+      link.href = url;
+      link.download = filenames[type] || batchId + '_export.csv';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+
+    // 导出全量批次（action-bar）
+    function exportAllBatches(type) {
+      var labels = { raw: '原始全量数据', violation: '违规数据', review: '互检差异数据' };
+      showToast('正在批量导出 ' + (labels[type] || type) + '，请稍候...');
+      var batchIds = allBatches.map(function(b) { return b.id; });
+      if (batchIds.length === 0) { showToast('暂无批次数据可导出', true); return; }
+      batchIds.forEach(function(batchId, i) {
+        setTimeout(function() {
+          var url = '/api/data-fetch/download/' + batchId + '?type=' + type;
+          var filenames = { raw: batchId + '_raw.csv', violation: batchId + '_violation.csv', review: batchId + '_review.csv' };
+          var link = document.createElement('a');
+          link.href = url;
+          link.download = filenames[type] || batchId + '_export.csv';
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+        }, i * 300);
+      });
     }
 
     // hover 效果
@@ -1351,62 +1409,62 @@
 
     function openGenerateModal(batchId) {
       generateBatchId = batchId;
-      const batch = allBatches.find(b => b.id === batchId);
-      const diffCount = currentBatchDiffs.length;
-      const rules = getSamplingRules();
+      // 从 allBatches 查找批次信息
+      const batch = allBatches.find(function(b) { return b.id === batchId; });
+      if (!batch) { showToast('未找到批次信息', true); return; }
 
-      // 渲染预设规则下拉
-      const ruleSelect = document.getElementById('presetRuleSelect');
-      if (rules.length === 0) {
-        ruleSelect.innerHTML = '<option value="">暂无预设规则，请先在系统设置中创建</option>';
-      } else {
-        ruleSelect.innerHTML = rules.map(r => `<option value="${r.id}">${r.name}</option>`).join('');
-      }
+      // 填充批次信息预览（v1.4）
+      document.getElementById('genBatchId').textContent = batchId;
+      var instances = batch.instances || '';
+      document.getElementById('genBatchInstances').textContent = instances ? '实例：' + instances : '';
 
-      // 渲染抽取配置网格
-      const diffTypes = ['A合规B违规', 'A违规B合规', 'A合规B合规', 'A违规B违规'];
-      let gridHtml = '';
-      diffTypes.forEach(type => {
-        const counts = currentBatchDiffs.filter(d => d.diffType === type).length;
-        gridHtml += `<div class="extract-item"><div class="extract-item-title">${type} (${counts}条)</div><select class="form-select" id="extractMethod_${type.replace(/[^a-zA-Z]/g,'')}" onchange="togglePercentageInput('${type.replace(/[^a-zA-Z]/g,'')}')"><option value="none">不抽取</option><option value="all">全量抽取</option><option value="ratio">按比例抽取</option></select><div class="percentage-input" id="percentage_${type.replace(/[^a-zA-Z]/g,'')}"><input type="number" class="form-input" id="extractValue_${type.replace(/[^a-zA-Z]/g,'')}" placeholder="百分比" value="20" min="1" max="100"></div></div>`;
-      });
-      document.getElementById('extractGrid').innerHTML = gridHtml;
+      // 重置 radio 和比例
+      document.querySelectorAll('input[name="genSampleMode"]').forEach(function(r) { r.checked = (r.value === 'inconsistent'); });
+      document.getElementById('genPercentRow').style.display = 'none';
+      document.getElementById('genSamplePercent').value = 5;
 
-      // 渲染实例复选框
-      const instances = getInstanceMappings();
-      let checkboxHtml = currentBatchInstances.map(instId => { const inst = instances.find(i => i.id === instId); return inst ? `<label class="instance-checkbox"><input type="checkbox" name="genInstance" value="${inst.id}" checked> ${inst.name}</label>` : ''; }).join('');
-      document.getElementById('instanceCheckboxes').innerHTML = checkboxHtml;
+      // 更新预览
+      updateGenPreview();
 
       document.getElementById('generateModal').classList.add('active');
-      updatePreview();
     }
 
-    function togglePercentageInput(typeId) {
-      const method = document.getElementById(`extractMethod_${typeId}`).value;
-      const input = document.getElementById(`percentage_${typeId}`);
-      input.classList.toggle('active', method === 'ratio');
-      updatePreview();
-    }
+    // v1.4 废弃：旧的预设规则网格抽取逻辑（已由 radio 模式替代）
+    function togglePercentageInput(typeId) { /* noop */ }
+    function loadPresetRule() { /* noop */ }
+    function saveAsNewPreset() { /* noop */ }
+    function updatePreview() { /* noop - replaced by updateGenPreview */ }
 
-    function updatePreview() {
-      const diffTypes = ['A合规B违规', 'A违规B合规', 'A合规B合规', 'A违规B违规'];
-      let total = 0;
-      diffTypes.forEach(type => {
-        const typeId = type.replace(/[^a-zA-Z]/g,'');
-        const methodEl = document.getElementById(`extractMethod_${typeId}`);
-        if (!methodEl) return;
-        const method = methodEl.value;
-        if (method === 'none') return;
-        const count = (currentBatchDiffs || []).filter(d => d.diffType === type).length;
-        if (method === 'all') total += count;
-        else if (method === 'ratio') { 
-          const valEl = document.getElementById(`extractValue_${typeId}`);
-          if (!valEl) return;
-          const pct = parseInt(valEl.value) || 20; 
-          total += Math.ceil(count * pct / 100); 
-        }
-      });
-      document.getElementById('previewText').innerHTML = `预计将生成标注任务约 ${total} 条`;
+    // v1.4 预览：根据抽取模式估算数量
+    function updateGenPreview() {
+      var mode = document.querySelector('input[name="genSampleMode"]:checked').value;
+      var previewEl = document.getElementById('genPreviewText');
+      var percentRow = document.getElementById('genPercentRow');
+
+      if (mode === 'inconsistent') {
+        percentRow.style.display = 'none';
+        var inconsistentCount = (currentBatchDiffs || []).filter(function(d) {
+          return d.diffType === 'A合规B违规' || d.diffType === 'A违规B合规';
+        }).length;
+        previewEl.innerHTML = '预计生成 <strong>' + inconsistentCount + '</strong> 条（A/B不一致数据，100%抽取）';
+      } else if (mode === 'consistent') {
+        percentRow.style.display = 'block';
+        var pct = parseInt(document.getElementById('genSamplePercent').value) || 5;
+        var consistentCount = (currentBatchDiffs || []).filter(function(d) {
+          return d.diffType === 'A合规B合规' || d.diffType === 'A违规B违规';
+        }).length;
+        previewEl.innerHTML = '预计生成 <strong>' + Math.ceil(consistentCount * pct / 100) + '</strong> 条（一致性抽检，' + pct + '%）';
+      } else {
+        percentRow.style.display = 'block';
+        var pct2 = parseInt(document.getElementById('genSamplePercent').value) || 5;
+        var inc = (currentBatchDiffs || []).filter(function(d) {
+          return d.diffType === 'A合规B违规' || d.diffType === 'A违规B合规';
+        }).length;
+        var con = (currentBatchDiffs || []).filter(function(d) {
+          return d.diffType === 'A合规B合规' || d.diffType === 'A违规B违规';
+        }).length;
+        previewEl.innerHTML = '预计生成 <strong>' + (inc + Math.ceil(con * pct2 / 100)) + '</strong> 条（不一致 ' + inc + ' + 一致性 ' + Math.ceil(con * pct2 / 100) + '）';
+      }
     }
 
     function loadPresetRule() {
@@ -1426,47 +1484,51 @@
       updatePreview();
     }
 
-    function saveAsNewPreset() {
-      const name = prompt('请输入新规则名称：');
-      if (!name) return;
-      const rules = getSamplingRules();
-      const diffTypes = ['A合规B违规', 'A违规B合规', 'A合规B合规', 'A违规B违规'];
-      const config = {};
-      diffTypes.forEach(type => { 
-        const typeId = type.replace(/[^a-zA-Z]/g,''); 
-        config[type] = { method: document.getElementById(`extractMethod_${typeId}`).value, value: parseInt(document.getElementById(`extractValue_${typeId}`).value) || 20 }; 
-      });
-      rules.push({ id: 'srule_' + Date.now(), name: name, desc: '自定义规则', config: config, updateTime: new Date().toISOString().slice(0,10) + ' ' + new Date().toTimeString().slice(0,8) });
-      saveSamplingRules(rules);
-      
-      // Refresh dropdown
-      const ruleSelect = document.getElementById('presetRuleSelect');
-      if (rules.length === 1) {
-        ruleSelect.innerHTML = rules.map(r => `<option value="${r.id}">${r.name}</option>`).join('');
-      } else {
-        ruleSelect.innerHTML = rules.map(r => `<option value="${r.id}">${r.name}</option>`).join('');
-      }
-      ruleSelect.value = rules[rules.length - 1].id;
-      showToast('规则已保存');
-    }
+    // v1.4 废弃：旧的保存预设规则功能（已由 radio 模式替代）
+    function saveAsNewPreset() { /* noop */ }
 
     function confirmGenerate() {
-      const diffTypes = ['A合规B违规', 'A违规B合规', 'A合规B合规', 'A违规B违规'];
-      let hasExtract = false;
-      diffTypes.forEach(type => { const typeId = type.replace(/[^a-zA-Z]/g,''); if (document.getElementById(`extractMethod_${typeId}`).value !== 'none') hasExtract = true; });
-      if (!hasExtract) { alert('请至少选择一种类型进行抽取'); return; }
-      // 计算总数
-      let total = 0;
-      diffTypes.forEach(type => {
-        const typeId = type.replace(/[^a-zA-Z]/g,'');
-        const method = document.getElementById(`extractMethod_${typeId}`).value;
-        if (method === 'none') return;
-        const count = currentBatchDiffs.filter(d => d.diffType === type).length;
-        if (method === 'all') total += count;
-        else if (method === 'ratio') { const pct = parseInt(document.getElementById(`extractValue_${typeId}`).value) || 20; total += Math.ceil(count * pct / 100); }
-      });
+      var mode = document.querySelector('input[name="genSampleMode"]:checked').value;
+      var percent = mode !== 'inconsistent' ? parseInt(document.getElementById('genSamplePercent').value) || 5 : 100;
+      var batchId = generateBatchId;
+
       closeModal('generateModal');
-      showToast(`已成功生成 ${total} 条标注任务，已注入标注任务池`);
+      showToast('正在生成标注任务，请稍候...');
+
+      // 根据实例规则映射推导 rule_name
+      var batch = allBatches.find(function(b) { return b.id === batchId; });
+      var ruleName = '';
+      if (batch && batch.instances) {
+        var batchInstances = batch.instances.split(',');
+        for (var i = 0; i < batchInstances.length; i++) {
+          var inst = batchInstances[i].trim();
+          var r = instanceRuleMapping[inst] || '';
+          if (r) { ruleName = r; break; }
+        }
+      }
+      if (!ruleName) ruleName = '合规抽检';  // 兜底
+
+      fetch('/api/dispatch/generate-tasks', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          batch_id: batchId,
+          rule_name: ruleName,
+          data_mode: mode,
+          sample_percent: percent
+        })
+      })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          if (data.success) {
+            showToast(data.message || '标注任务生成成功，已注入任务池');
+          } else {
+            showToast(data.error || '生成失败：' + (data.message || '未知错误'), true);
+          }
+        })
+        .catch(function(err) {
+          showToast('网络错误：' + err.message, true);
+        });
     }
 
     function closeModal(id) { document.getElementById(id).classList.remove('active'); }
@@ -1709,27 +1771,35 @@
             '<td style="width:85px;font-size:11px;white-space:normal;text-align:center;line-height:1.2;">' + fetchTimeDisplay + '</td>' +
             '<td style="white-space:nowrap;text-align:center;">' + statusTag + '</td>' +
             '<td style="width:55px;text-align:center;white-space:nowrap;">' + reviewProgress + '</td>' +
-          '<td style="width:85px;white-space:nowrap;text-align:center;vertical-align:middle;">' +
-              '<button class="btn-action default more-btn" onclick="toggleMoreMenu(\'' + batch.id + '\')" style="display:inline-flex;align-items:center;gap:4px;vertical-align:middle;position:relative;">更多 <span style="font-size:10px;">▼</span>' +
-                '<div class="more-menu" id="moreMenu_' + batch.id + '" style="display:none;position:absolute;right:0;top:calc(100% + 2px);background:#fff;border:1px solid var(--border);border-radius:6px;box-shadow:0 4px 12px rgba(0,0,0,0.15);z-index:1000;width:85px;min-width:85px;overflow:hidden;white-space:nowrap;">' +
-                '<a class="more-menu-item" href="/batch-detail/' + batch.id + '" style="padding:8px 10px;display:block;cursor:pointer;border-bottom:1px solid var(--border-light);font-size:12px;color:var(--text-primary);text-decoration:none;">📋 明细</a>' +
-                (function() {
-                  var items = '';
-                  if (batch.status === 'completed') {
-                    if (batchReviewStatus === '已互检' || batchReviewStatus === '互检失败') {
-                      items += '<div class="more-menu-item" onclick="triggerReview(\'' + batch.id + '\', true)" style="padding:8px 10px;cursor:pointer;border-bottom:1px solid var(--border-light);font-size:12px;color:var(--text-primary);">🔁 重新互检</div>';
-                    } else if (batchReviewStatus !== '互检中') {
-                      items += '<div class="more-menu-item" onclick="triggerReview(\'' + batch.id + '\', false)" style="padding:8px 10px;cursor:pointer;border-bottom:1px solid var(--border-light);font-size:12px;color:var(--text-primary);">🧪 触发互检</div>';
-                    }
-                  }
-                  if (batch.status === 'running' || batch.status === 'processing' || isReviewRunning) {
-                    items += '<div class="more-menu-item" onclick="abortBatch(\'' + batch.id + '\')" style="padding:8px 10px;cursor:pointer;border-bottom:1px solid var(--border-light);font-size:12px;color:#ff9800;">⏹ 中止</div>';
-                  }
-                  items += '<div class="more-menu-item" onclick="deleteBatch(\'' + batch.id + '\')" style="padding:8px 10px;cursor:pointer;font-size:12px;color:var(--danger);">🗑 删除</div>';
-                  return items;
-                })() +
-              '</div>' +
-              '</button>' +
+          '<td style="width:90px;white-space:nowrap;text-align:center;vertical-align:middle;">' +
+              '<button class="btn-action default more-btn" onclick="toggleMoreMenu(\'' + batch.id + '\')" style="display:inline-flex;align-items:center;gap:2px;font-size:12px;padding:4px 10px;position:relative;">更多 <span style="font-size:10px;">▼</span>' +
+                '<div id="moreMenu_' + batch.id + '" class="more-menu" style="display:none;position:absolute;right:0;top:calc(100% + 2px);background:#fff;border:1px solid var(--border);border-radius:6px;box-shadow:0 4px 12px rgba(0,0,0,0.15);z-index:1000;min-width:140px;overflow:visible;white-space:nowrap;">' +
+              (function() {
+                var menuItems = '';
+                var isCompleted = batch.status === 'completed';
+                var isReviewed = (batchReviewStatus === '已互检' || batchReviewStatus === '互检失败');
+                var isReviewRunning = (batchReviewStatus === '互检中');
+                var isRunning = (batch.status === 'running' || batch.status === 'processing');
+                
+                if (isCompleted && isReviewed) {
+                  menuItems += '<div class="more-menu-item" onclick="location.href=\'/batch-detail/' + batch.id + '\'" style="padding:7px 12px;cursor:pointer;border-bottom:1px solid var(--border-light);font-size:12px;">📋 查看生成明细</div>';
+                  menuItems += '<div class="more-menu-item" onclick="closeAllMoreMenus();triggerReview(\'' + batch.id + '\', true)" style="padding:7px 12px;cursor:pointer;border-bottom:1px solid var(--border-light);font-size:12px;">🔁 重新抽取</div>';
+                } else if (isRunning || isReviewRunning) {
+                  menuItems += '<div class="more-menu-item" onclick="closeAllMoreMenus();abortBatch(\'' + batch.id + '\')" style="padding:7px 12px;cursor:pointer;border-bottom:1px solid var(--border-light);font-size:12px;color:#ff9800;">⏹ 中止</div>';
+                } else if (isCompleted && !isReviewed) {
+                  menuItems += '<div class="more-menu-item" onclick="closeAllMoreMenus();openGenerateModal(\'' + batch.id + '\')" style="padding:7px 12px;cursor:pointer;border-bottom:1px solid var(--border-light);font-size:12px;">📝 生成标注</div>';
+                  menuItems += '<div class="more-menu-item" onclick="closeAllMoreMenus();triggerReview(\'' + batch.id + '\', false)" style="padding:7px 12px;cursor:pointer;border-bottom:1px solid var(--border-light);font-size:12px;">🧪 触发互检</div>';
+                } else {
+                  menuItems += '<div class="more-menu-item" onclick="closeAllMoreMenus();openGenerateModal(\'' + batch.id + '\')" style="padding:7px 12px;cursor:pointer;border-bottom:1px solid var(--border-light);font-size:12px;">📝 生成标注</div>';
+                }
+                // 分隔线 + 导出 + 删除（所有状态统一）
+                menuItems += '<div style="border-top:1px dashed var(--border-light);"></div>';
+                menuItems += '<div class="more-menu-item" onclick="closeAllMoreMenus();openExportModal(\'' + batch.id + '\')" style="padding:7px 12px;cursor:pointer;border-bottom:1px solid var(--border-light);font-size:12px;">📤 导出</div>';
+                menuItems += '<div class="more-menu-item" onclick="closeAllMoreMenus();deleteBatch(\'' + batch.id + '\')" style="padding:7px 12px;cursor:pointer;font-size:12px;color:var(--danger);">🗑 删除</div>';
+                return menuItems;
+              })() +
+            '</div>' +
+            '</button>' +
           '</td>' +
           '</tr>';
         }).join('');
@@ -2292,7 +2362,6 @@
     renderBatchTable = renderBatchTableWithReview;
 
     document.querySelectorAll('.modal-overlay').forEach(o => o.addEventListener('click', e => { if (e.target === o) o.classList.remove('active'); }));
-    document.addEventListener('change', updatePreview);
     init();
   </script>
 </body>

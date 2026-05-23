@@ -30,6 +30,7 @@ from blueprints.sql_config import sql_config_bp
 from blueprints.model_review import model_review_bp
 from blueprints.prompt_rules import prompt_rules_bp, init_default_rules
 from blueprints.analysis import analysis_bp
+from blueprints.dispatch import dispatch_bp
 app.register_blueprint(auth_bp)
 app.register_blueprint(data_fetch_bp)
 app.register_blueprint(dashboard_bp)
@@ -37,6 +38,7 @@ app.register_blueprint(sql_config_bp)
 app.register_blueprint(model_review_bp)
 app.register_blueprint(prompt_rules_bp)
 app.register_blueprint(analysis_bp)
+app.register_blueprint(dispatch_bp)
 
 # ========== 静态页面路由 ==========
 @app.route('/index.html')
@@ -188,6 +190,27 @@ with app.app_context():
         try:
             db.session.execute(text("ALTER TABLE daily_stats ADD COLUMN inconsistent_rate FLOAT DEFAULT 0.0"))
             print("已添加列 inconsistent_rate")
+        except:
+            pass
+
+        # 检查并添加 fetch_log 的 task_generated 列（v1.4 任务调度模块）
+        try:
+            db.session.execute(text("ALTER TABLE fetch_log ADD COLUMN task_generated BOOLEAN DEFAULT 0"))
+            print("已添加列 task_generated")
+        except:
+            pass
+
+        # 检查并添加 fetch_log 的 task_generate_time 列
+        try:
+            db.session.execute(text("ALTER TABLE fetch_log ADD COLUMN task_generate_time VARCHAR(30)"))
+            print("已添加列 task_generate_time")
+        except:
+            pass
+
+        # 检查并添加 fetch_log 的 task_sample_percent 列
+        try:
+            db.session.execute(text("ALTER TABLE fetch_log ADD COLUMN task_sample_percent FLOAT DEFAULT 5.0"))
+            print("已添加列 task_sample_percent")
         except:
             pass
 

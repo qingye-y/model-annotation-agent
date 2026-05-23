@@ -119,9 +119,6 @@ def api_current_user():
 @login_required
 def list_users():
     """获取用户列表"""
-    if current_user.role != 'admin':
-        return jsonify({'success': False, 'message': '权限不足'}), 403
-
     users = User.query.filter_by(is_active=True).all()
     return jsonify({
         'success': True,
