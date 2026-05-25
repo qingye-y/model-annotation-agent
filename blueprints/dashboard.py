@@ -52,7 +52,6 @@ def api_stats():
 def api_dashboard_stats():
     """看板统计接口 - 从 DailyStats 快照表读取线上原始全量统计"""
     from config import ENV_CONFIG
-    import json
 
     # 获取查询参数
     instances_param = request.args.get('instances', '')
@@ -107,6 +106,15 @@ def api_dashboard_stats():
     record_count = len(daily_records)
 
     print(f"[Dashboard] DailyStats 记录数: {record_count}")
+
+    # ====== DEBUG: 打印 by_date_map keys ======
+    _tmp_map = {}
+    for record in daily_records:
+        ds = record.stat_date
+        if ds not in _tmp_map:
+            _tmp_map[ds] = 0
+        _tmp_map[ds] += 1
+    print(f"[DEBUG] by_date_map keys: {sorted(_tmp_map.keys())}")
 
     # 初始化统计数据
     total_count = 0
@@ -188,8 +196,10 @@ def api_dashboard_stats():
         while current <= end_dt:
             date_range.append(current.strftime('%Y%m%d'))
             current += timedelta(days=1)
+        print(f"[DEBUG] date_range 构建完成: {date_range}")
     except Exception as e:
         print(f"[ERROR] 日期解析失败: {e}")
+        date_range = []
 
     by_date = []
     for date_str in date_range:
@@ -244,6 +254,51 @@ def api_dashboard_stats():
     print(f"[看板统计] FetchLog 口径：审核总数={fl_total}, 不一致={fl_inconsistent}, 不一致率={inconsistent_rate}%")
     print(f"[看板统计] 违规原因标签数={len(violation_reason_map)}, top10={len(top_violation_reasons)}")
 
+    # ====== 标注员今日效能统计（annotator_stats）======
+    # 查询当天所有标注员的有效标注数据，按人聚合，计算标注量和准确率
+    annotator_stats = []
+    try:
+        # 北京时区今日日期
+        bj_today = (datetime.utcnow() + timedelta(hours=8)).date()
+        today_start_utc = datetime.combine(bj_today, datetime.min.time()) - timedelta(hours=8)
+        today_end_utc = datetime.combine(bj_today, datetime.max.time()) - timedelta(hours=8)
+
+        # 查询所有活跃标注员
+        active_annotators = User.query.filter(
+            User.role == 'annotator',
+            User.is_active == True
+        ).all()
+
+        for annotator in active_annotators:
+            # 查询该标注员今日的有效标注记录（已提交）
+            ann_records = db.session.query(Annotation).join(
+                RawData, Annotation.raw_data_id == RawData.id
+            ).filter(
+                Annotation.annotator_id == annotator.id,
+                Annotation.is_submitted == True,
+                Annotation.created_at >= today_start_utc,
+                Annotation.created_at <= today_end_utc,
+            ).all()
+
+            today_annotated = len(ann_records)
+            correct_count = sum(1 for r in ann_records if r.result == 'correct')
+            today_accuracy = round(correct_count / today_annotated * 100, 1) if today_annotated > 0 else None
+
+            annotator_stats.append({
+                'id': annotator.id,
+                'name': annotator.name or annotator.username,
+                'today_annotated': today_annotated,
+                'today_accuracy': today_accuracy,
+            })
+        print(f"[看板统计] 标注员效能数据：{len(annotator_stats)} 人")
+    except Exception as e:
+        print(f"[ERROR] 获取标注员效能数据失败: {e}")
+        annotator_stats = []
+
+    # ====== DEBUG: 打印 by_date 构建结果 ======
+    print(f"[DEBUG] by_date 构建前: date_range={date_range}, by_date_map keys={sorted(by_date_map.keys())}")
+    print(f"[DEBUG] by_date 最终: {[{x['date']: x['total']} for x in by_date]}")
+
     # 构建返回数据
     return jsonify({
         'total_count': total_count,
@@ -258,6 +313,7 @@ def api_dashboard_stats():
         'by_date': by_date,
         'top_violation_reasons': top_violation_reasons,
         'all_reasons_detail': all_reasons_detail,  # 全量明细，供"其他"展开
+        'annotator_stats': annotator_stats,  # 标注员今日效能数据
         'record_count': record_count,
         'start_date': start_date,
         'end_date': end_date,

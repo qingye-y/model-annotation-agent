@@ -65,6 +65,10 @@ def page_dispatch():
 def page_annotation():
     return render_template('annotation_list.html')
 
+@app.route('/annotation_detail.html')
+def page_annotation_detail():
+    return render_template('annotation_detail.html')
+
 @app.route('/qc_center.html')
 def page_qc():
     return render_template('qc_center.html')
@@ -128,11 +132,13 @@ with app.app_context():
             ("modelb_result", "VARCHAR(20)"),
             ("modelb_reason", "TEXT"),
             ("modelb_consistent", "BOOLEAN DEFAULT 0"),
-            ("modelb_reviewed", "BOOLEAN DEFAULT 0")
+            ("modelb_reviewed", "BOOLEAN DEFAULT 0"),
+            ("assigned_at", "TIMESTAMP"),
         ]
         for col_name, col_type in raw_data_cols:
             try:
-                db.session.execute(text(f"ALTER TABLE raw_data ADD COLUMN {col_name} {col_type}"))
+                sql = "ALTER TABLE raw_data ADD COLUMN %s %s" % (col_name, col_type)
+                db.session.execute(text(sql))
                 print(f"已添加列 {col_name}")
             except:
                 pass

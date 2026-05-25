@@ -135,6 +135,81 @@
       text-align: right;
     }
 
+    /* ====== 标注员效能横向柱状图 ====== */
+    .ae-row {
+      display: grid;
+      grid-template-columns: 90px 1fr 52px;
+      align-items: center;
+      gap: 8px;
+      padding: 4px 4px;
+      border-radius: 6px;
+      transition: background 0.15s;
+      user-select: none;
+    }
+    .ae-row:hover {
+      background: #f0f4ff;
+    }
+    .ae-name {
+      font-size: 12px;
+      color: var(--text-primary);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      font-weight: 500;
+    }
+    .ae-bar-wrap {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .ae-bar-track {
+      flex: 1;
+      height: 10px;
+      background: var(--border-light);
+      border-radius: 5px;
+      overflow: hidden;
+    }
+    .ae-bar-fill {
+      height: 100%;
+      background: var(--primary);
+      border-radius: 5px;
+      transition: width 0.6s ease;
+      min-width: 2px;
+    }
+    .ae-count {
+      font-size: 11px;
+      color: var(--text-secondary);
+      min-width: 36px;
+      text-align: right;
+      white-space: nowrap;
+    }
+    .ae-accuracy {
+      font-size: 12px;
+      text-align: right;
+      white-space: nowrap;
+    }
+
+    /* 排序切换按钮 */
+    .sort-toggle button {
+      background: none;
+      border: 1px solid var(--border-light);
+      border-radius: 4px;
+      padding: 2px 8px;
+      font-size: 11px;
+      color: var(--text-secondary);
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .sort-toggle button.active {
+      background: var(--primary);
+      border-color: var(--primary);
+      color: #fff;
+    }
+    .sort-toggle button:hover:not(.active) {
+      border-color: var(--primary);
+      color: var(--primary);
+    }
+
     /* 筛选栏样式增强 */
     .filter-bar-top {
       display: flex;
@@ -363,14 +438,21 @@
         </div>
       </div>
 
-      <!-- 今日标注员工作量 -->
+      <!-- 📊 标注员效能概览 -->
       <div class="chart-container">
         <div class="chart-header">
-          <span class="chart-title">👨‍💻 今日标注员工作量</span>
-          <span class="badge badge-primary">TOP 10</span>
+          <span class="chart-title">📊 标注员效能概览</span>
+          <span class="badge badge-primary">今日</span>
+          <div class="sort-toggle" style="margin-left: auto;">
+            <button id="workerSortBtn" class="btn btn-sm btn-ghost active" onclick="toggleWorkerSort()" title="切换排序">
+              <span id="workerSortLabel">按准确率</span> ↓
+            </button>
+          </div>
         </div>
         <div class="chart-body">
-          <div id="workerChart" style="height: 280px;"></div>
+          <!-- 横向柱状图容器 -->
+          <div id="annotatorEfficiencyChart" style="padding: 8px 0;"></div>
+          <!-- 兜底表格（charts 未加载时使用） -->
           <div id="workerFallback" style="display: none;">
             <table class="fallback-table">
               <thead>
@@ -621,6 +703,9 @@
           updateTrendChart(data.by_date || []);
           // 更新违规原因分布图（使用接口返回的 top_violation_reasons 和 all_reasons_detail）
           updateReasonChart(data.top_violation_reasons || [], data.non_compliant_count || 0, data.all_reasons_detail || []);
+          // ====== 更新标注员效能概览 ======
+          window.annotatorStats = data.annotator_stats || [];
+          renderAnnotatorEfficiency(window.annotatorStats);
         })
         .catch(function(error) {
           console.error('获取看板统计失败:', error);
@@ -936,19 +1021,102 @@
       // 保持局部引用兼容
       const reasonData = window.reasonData;
 
-      // 今日标注员工作量
-      const workerData = [
-        { name: '张小明', count: 312, accuracy: 96.8 },
-        { name: '李小红', count: 298, accuracy: 98.2 },
-        { name: '王大力', count: 285, accuracy: 95.5 },
-        { name: '赵小芳', count: 276, accuracy: 97.1 },
-        { name: '刘小强', count: 264, accuracy: 94.8 },
-        { name: '陈小美', count: 252, accuracy: 98.5 },
-        { name: '杨小军', count: 241, accuracy: 96.3 },
-        { name: '黄小丽', count: 235, accuracy: 97.8 },
-        { name: '周小波', count: 228, accuracy: 95.9 },
-        { name: '吴小倩', count: 216, accuracy: 97.5 }
-      ];
+      // ====== 标注员效能数据 ======
+      // 从 /api/dashboard/stats.annotator_stats 动态填充，由 fetchDashboardStats() 赋值
+      window.annotatorStats = [];
+
+      // 排序模式：'accuracy'（默认，从低到高）| 'count'（从高到低）
+      window.annotatorSortMode = 'accuracy';
+
+      // 渲染标注员效能横向柱状图（纯 HTML/CSS，不依赖 ApexCharts）
+      function renderAnnotatorEfficiency(data) {
+        var container = document.getElementById('annotatorEfficiencyChart');
+        if (!container) return;
+
+        if (!data || data.length === 0) {
+          container.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:260px;color:var(--text-muted);font-size:13px;">暂无标注员数据</div>';
+          return;
+        }
+
+        // 排序
+        var sorted = data.slice().sort(function(a, b) {
+          if (window.annotatorSortMode === 'accuracy') {
+            // 从低到高排（准确率低的优先关注）
+            var accA = a.today_accuracy != null ? a.today_accuracy : 100;
+            var accB = b.today_accuracy != null ? b.today_accuracy : 100;
+            return accA - accB;
+          } else {
+            // 按标注量从高到低
+            return (b.today_annotated || 0) - (a.today_annotated || 0);
+          }
+        });
+
+        var maxCount = Math.max.apply(null, sorted.map(function(d) { return d.today_annotated || 0; }));
+        if (maxCount === 0) maxCount = 1;
+
+        var html = '<div style="display:flex;flex-direction:column;gap:6px;">';
+        sorted.forEach(function(d) {
+          var name = d.name || d.username || '未知';
+          var count = d.today_annotated || 0;
+          var accuracy = d.today_accuracy;
+          var barPct = Math.round(count / maxCount * 100);
+          var hasAccuracy = accuracy != null && accuracy !== '';
+
+          // 准确率颜色
+          var accColor = '#6b7280'; // 无数据
+          var accText = '--';
+          if (hasAccuracy) {
+            if (accuracy >= 90) {
+              accColor = '#22c55e'; // 绿色
+            } else if (accuracy >= 80) {
+              accColor = '#eab308'; // 黄色
+            } else {
+              accColor = '#ef4444'; // 红色
+            }
+            accText = accuracy + '%';
+          }
+
+          html += '<div class="ae-row" onclick="jumpToAnnotator(\'' + encodeURIComponent(name) + '\')" title="点击查看 ' + name + ' 的详情" style="cursor:pointer;">' +
+            '<div class="ae-name">' + name + '</div>' +
+            '<div class="ae-bar-wrap">' +
+              '<div class="ae-bar-track">' +
+                '<div class="ae-bar-fill" style="width:' + barPct + '%;"></div>' +
+              '</div>' +
+              '<span class="ae-count">' + count + ' 条</span>' +
+            '</div>' +
+            '<div class="ae-accuracy" style="color:' + accColor + ';font-weight:600;">' + accText + '</div>' +
+          '</div>';
+        });
+        html += '</div>';
+        container.innerHTML = html;
+      }
+
+      // 切换排序模式
+      function toggleWorkerSort() {
+        window.annotatorSortMode = (window.annotatorSortMode === 'accuracy') ? 'count' : 'accuracy';
+        var label = document.getElementById('workerSortLabel');
+        var btn = document.getElementById('workerSortBtn');
+        if (label) label.textContent = (window.annotatorSortMode === 'accuracy') ? '按准确率' : '按标注量';
+        if (btn) {
+          btn.classList.toggle('active', window.annotatorSortMode === 'accuracy');
+        }
+        // 重新渲染（如果数据已加载）
+        if (window.annotatorStats && window.annotatorStats.length > 0) {
+          renderAnnotatorEfficiency(window.annotatorStats);
+        }
+      }
+
+      // 跳转到调度中心并自动打开标注员详情
+      function jumpToAnnotator(name) {
+        var url = 'dispatch_center.html?open_annotator=' + name;
+        if (window.parent && window.parent.navigateTo) {
+          window.parent.navigateTo(url);
+        } else if (window.parent) {
+          window.parent.location.href = url;
+        } else {
+          window.location.href = url;
+        }
+      }
 
       // ====== 图表初始化 ======
       let trendChart, accuracyChart, reasonChart, workerChart;
@@ -1362,59 +1530,8 @@
       }
 
       function initWorkerChart() {
-        if (!chartsReady) {
-          showWorkerFallback();
-          return;
-        }
-        const options = {
-          chart: {
-            type: 'bar',
-            height: 280,
-            fontFamily: 'inherit',
-            toolbar: { show: false }
-          },
-          series: [{
-            name: '完成量',
-            data: workerData.map(function(d) { return d.count; })
-          }],
-          xaxis: {
-            categories: workerData.map(function(d) { return d.name; }),
-            labels: { style: { fontSize: '11px', colors: '#6b7280' } },
-            axisBorder: { show: false },
-            axisTicks: { show: false }
-          },
-          yaxis: {
-            labels: { style: { fontSize: '11px', colors: '#6b7280' } }
-          },
-          colors: ['#4f6ef7'],
-          plotOptions: {
-            bar: {
-              borderRadius: 3,
-              columnWidth: '55%'
-            }
-          },
-          dataLabels: { enabled: false },
-          grid: {
-            borderColor: '#f3f4f6',
-            strokeDashArray: 3
-          },
-          tooltip: {
-            y: { formatter: function(v) { return v + ' 条'; } },
-            custom: function(_ref) {
-              var series = _ref.series;
-              var seriesIndex = _ref.seriesIndex;
-              var dataPointIndex = _ref.dataPointIndex;
-              var w = workerData[dataPointIndex];
-              return '<div style="padding:8px 12px;font-size:12px;">' +
-                '<div style="font-weight:600;margin-bottom:4px;">' + w.name + '</div>' +
-                '<div>完成量: ' + w.count + ' 条</div>' +
-                '<div>准确率: ' + w.accuracy + '%</div>' +
-                '</div>';
-            }
-          }
-        };
-        workerChart = new ApexCharts(document.querySelector('#workerChart'), options);
-        workerChart.render();
+        // 标注员效能概览使用纯 HTML/CSS 横向柱状图（始终渲染，不依赖 ApexCharts）
+        renderAnnotatorEfficiency(window.annotatorStats || []);
       }
 
       // ====== 兜底渲染 ======
@@ -1480,21 +1597,40 @@
       }
 
       function showWorkerFallback() {
-        document.getElementById('workerChart').style.display = 'none';
+        // 统一走 renderAnnotatorEfficiency，隐藏图表容器
+        var container = document.getElementById('annotatorEfficiencyChart');
+        if (container) container.style.display = 'none';
         document.getElementById('workerFallback').style.display = 'block';
         var tbody = document.getElementById('workerFallbackBody');
-        var maxCount = Math.max.apply(null, workerData.map(function(d) { return d.count; }));
+        var sorted = (window.annotatorStats || []).slice().sort(function(a, b) {
+          if (window.annotatorSortMode === 'accuracy') {
+            var accA = a.today_accuracy != null ? a.today_accuracy : 100;
+            var accB = b.today_accuracy != null ? b.today_accuracy : 100;
+            return accA - accB;
+          } else {
+            return (b.today_annotated || 0) - (a.today_annotated || 0);
+          }
+        });
+        var maxCount = Math.max.apply(null, sorted.map(function(d) { return d.today_annotated || 0; }));
+        if (maxCount === 0) maxCount = 1;
         var html = '';
-        workerData.forEach(function(d) {
-          html += '<tr>' +
-            '<td>' + d.name + '</td>' +
+        sorted.forEach(function(d) {
+          var name = d.name || d.username || '未知';
+          var count = d.today_annotated || 0;
+          var accuracy = d.today_accuracy;
+          var accColor = accuracy != null && accuracy !== ''
+            ? (accuracy >= 90 ? '#22c55e' : accuracy >= 80 ? '#eab308' : '#ef4444')
+            : '#6b7280';
+          var accText = accuracy != null && accuracy !== '' ? accuracy + '%' : '--';
+          html += '<tr style="cursor:pointer;" onclick="jumpToAnnotator(\'' + encodeURIComponent(name) + '\')">' +
+            '<td>' + name + '</td>' +
             '<td>' +
               '<div class="fallback-bar-wrap">' +
-                '<div class="fallback-bar-track"><div class="fallback-bar-fill" style="width:' + (d.count / maxCount * 100) + '%"></div></div>' +
-                '<span class="fallback-bar-value">' + d.count + '</span>' +
+                '<div class="fallback-bar-track"><div class="fallback-bar-fill" style="width:' + Math.round(count / maxCount * 100) + '%"></div></div>' +
+                '<span class="fallback-bar-value">' + count + '</span>' +
               '</div>' +
             '</td>' +
-            '<td class="font-semibold ' + (d.accuracy >= 97 ? 'text-success' : d.accuracy >= 95 ? 'text-warning' : 'text-danger') + '">' + d.accuracy + '%</td>' +
+            '<td class="font-semibold" style="color:' + accColor + ';">' + accText + '</td>' +
             '</tr>';
         });
         tbody.innerHTML = html;

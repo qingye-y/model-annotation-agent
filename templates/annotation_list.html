@@ -69,6 +69,66 @@
       margin-left: 8px;
     }
 
+    /* 准确率进度条（v3.0） */
+    .accuracy-section {
+      background: var(--white);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow);
+      padding: 16px 20px;
+      margin-bottom: 16px;
+      margin-top: 4px;
+    }
+    .accuracy-bars {
+      display: flex;
+      gap: 40px;
+      flex-wrap: wrap;
+      margin-bottom: 8px;
+    }
+    .accuracy-item {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      min-width: 200px;
+    }
+    .accuracy-label {
+      font-size: 13px;
+      color: var(--text-secondary);
+      display: flex;
+      justify-content: space-between;
+    }
+    .accuracy-label .acc-name { font-weight: 500; }
+    .accuracy-label .acc-num { color: var(--text-primary); font-weight: 700; font-size: 14px; }
+    .accuracy-track {
+      height: 14px;
+      background: #f1f3f4;
+      border-radius: 7px;
+      overflow: hidden;
+      min-width: 160px;
+    }
+    .accuracy-fill {
+      height: 100%;
+      border-radius: 7px;
+      transition: width 0.4s ease;
+    }
+    .accuracy-fill.overall { background: var(--primary); }
+    .accuracy-fill.compliance { background: var(--success); }
+    .accuracy-fill.violation { background: var(--danger); }
+    .accuracy-raw {
+      font-size: 12px;
+      color: var(--text-secondary);
+      border-top: 1px solid var(--border-light);
+      padding-top: 8px;
+      display: flex;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+    .accuracy-raw-item { display: flex; gap: 4px; align-items: center; }
+    .accuracy-raw-item .label { color: var(--text-secondary); }
+    .accuracy-raw-item .val { font-weight: 600; color: var(--text-primary); }
+    .accuracy-raw-item .val.success { color: var(--success); }
+    .accuracy-raw-item .val.danger { color: var(--danger); }
+    .accuracy-raw-item .val.warning { color: var(--warning); }
+
     /* 批量操作按钮 */
     .batch-actions {
       display: flex;
@@ -851,56 +911,449 @@
       box-shadow: 0 4px 12px rgba(231, 76, 60, 0.3);
     }
 
-    /* ====== v2 分组视图 ====== */
-    .breadcrumb { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-secondary); margin-bottom: 12px; }
-    .breadcrumb .btn-back { padding: 4px 10px; font-size: 12px; background: var(--white); border: 1px solid var(--border); border-radius: var(--radius); cursor: pointer; }
-    .breadcrumb .btn-back:hover { border-color: var(--primary); color: var(--primary); }
-    .breadcrumb .sep { color: var(--border); }
-    .group-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; }
-    .group-card { background: var(--white); border-radius: var(--radius-lg); box-shadow: var(--shadow); padding: 14px 16px; cursor: pointer; transition: all 0.2s; border-left: 3px solid var(--primary); }
-    .group-card:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.1); transform: translateY(-1px); }
-    .group-card .gc-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px; }
-    .group-card .gc-rule { font-size: 14px; font-weight: 600; color: var(--text-primary); }
-    .group-card .gc-date { font-size: 12px; color: var(--text-muted); }
-    .group-card .gc-stats { display: flex; gap: 16px; font-size: 13px; }
-    .group-card .gc-stat-pending { color: var(--warning); font-weight: 600; }
-    .group-card .gc-stat-annotated { color: var(--success); }
-    .group-card .gc-stat-total { color: var(--text-secondary); }
-    .group-card .gc-arrow { font-size: 18px; color: var(--primary); }
-    .group-card.pending-heavy { border-left-color: var(--warning); }
-    .group-card.done { border-left-color: var(--success); opacity: 0.75; }
+    /* ========== 标注弹窗 ========== */
+    .annot-popup-overlay {
+      position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0,0,0,0.55); display: flex; align-items: center;
+      justify-content: center; z-index: 5000; opacity: 0; visibility: hidden;
+      transition: opacity 0.25s;
+    }
+    .annot-popup-overlay.active { opacity: 1; visibility: visible; }
+
+    .annot-popup {
+      background: var(--white); border-radius: var(--radius-lg);
+      box-shadow: 0 12px 48px rgba(0,0,0,0.25);
+      width: 95%; max-width: 1180px; height: 90vh;
+      display: flex; flex-direction: column;
+      transform: scale(0.97); transition: transform 0.25s;
+    }
+    .annot-popup-overlay.active .annot-popup { transform: scale(1); }
+
+    .annot-popup-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 14px 20px; border-bottom: 1px solid var(--border-light); flex-shrink: 0;
+    }
+    .annot-popup-title {
+      font-size: 16px; font-weight: 600; color: var(--text-primary);
+    }
+    .annot-popup-close {
+      background: none; border: none; font-size: 24px; color: var(--text-muted);
+      cursor: pointer; padding: 4px 8px; border-radius: var(--radius); line-height: 1;
+    }
+    .annot-popup-close:hover { background: var(--border-light); color: var(--text-primary); }
+
+    .annot-popup-body {
+      flex: 1; display: flex; gap: 20px; padding: 20px; overflow: hidden;
+    }
+
+    /* 左侧：商品信息 */
+    .annot-prod-panel { flex: 0 0 55%; display: flex; flex-direction: column; overflow: hidden; }
+    .annot-prod-title { font-size: 18px; font-weight: 600; margin-bottom: 12px; color: var(--text-primary); }
+    .annot-prod-meta { display: flex; gap: 16px; margin-bottom: 16px; flex-wrap: wrap; }
+    .annot-prod-meta-item { font-size: 13px; color: var(--text-secondary); }
+    .annot-prod-meta-item .value { color: var(--text-primary); font-weight: 500; }
+    .annot-prod-tabs { display: flex; gap: 8px; margin-bottom: 12px; }
+    .annot-prod-tab { padding: 5px 14px; font-size: 12px; background: var(--border-light); border: none; border-radius: var(--radius); cursor: pointer; }
+    .annot-prod-tab.active { background: var(--primary); color: #fff; }
+    .annot-prod-grid { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding-right: 8px; }
+    .annot-prod-grid::-webkit-scrollbar { width: 5px; }
+    .annot-prod-grid::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 3px; }
+    .annot-img-card { cursor: pointer; }
+    .annot-img-card-label { font-size: 11px; color: var(--text-muted); margin-bottom: 4px; }
+    .annot-img-card img { width: 100%; max-width: 380px; border-radius: var(--radius); border: 1px solid var(--border-light); transition: transform 0.2s; }
+    .annot-img-card img:hover { transform: scale(1.01); }
+    .annot-no-img { width: 100%; aspect-ratio: 4/3; display: flex; align-items: center; justify-content: center; background: var(--bg); border-radius: var(--radius); border: 1px dashed var(--border); color: var(--text-muted); font-size: 12px; }
+
+    /* 右侧：审核+标注 */
+    .annot-review-panel { flex: 1; display: flex; flex-direction: column; gap: 12px; overflow-y: auto; }
+    .annot-review-card { background: #fafbfc; border-radius: var(--radius-lg); padding: 14px; border: 1px solid var(--border-light); }
+    .annot-review-card-title { font-size: 13px; font-weight: 600; color: var(--text-primary); margin-bottom: 10px; padding-bottom: 8px; border-bottom: 1px solid var(--border-light); display: flex; align-items: center; gap: 6px; }
+    .annot-review-row { font-size: 12px; margin-bottom: 6px; }
+    .annot-review-row .label { color: var(--text-secondary); margin-right: 6px; }
+    .annot-review-row .value { color: var(--text-primary); font-weight: 500; }
+    .annot-review-row .value.ai-pass { color: var(--success); }
+    .annot-review-row .value.ai-fail { color: var(--danger); }
+    .annot-review-row .value.ai-pending { color: var(--warning); }
+
+    .annot-model-b-toggle { display: flex; align-items: center; justify-content: space-between; cursor: pointer; font-size: 13px; font-weight: 600; padding-bottom: 8px; border-bottom: 1px solid var(--border-light); margin-bottom: 10px; color: var(--text-primary); }
+    .annot-model-b-toggle:hover { color: var(--primary); }
+    .annot-model-b-content { display: block; }
+    .annot-model-badge { font-size: 10px; padding: 2px 7px; border-radius: 10px; font-weight: 500; }
+    .annot-model-badge.model-a { background: var(--primary-light); color: var(--primary); }
+    .annot-model-badge.model-b { background: var(--warning-light); color: var(--warning-dark); }
+
+    /* 标注区 */
+    .annot-action-panel { background: var(--white); border-radius: var(--radius-lg); border: 1px solid var(--border); padding: 16px; }
+    .annot-action-status { padding: 8px 14px; border-radius: var(--radius); font-size: 13px; font-weight: 500; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
+    .annot-action-status.pending { background: var(--bg); color: var(--text-secondary); border: 1px dashed var(--border); }
+    .annot-action-status.done-correct { background: var(--success-light); color: var(--success-dark); border: 1px solid var(--success); }
+    .annot-action-status.done-error { background: var(--danger-light); color: var(--danger-dark); border: 1px solid var(--danger); }
+    .annot-action-status.done-ignore { background: var(--warning-light); color: var(--warning-dark); border: 1px solid var(--warning); }
+    .annot-action-buttons { display: flex; gap: 12px; margin-bottom: 14px; }
+    .annot-btn { flex: 1; padding: 11px 16px; font-size: 14px; font-weight: 600; border: 2px solid transparent; border-radius: var(--radius); cursor: pointer; transition: all 0.2s; display: flex; align-items: center; justify-content: center; gap: 6px; }
+    .annot-btn.correct { background: var(--white); border-color: var(--success); color: var(--success); }
+    .annot-btn.correct.active, .annot-btn.correct:hover { background: var(--success); color: #fff; }
+    .annot-btn.error { background: var(--white); border-color: var(--danger); color: var(--danger); }
+    .annot-btn.error.active, .annot-btn.error:hover { background: var(--danger); color: #fff; }
+    .annot-btn.ignore { background: var(--white); border-color: var(--warning); color: var(--warning); }
+    .annot-btn.ignore.active, .annot-btn.ignore:hover { background: var(--warning); color: #fff; }
+    .annot-inputs { display: none; gap: 12px; padding: 12px; background: #fafbfc; border-radius: var(--radius); margin-bottom: 14px; }
+    .annot-inputs.show { display: flex; }
+    .annot-inputs .form-group { flex: 1; }
+    .annot-inputs label { display: block; font-size: 12px; color: var(--text-secondary); margin-bottom: 4px; }
+    .annot-inputs select, .annot-inputs input { width: 100%; padding: 7px 10px; font-size: 13px; border: 1px solid var(--border); border-radius: var(--radius); }
+    .annot-inputs select:focus, .annot-inputs input:focus { outline: none; border-color: var(--primary); }
+    .annot-shortcut { margin-top: 10px; padding: 8px 12px; background: var(--bg); border-radius: var(--radius); font-size: 11px; color: var(--text-muted); border: 1px solid var(--border-light); }
+    .annot-shortcut kbd { display: inline-block; padding: 1px 5px; background: var(--white); border: 1px solid var(--border); border-radius: 3px; font-family: monospace; font-size: 11px; color: var(--text-primary); margin: 0 2px; }
+
+    /* 弹窗底部导航 */
+    .annot-popup-footer { display: flex; align-items: center; justify-content: center; gap: 24px; padding: 12px 20px; border-top: 1px solid var(--border-light); background: #fafbfc; flex-shrink: 0; }
+    .annot-nav-btn { padding: 9px 18px; font-size: 13px; font-weight: 500; border: 1px solid var(--border); border-radius: var(--radius); background: var(--white); color: var(--text-primary); cursor: pointer; display: flex; align-items: center; gap: 6px; }
+    .annot-nav-btn:hover:not(:disabled) { background: var(--primary); border-color: var(--primary); color: #fff; }
+    .annot-nav-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+    .annot-nav-btn.primary { background: var(--primary); border-color: var(--primary); color: #fff; }
+    .annot-nav-btn.primary:hover:not(:disabled) { background: #3b82f6; }
+    .annot-nav-info { font-size: 14px; font-weight: 500; min-width: 60px; text-align: center; }
+
+    /* 图片预览 */
+    .annot-preview-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.88); z-index: 6000; align-items: center; justify-content: center; flex-direction: column; }
+    .annot-preview-overlay.active { display: flex; }
+    .annot-preview-img { max-width: 90vw; max-height: 80vh; object-fit: contain; border-radius: 4px; }
+    .annot-preview-close { position: absolute; top: 20px; right: 24px; font-size: 26px; color: rgba(255,255,255,0.8); background: none; border: none; cursor: pointer; padding: 8px; }
+    .annot-preview-close:hover { color: #fff; }
+    .annot-preview-nav-btn { position: absolute; top: 50%; transform: translateY(-50%); background: rgba(255,255,255,0.15); border: none; color: #fff; font-size: 30px; cursor: pointer; padding: 14px 10px; transition: background 0.2s; }
+    .annot-preview-nav-btn:hover { background: rgba(255,255,255,0.3); }
+    .annot-preview-nav-btn.prev { left: 20px; }
+    .annot-preview-nav-btn.next { right: 20px; }
+    .annot-preview-counter { color: rgba(255,255,255,0.7); font-size: 13px; margin-top: 10px; }
+
+    /* ========== 任务列表视图（v2.0） ========== */
+    .task-group-view { display: none; }
+    .task-group-view.active { display: block; }
+
+    /* 任务表格 */
+    .task-group-table { width: 100%; border-collapse: collapse; font-size: 13px; background: var(--white); border-radius: var(--radius-lg); box-shadow: var(--shadow); overflow: hidden; }
+    .task-group-table thead th {
+      background: #fafbfc; color: var(--text-secondary); font-weight: 500;
+      text-align: left; padding: 11px 12px; border-bottom: 1px solid var(--border);
+      white-space: nowrap; font-size: 12px;
+    }
+    .task-group-table tbody td {
+      padding: 11px 12px; border-bottom: 1px solid var(--border-light);
+      color: var(--text-primary); vertical-align: middle;
+    }
+    .task-group-table tbody tr:hover { background: #f8f9ff; cursor: pointer; }
+    .task-group-table tbody tr:last-child td { border-bottom: none; }
+
+    /* 任务编码 */
+    .task-code {
+      font-family: 'Courier New', monospace; font-size: 12px; font-weight: 600;
+      color: var(--primary); cursor: pointer; padding: 2px 8px;
+      background: var(--primary-light); border-radius: var(--radius); white-space: nowrap;
+    }
+    .task-code:hover { background: #dbeafe; }
+
+    /* 进度条单元格 */
+    .progress-cell { min-width: 100px; }
+    .progress-bar-wrap { display: flex; align-items: center; gap: 8px; }
+    .progress-bar-bg { flex: 1; height: 8px; background: #f1f3f4; border-radius: 4px; overflow: hidden; }
+    .progress-bar-fill { height: 100%; border-radius: 4px; background: var(--primary); transition: width 0.4s ease; }
+    .progress-bar-fill.full { background: var(--success); }
+    .progress-pct { font-size: 12px; color: var(--text-secondary); min-width: 36px; text-align: right; }
+
+    /* 统计数字 */
+    .stat-num { font-weight: 600; font-size: 13px; }
+    .stat-num.pending { color: var(--danger); }
+    .stat-num.done { color: var(--success); }
+    .stat-num.correct { color: var(--success); font-size: 12px; }
+    .stat-num.error { color: var(--danger); font-size: 12px; }
+    .stat-num.ignore { color: var(--warning); font-size: 12px; }
+
+    /* 操作按钮 */
+    .btn-enter-annot {
+      padding: 6px 14px; font-size: 12px; background: var(--primary); color: #fff;
+      border: none; border-radius: var(--radius); cursor: pointer; font-weight: 500;
+      transition: background 0.2s; white-space: nowrap;
+    }
+    .btn-enter-annot:hover { background: #3b82f6; }
+    .btn-enter-annot.all-done {
+      background: var(--success); cursor: default;
+    }
+    .btn-enter-annot.all-done:hover { background: var(--success); }
+
+    /* 视图切换动画 */
+    .view-section { display: none; }
+    .view-section.active { display: block; }
+
+    /* 详情页顶部导航栏 */
+    .detail-header-bar {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 0;
+      margin-bottom: 12px;
+      border-bottom: 1px solid var(--border-light);
+    }
+    .detail-header-title {
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+
+    /* ========== 任务统计摘要（v2.0） ========== */
+    .stats-summary {
+      display: flex;
+      gap: 0;
+      background: var(--white);
+      border: 1px solid var(--border-light);
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+      box-shadow: var(--shadow-sm);
+    }
+    .stat-item {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 14px 12px;
+      gap: 4px;
+      border-right: 1px solid var(--border-light);
+    }
+    .stat-item:last-child { border-right: none; }
+    .stat-label {
+      font-size: 12px;
+      color: var(--text-secondary, #6b7280);
+      font-weight: 500;
+    }
+    .stat-value {
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--text-primary, #111827);
+    }
+    .stat-value.stat-pending { color: var(--danger, #ef4444); }
+    .stat-value.stat-done { color: var(--success, #10b981); }
+    .stat-value.stat-correct { color: var(--success, #10b981); }
+    .stat-value.stat-error { color: var(--danger, #ef4444); }
+    .stat-value.stat-ignore { color: var(--warning, #f59e0b); }
+
+    /* ========== 任务列表分页（v2.0） ========== */
+    .pg-btn {
+      padding: 5px 14px; font-size: 13px; border: 1px solid var(--border); border-radius: var(--radius);
+      background: var(--white); color: var(--text-primary); cursor: pointer; transition: all 0.2s;
+    }
+    .pg-btn:hover:not(:disabled) { background: var(--primary); border-color: var(--primary); color: #fff; }
+    .pg-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+    .pg-info { font-size: 13px; color: var(--text-secondary); padding: 0 12px; }
+
   </style>
 </head>
 <body>
   <!-- 任务保存提示 -->
   <div class="task-toast" id="taskToast">任务进度已保存</div>
 
+  <!-- ========== 标注弹窗 ========== -->
+  <div class="annot-popup-overlay" id="annotPopupOverlay" onclick="if(event.target===this)closeAnnotationPopup()">
+    <div class="annot-popup" onclick="event.stopPropagation()">
+
+      <!-- 头部 -->
+      <div class="annot-popup-header">
+        <div class="annot-popup-title" id="annotPopupTitle">标注任务</div>
+        <button class="annot-popup-close" onclick="closeAnnotationPopup()">×</button>
+      </div>
+
+      <!-- 主体 -->
+      <div class="annot-popup-body">
+
+        <!-- 左侧：商品信息 + 图片 -->
+        <div class="annot-prod-panel">
+          <div class="annot-prod-title" id="annotProdTitle">-</div>
+          <div class="annot-prod-meta">
+            <span class="annot-prod-meta-item">类目：<span class="value" id="annotCategory">-</span></span>
+            <span class="annot-prod-meta-item">店铺：<span class="value" id="annotShop">-</span></span>
+            <span class="annot-prod-meta-item">商品ID：<span class="value" id="annotProductId">-</span></span>
+            <span class="annot-prod-meta-item">批次：<span class="value" id="annotBatchNo">-</span></span>
+            <span class="annot-prod-meta-item">标注人：<span class="value" id="annotAnnotator">-</span></span>
+          </div>
+          <div class="annot-prod-tabs">
+            <button class="annot-prod-tab active" id="annotTabMain" onclick="switchAnnotTab('main')">主图</button>
+            <button class="annot-prod-tab" id="annotTabSku" onclick="switchAnnotTab('sku')">SKU图</button>
+            <button class="annot-prod-tab" id="annotTabDetail" onclick="switchAnnotTab('detail')">详情图</button>
+          </div>
+          <div class="annot-prod-grid" id="annotImageGrid"></div>
+        </div>
+
+        <!-- 右侧：审核结果 + 标注操作 -->
+        <div class="annot-review-panel">
+
+          <!-- 模型A结果 -->
+          <div class="annot-review-card">
+            <div class="annot-review-card-title">
+              <span class="annot-model-badge model-a">模型A</span> AI审核结果
+            </div>
+            <div class="annot-review-row">
+              <span class="label">AI判断：</span>
+              <span class="value" id="annotAiResult">-</span>
+            </div>
+            <div class="annot-review-row">
+              <span class="label">AI拒绝原因：</span>
+              <span class="value" id="annotAiReject">-</span>
+            </div>
+          </div>
+
+          <!-- 模型B结果（可折叠） -->
+          <div class="annot-review-card">
+            <div class="annot-model-b-toggle" onclick="toggleAnnotModelB()">
+              <span><span class="annot-model-badge model-b">模型B</span> 交叉验证结果</span>
+              <span id="annotModelBArrow">▼</span>
+            </div>
+            <div class="annot-model-b-content" id="annotModelBContent">
+              <div class="annot-review-row">
+                <span class="label">模型B判断：</span>
+                <span class="value" id="annotModelBResult">-</span>
+              </div>
+              <div class="annot-review-row">
+                <span class="label">模型B原因：</span>
+                <span class="value" id="annotModelBReason">-</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- 标注操作 -->
+          <div class="annot-action-panel">
+            <!-- 已标注状态 -->
+            <div class="annot-action-status" id="annotStatusBar">
+              <span id="annotStatusIcon">○</span>
+              <span id="annotStatusText">待标注</span>
+              <span id="annotStatusTag" style="margin-left:auto;font-size:11px;"></span>
+            </div>
+            <!-- 标注按钮 -->
+            <div class="annot-action-buttons">
+              <button class="annot-btn correct" id="annotBtnCorrect" onclick="annotSelectType('correct')">✓ 正确</button>
+              <button class="annot-btn error" id="annotBtnError" onclick="annotSelectType('error')">✗ 错误</button>
+              <button class="annot-btn ignore" id="annotBtnIgnore" onclick="annotSelectType('ignore')">⊘ 忽略</button>
+            </div>
+            <!-- 错误标签（error 时显示） -->
+            <div class="annot-inputs" id="annotInputs">
+              <div class="form-group">
+                <label>错误标签 <span style="color:var(--danger)">*</span></label>
+                <select class="form-select" id="annotInputNote"><option value="">请选择</option></select>
+              </div>
+              <div class="form-group">
+                <label>补充说明</label>
+                <input type="text" id="annotInputComment" class="form-input" placeholder="选填">
+              </div>
+            </div>
+            <!-- 快捷键提示 -->
+            <div class="annot-shortcut">
+              <kbd>←</kbd><kbd>→</kbd> 切换商品 &nbsp;|&nbsp;
+              <kbd>1</kbd> 正确 &nbsp;<kbd>2</kbd> 错误 &nbsp;<kbd>3</kbd> 忽略 &nbsp;|&nbsp;
+              <kbd>Enter</kbd> 提交并下一条 &nbsp;|&nbsp;
+              <kbd>Esc</kbd> 关闭
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 底部导航 -->
+      <div class="annot-popup-footer">
+        <button class="annot-nav-btn" id="annotPrevBtn" onclick="annotPrevRecord()">← 上一条</button>
+        <span class="annot-nav-info" id="annotNavInfo">- / -</span>
+        <button class="annot-nav-btn primary" id="annotNextBtn" onclick="annotNextRecord()">下一条 →</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 图片预览 -->
+  <div class="annot-preview-overlay" id="annotPreviewOverlay" onclick="closeAnnotImagePreview()">
+    <button class="annot-preview-close" onclick="closeAnnotImagePreview()">×</button>
+    <button class="annot-preview-nav-btn prev" id="annotPreviewPrev" onclick="annotPrevImage()">‹</button>
+    <img class="annot-preview-img" id="annotPreviewImg" src="" alt="">
+    <button class="annot-preview-nav-btn next" id="annotPreviewNext" onclick="annotNextImage()">›</button>
+    <div class="annot-preview-counter" id="annotPreviewCounter">- / -</div>
+  </div>
+
   <div class="annotation-page">
     <!-- 页面标题 -->
     <div class="page-header">
-      <div class="page-title">✏️ 标注任务</div>
+      <div style="display:flex;align-items:center;gap:10px;">
+        <button id="backToDispatchBtn" onclick="backToDispatchCenter()" style="display:none;cursor:pointer;background:#eff6ff;border:1px solid #bfdbfe;color:#2563eb;padding:5px 14px;border-radius:20px;font-size:13px;font-weight:500;transition:all 0.2s;">
+          ← 返回调度中心
+        </button>
+        <div class="page-title">✏️ 标注任务</div>
+        <span id="batchNoTag" style="font-size:12px;background:#eff6ff;color:#2563eb;padding:2px 10px;border-radius:10px;font-weight:500;display:none;"></span>
+      </div>
       <span class="text-sm text-secondary" id="pageUpdateTime">数据更新时间：加载中...</span>
     </div>
 
-    <!-- v2 面包屑导航 -->
-    <div class="breadcrumb" id="breadcrumbNav" style="display:none;">
-      <button class="btn-back" onclick="backToGroups()">← 返回任务列表</button>
-      <span class="sep">|</span>
-      <span id="breadcrumbTitle" style="font-weight:500;color:var(--text-primary);"></span>
-    </div>
-
-    <!-- v2 第一层：任务分组列表 -->
-    <div id="viewGroups">
-      <div class="stats-summary" id="groupStats">
-        <span style="font-size:13px;color:var(--text-secondary);">加载中...</span>
+    <!-- ========== 视图一：任务列表（v2.0 新增） ========== -->
+    <div class="task-group-view active" id="taskGroupView">
+      <!-- 任务筛选栏 -->
+      <div class="filter-bar" id="taskGroupFilterBar">
+        <div class="filter-item">
+          <label>审核规则：</label>
+          <select class="form-select" id="tgFilterRule" onchange="handleTaskGroupFilter()">
+            <option value="">全部</option>
+          </select>
+        </div>
+        <div class="filter-item">
+          <label>实例：</label>
+          <select class="form-select" id="tgFilterInstance" onchange="handleTaskGroupFilter()">
+            <option value="">全部</option>
+          </select>
+        </div>
+        <div class="filter-item">
+          <button class="btn btn-primary btn-sm" onclick="loadTaskGroups()">刷新</button>
+        </div>
       </div>
-      <div class="group-grid" id="groupGrid"></div>
+
+      <!-- 任务统计摘要（简化版） -->
+      <div class="stats-summary" id="tgStatsSummary" style="margin-bottom:12px;">
+        <div class="stat-item"><span class="stat-label">任务分组</span><span class="stat-value">-</span></div>
+        <div class="stat-item"><span class="stat-label">总条数</span><span class="stat-value">-</span></div>
+        <div class="stat-item"><span class="stat-label">待标注</span><span class="stat-value stat-pending">-</span></div>
+        <div class="stat-item"><span class="stat-label">已标注</span><span class="stat-value stat-done">-</span></div>
+      </div>
+
+      <!-- 任务列表表格 -->
+      <table class="task-group-table" id="taskGroupTable">
+        <thead>
+          <tr>
+            <th>批次号</th>
+            <th>审核规则</th>
+            <th>任务日期</th>
+            <th>总条数</th>
+            <th>待标注</th>
+            <th>已标注</th>
+            <th>正确</th>
+            <th>错误</th>
+            <th>忽略</th>
+            <th style="min-width:110px;">进度</th>
+            <th>操作</th>
+          </tr>
+        </thead>
+        <tbody id="taskGroupBody">
+          <tr><td colspan="11" style="text-align:center;padding:32px;color:var(--text-muted);">加载中...</td></tr>
+        </tbody>
+      </table>
+
+      <!-- 任务列表分页 -->
+      <div class="pagination" id="taskGroupPagination">
+        <div class="pagination-right" id="tgPaginationRight"></div>
+        <div class="pagination-center" id="tgPaginationCenter"></div>
+      </div>
     </div>
 
-    <!-- v2 第二层：商品明细（原内容包裹） -->
-    <div id="viewDetail" style="display:none;">
+    <!-- ========== 视图二：商品明细（现有逻辑） ========== -->
+    <div class="view-section" id="detailSection">
+      <!-- 详情页顶部导航栏 -->
+      <div class="detail-header-bar">
+        <button class="btn btn-default btn-sm" onclick="switchToTaskGroupView()" style="display:inline-flex;align-items:center;gap:6px;">
+          ← 返回标注列表
+        </button>
+        <span class="detail-header-title">标注详情</span>
+      </div>
 
-    <!-- 筛选栏 -->
+      <!-- 筛选栏 -->
     <div class="filter-bar">
       <div class="filter-item">
         <label>AI审核结果：</label>
@@ -939,6 +1392,12 @@
         </select>
       </div>
       <div class="filter-item">
+        <label>标注人：</label>
+        <select class="form-select" id="filterAnnotator">
+          <option value="">全部</option>
+        </select>
+      </div>
+      <div class="filter-item">
         <label>类目：</label>
         <select class="form-select" id="filterCategory">
           <option value="">全部</option>
@@ -952,40 +1411,45 @@
       </div>
     </div>
 
-    <!-- 统计摘要栏 -->
-    <div class="stats-summary">
-      <div class="stats-group">
-        <div class="stats-item">
-          <span class="num">标注总数</span>：
-          <span class="label num" id="statAnnotationTotal">-</span>
+    <!-- 准确率进度条（v3.0：独立区块） -->
+    <div class="accuracy-section" id="detailStats">
+      <div class="accuracy-bars">
+        <div class="accuracy-item">
+          <div class="accuracy-label">
+            <span class="acc-name">整体准确率</span>
+            <span class="acc-num" id="accOverallNum">-</span>
+          </div>
+          <div class="accuracy-track">
+            <div class="accuracy-fill overall" id="accOverallBar" style="width:0%"></div>
+          </div>
         </div>
-        <span class="divider">|</span>
-        <div class="stats-item">
-          <span class="label">待标注</span>：
-          <span class="num" id="statPending">-</span>
+        <div class="accuracy-item">
+          <div class="accuracy-label">
+            <span class="acc-name">合规数据准确率</span>
+            <span class="acc-num" id="accComplianceNum">-</span>
+          </div>
+          <div class="accuracy-track">
+            <div class="accuracy-fill compliance" id="accComplianceBar" style="width:0%"></div>
+          </div>
         </div>
-        <span class="divider">|</span>
-        <div class="stats-item">
-          <span class="label">已标注</span>：
-          <span class="num" id="statAnnotated">-</span>
-        </div>
-        <span class="divider">|</span>
-        <div class="stats-item">
-          <span class="label">正确</span>：
-          <span class="num" id="statCorrect">-</span>
-        </div>
-        <span class="divider">|</span>
-        <div class="stats-item">
-          <span class="label">错误</span>：
-          <span class="num" id="statError">-</span>
-        </div>
-        <span class="divider">|</span>
-        <div class="stats-item">
-          <span class="label">忽略</span>：
-          <span class="num" id="statIgnore">-</span>
+        <div class="accuracy-item">
+          <div class="accuracy-label">
+            <span class="acc-name">违规数据准确率</span>
+            <span class="acc-num" id="accViolationNum">-</span>
+          </div>
+          <div class="accuracy-track">
+            <div class="accuracy-fill violation" id="accViolationBar" style="width:0%"></div>
+          </div>
         </div>
       </div>
-      <button class="btn btn-default" onclick="exportAnnotation()">导出标注</button>
+      <div class="accuracy-raw" id="accuracyRaw">
+        <span class="accuracy-raw-item"><span class="label">总数</span><span class="val" id="rawTotal">-</span></span>
+        <span class="accuracy-raw-item"><span class="label">待标注</span><span class="val warning" id="rawPending">-</span></span>
+        <span class="accuracy-raw-item"><span class="label">已标</span><span class="val" id="rawAnnotated">-</span></span>
+        <span class="accuracy-raw-item"><span class="label">正确</span><span class="val success" id="rawCorrect">-</span></span>
+        <span class="accuracy-raw-item"><span class="label">错误</span><span class="val danger" id="rawError">-</span></span>
+        <span class="accuracy-raw-item"><span class="label">忽略</span><span class="val" id="rawIgnore">-</span></span>
+      </div>
     </div>
 
     <!-- 批量操作按钮 -->
@@ -1028,111 +1492,8 @@
       <div class="pagination-center" id="paginationCenter"></div>
       <div class="pagination-right" id="paginationRight"></div>
     </div>
-  </div>
+    </div><!-- end #detailSection -->
 
-  <!-- 标注详情弹窗 -->
-  <div class="detail-modal-overlay" id="detailModal">
-    <div class="detail-modal">
-      <div class="detail-modal-header">
-        <span class="detail-modal-title">标注详情</span>
-        <button class="detail-modal-close" onclick="closeDetailModal()">&times;</button>
-      </div>
-      <div class="detail-modal-body">
-        <!-- 左侧商品信息 -->
-        <div class="product-info">
-          <div class="product-title" id="modalProductTitle">商品名称</div>
-          <div class="product-meta">
-            <div class="product-meta-item">类目：<span class="value" id="modalCategory">-</span></div>
-            <div class="product-meta-item">店铺：<span class="value" id="modalShop">-</span></div>
-            <div class="product-meta-item">商品ID：<span class="value" id="modalProductId">-</span></div>
-            <div class="product-meta-item"><a href="#" target="_blank" id="modalProductLink">商品链接</a></div>
-          </div>
-          <div class="image-compact" id="imageGrid">
-          </div>
-        </div>
-        <!-- 右侧审核区 -->
-        <div class="review-panel">
-          <div class="review-card">
-            <div class="review-card-title">模型A审核结果</div>
-            <div class="review-item">
-              <span class="label">AI审核结果：</span>
-              <span class="value" id="modalAiResult">-</span>
-            </div>
-            <div class="review-item">
-              <span class="label">AI拒绝原因：</span>
-              <span class="value" id="modalAiRejectReason">-</span>
-            </div>
-          </div>
-          <div class="review-card">
-            <div class="collapse-toggle" onclick="toggleCollapse(this)">
-              <span>模型B审核结果</span>
-              <span>▼</span>
-            </div>
-            <div class="collapse-content" id="modelBContent">
-              <div class="review-item">
-                <span class="label">模型B结果：</span>
-                <span class="value" id="modalModelBResult">-</span>
-              </div>
-              <div class="review-item">
-                <span class="label">模型B拒绝原因：</span>
-                <span class="value" id="modalModelBRejectReason">-</span>
-              </div>
-            </div>
-          </div>
-          <div class="annotation-actions">
-            <div class="annotation-buttons">
-              <button class="annotation-btn correct" id="btnCorrect" onclick="selectAnnotation('correct')">✓ 正确</button>
-              <button class="annotation-btn error" id="btnError" onclick="selectAnnotation('error')">✗ 错误</button>
-              <button class="annotation-btn ignore" id="btnIgnore" onclick="selectAnnotation('ignore')">⊘ 忽略</button>
-            </div>
-            <div class="annotation-inputs" id="annotationInputs">
-              <div class="form-group">
-                <label>标注备注<span style="color:var(--danger)">*</span></label>
-                <select id="inputNote">
-                  <option value="">请选择</option>
-                </select>
-              </div>
-              <div class="form-group">
-                <label>补充说明</label>
-                <input type="text" id="inputComment" placeholder="选填">
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-      <div class="detail-modal-footer">
-        <button class="back-to-list-btn" onclick="closeDetailModal()">返回列表</button>
-        <button class="detail-nav-btn" id="prevBtn" onclick="prevRecord()">← 上一条</button>
-        <span class="detail-progress" id="progressInfo">1 / 20</span>
-        <button class="detail-nav-btn" id="nextBtn" onclick="nextRecord()">下一条 →</button>
-      </div>
-    </div>
-  </div>
-  </div>
-
-  <!-- v2 关闭 viewDetail -->
-  </div>
-
-  <!-- 图片预览弹窗 -->
-  <div class="image-preview-overlay" id="imagePreview">
-    <button class="preview-close" onclick="closeImagePreview()">&times;</button>
-    <button class="preview-nav preview-prev" onclick="prevImage()">‹</button>
-    <img id="previewImg" src="" alt="">
-    <button class="preview-nav preview-next" onclick="nextImage()">›</button>
-    <span class="preview-counter" id="previewCounter">1 / 4</span>
-  </div>
-
-  <!-- 提交确认弹窗 -->
-  <div class="confirm-overlay" id="confirmOverlay">
-    <div class="confirm-dialog">
-      <div class="confirm-title">确认提交</div>
-      <div class="confirm-message">确认提交此任务？提交后将不可再修改标注。</div>
-      <div class="confirm-buttons">
-        <button class="btn btn-default" onclick="closeConfirm()">取消</button>
-        <button class="btn btn-primary" onclick="confirmSubmit()">确定</button>
-      </div>
-    </div>
-  </div>
 
   <script>
     // =====================================================================
@@ -1155,6 +1516,14 @@
     let pendingSubmitIndex = null;
     let batchPendingIndexes = [];
     let isLoading = false;
+
+    // ========== 标注弹窗状态 ==========
+    let annotAllItems = [];          // 弹窗内全量筛选列表（用于 prev/next 导航）
+    let annotCurrentIdx = 0;        // 弹窗内当前索引
+    let annotSelectedType = '';     // 'correct' | 'error' | 'ignore'
+    let annotImageList = [];        // 当前商品图片列表 [{src, label}]
+    let annotImgIdx = 0;           // 预览图片索引
+    let annotIsSubmitting = false;  // 防重复提交
 
     // =====================================================================
     // 工具函数
@@ -1184,19 +1553,49 @@
     }
 
     /** 更新统计摘要栏 */
+    /** v3.0：统计3个准确率（整体/合规/违规），并渲染进度条 */
     function updateStats() {
-      const pending = filteredData.filter(t => !t.check_result);
+      const total = filteredData.length;
       const annotated = filteredData.filter(t => t.check_result);
-      document.getElementById('statAnnotationTotal').textContent = filteredData.length.toLocaleString();
-      document.getElementById('statPending').textContent = pending.length.toLocaleString();
-      document.getElementById('statAnnotated').textContent = annotated.length.toLocaleString();
-      // 标注状态细分
-      const correct = filteredData.filter(t => t.check_result === 'correct').length;
-      const error   = filteredData.filter(t => t.check_result === 'error').length;
-      const ignore  = filteredData.filter(t => t.check_result === 'ignore').length;
-      document.getElementById('statCorrect').textContent = correct.toLocaleString();
-      document.getElementById('statError').textContent   = error.toLocaleString();
-      document.getElementById('statIgnore').textContent  = ignore.toLocaleString();
+
+      // 整体准确率：正确/(正确+错误)，忽略不计入
+      const correct = annotated.filter(t => t.check_result === 'correct').length;
+      const error   = annotated.filter(t => t.check_result === 'error').length;
+      const ignore  = annotated.filter(t => t.check_result === 'ignore').length;
+      const overallRate = (correct + error) > 0 ? (correct / (correct + error) * 100) : 0;
+
+      // AI审核结果分组（基于 ai_result 字段）
+      const aiPassItems = filteredData.filter(t => t.ai_result === '合规' || t.ai_result === 'pass');
+      const aiFailItems = filteredData.filter(t => t.ai_result === '违规' || t.ai_result === 'fail');
+
+      // 合规数据准确率：AI判断为合规中，标注为correct的比例
+      const compCorrect = aiPassItems.filter(t => t.check_result === 'correct').length;
+      const compError   = aiPassItems.filter(t => t.check_result === 'error').length;
+      const compRate    = (compCorrect + compError) > 0 ? (compCorrect / (compCorrect + compError) * 100) : 0;
+
+      // 违规数据准确率：AI判断为违规中，标注为error的比例
+      const violCorrect = aiFailItems.filter(t => t.check_result === 'correct').length;
+      const violError   = aiFailItems.filter(t => t.check_result === 'error').length;
+      const violRate    = (violCorrect + violError) > 0 ? (violError / (violCorrect + violError) * 100) : 0;
+
+      // 渲染进度条
+      document.getElementById('accOverallNum').textContent = total > 0 ? overallRate.toFixed(1) + '%' : '-';
+      document.getElementById('accOverallBar').style.width = overallRate.toFixed(1) + '%';
+
+      document.getElementById('accComplianceNum').textContent = aiPassItems.length > 0 ? compRate.toFixed(1) + '%' : '-';
+      document.getElementById('accComplianceBar').style.width = compRate.toFixed(1) + '%';
+
+      document.getElementById('accViolationNum').textContent = aiFailItems.length > 0 ? violRate.toFixed(1) + '%' : '-';
+      document.getElementById('accViolationBar').style.width = violRate.toFixed(1) + '%';
+
+      // 原始计数（辅助信息）
+      const pending = filteredData.filter(t => !t.check_result).length;
+      document.getElementById('rawTotal').textContent = total;
+      document.getElementById('rawPending').textContent = pending;
+      document.getElementById('rawAnnotated').textContent = annotated.length;
+      document.getElementById('rawCorrect').textContent = correct;
+      document.getElementById('rawError').textContent = error;
+      document.getElementById('rawIgnore').textContent = ignore;
     }
 
     // =====================================================================
@@ -1226,15 +1625,10 @@
           // 提取去重规则和实例
           extractFilterOptions();
 
-          if (currentGroupKey) {
-            // 在明细视图中，重新筛选当前组
-            filteredData = [...apiData]; // fallback
-            renderTable();
-            updateStats();
-          } else {
-            // 默认显示分组视图
-            renderGroupView();
-          }
+          // 默认显示表格视图
+          filteredData = [...apiData];
+          renderTable();
+          updateStats();
           document.getElementById('pageUpdateTime').textContent =
             '数据更新时间：' + new Date().toLocaleString('zh-CN');
         })
@@ -1265,108 +1659,16 @@
       });
     }
 
-    // =====================================================================
-    // v2 分组视图逻辑
-    // =====================================================================
-
-    let currentGroupKey = null;  // 当前选中的分组键 "rule_name||data_date"
-
-    /** 将 apiData 按 规则+数据日期 聚合为分组 */
-    function aggregateGroups() {
-      const groups = {};
-      apiData.forEach(t => {
-        const rule = t.rule_name || '未分类';
-        const date = (t.data_date || '未知日期').replace(/[\/-]/g, '/').slice(0, 10);
-        const key = rule + '||' + date;
-        if (!groups[key]) {
-          groups[key] = { rule_name: rule, data_date: date, total: 0, pending: 0, annotated: 0, correct: 0, error: 0, ignore: 0, items: [] };
-        }
-        groups[key].total++;
-        groups[key].items.push(t);
-        if (!t.check_result) groups[key].pending++;
-        else {
-          groups[key].annotated++;
-          if (t.check_result === 'correct') groups[key].correct++;
-          else if (t.check_result === 'error') groups[key].error++;
-          else groups[key].ignore++;
-        }
+    /** 从当前 URL 提取上下文参数，透传到详情页 */
+    function getContextParams() {
+      var params = [];
+      var urlParams = new URLSearchParams(window.location.search);
+      var keys = ['batch_no', 'rule_name', 'status', 'instance', 'page'];
+      keys.forEach(function(k) {
+        var v = urlParams.get(k);
+        if (v) params.push(k + '=' + encodeURIComponent(v));
       });
-      return Object.values(groups).sort((a, b) => b.total - a.total);
-    }
-
-    /** 渲染分组视图 */
-    function renderGroupView() {
-      showView('groups');
-      document.getElementById('breadcrumbNav').style.display = 'none';
-
-      const groups = aggregateGroups();
-      const grid = document.getElementById('groupGrid');
-      const statArea = document.getElementById('groupStats');
-
-      const totalPending = groups.reduce((s, g) => s + g.pending, 0);
-      const totalAnnotated = groups.reduce((s, g) => s + g.annotated, 0);
-      statArea.innerHTML = '<div class="stats-group"><div class="stats-item"><span class="label">分组数：</span><span class="num">' + groups.length + '</span></div><div class="stats-item"><span class="divider">|</span><span class="label">待标注：</span><span class="num" style="color:var(--warning);">' + totalPending + '</span></div><div class="stats-item"><span class="divider">|</span><span class="label">已标注：</span><span class="num" style="color:var(--success);">' + totalAnnotated + '</span></div></div>';
-
-      if (groups.length === 0) {
-        grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--text-muted);">暂无标注任务</div>';
-        return;
-      }
-
-      let html = '';
-      groups.forEach(g => {
-        const key = encodeURIComponent(g.rule_name + '||' + g.data_date);
-        const cls = g.pending === 0 ? 'done' : (g.pending > g.annotated ? 'pending-heavy' : '');
-        html += '<div class="group-card ' + cls + '" onclick="enterGroup(\'' + key + '\')">';
-        html += '<div class="gc-header">';
-        html += '<div><div class="gc-rule">' + g.rule_name + '</div><div class="gc-date">📅 ' + g.data_date + '</div></div>';
-        html += '<div class="gc-arrow">▶</div>';
-        html += '</div>';
-        html += '<div class="gc-stats">';
-        html += '<span class="gc-stat-pending">⏳ ' + g.pending + ' 待标注</span>';
-        html += '<span class="gc-stat-annotated">✅ ' + g.annotated + ' 已标注</span>';
-        html += '<span class="gc-stat-total">共 ' + g.total + ' 条</span>';
-        html += '</div></div>';
-      });
-      grid.innerHTML = html;
-    }
-
-    /** 进入分组 → 展示该组下的商品明细 */
-    function enterGroup(key) {
-      currentGroupKey = decodeURIComponent(key);
-      const [rule, date] = currentGroupKey.split('||');
-
-      // 筛选当前组的数据
-      filteredData = apiData.filter(t => {
-        const tRule = t.rule_name || '未分类';
-        const tDate = (t.data_date || '').replace(/[\/-]/g, '/').slice(0, 10);
-        return tRule === rule && tDate === date;
-      });
-
-      // 显示面包屑
-      document.getElementById('breadcrumbTitle').textContent = rule + ' · ' + date;
-      document.getElementById('breadcrumbNav').style.display = 'flex';
-      showView('detail');
-
-      // 渲染表格
-      currentPage = 1;
-      updateStats();
-      renderTable();
-      renderPagination();
-      document.getElementById('pageUpdateTime').textContent = '共 ' + filteredData.length + ' 条任务';
-    }
-
-    /** 返回分组列表 */
-    function backToGroups() {
-      currentGroupKey = null;
-      filteredData = [];
-      renderGroupView();
-      document.getElementById('pageUpdateTime').textContent = '数据更新时间：加载中...';
-    }
-
-    /** 切换视图 */
-    function showView(view) {
-      document.getElementById('viewGroups').style.display = (view === 'groups') ? '' : 'none';
-      document.getElementById('viewDetail').style.display = (view === 'detail') ? '' : 'none';
+      return params.length > 0 ? ('&' + params.join('&')) : '';
     }
 
     // =====================================================================
@@ -1374,8 +1676,43 @@
     // =====================================================================
 
     function init() {
-      fetchTasks();
+      // v3.0：从 URL 参数识别是否来自调度中心（dispatch_batch_no）
+      var urlParams = new URLSearchParams(window.location.search);
+      var urlBatchNo = urlParams.get('dispatch_batch_no');  // 修复：参数名与 dispatch_center.html 跳转时一致
+
+      if (urlBatchNo) {
+        // 显示"返回调度中心"按钮，并在任务列表时自动过滤该批次
+        document.getElementById('backToDispatchBtn').style.display = '';
+        document.getElementById('batchNoTag').style.display = '';
+        document.getElementById('batchNoTag').textContent = '📦 ' + urlBatchNo;
+        // loadTaskGroups 加载时自动附上 dispatch_batch_no 过滤
+        loadTaskGroups(1, { dispatch_batch_no: urlBatchNo });
+      } else {
+        document.getElementById('backToDispatchBtn').style.display = 'none';
+        document.getElementById('batchNoTag').style.display = 'none';
+        // v2.0 默认显示任务列表视图
+        loadTaskGroups(1);
+      }
       fetchLabels();
+    }
+
+    /** v3.0：返回调度中心（恢复侧边栏后导航） */
+    function backToDispatchCenter() {
+      try {
+        // 1. 恢复侧边栏可见
+        if (window.parent && typeof window.parent.showSidebar === 'function') {
+          window.parent.showSidebar();
+        }
+        // 2. 导航到调度中心（parent.navigateTo 会自动高亮"任务调度"菜单）
+        if (window.parent && typeof window.parent.navigateTo === 'function') {
+          window.parent.navigateTo('dispatch_center.html');
+        } else {
+          window.location.href = '/dispatch_center.html';
+        }
+      } catch (e) {
+        // 跨域安全限制时降级
+        window.location.href = '/dispatch_center.html';
+      }
     }
 
     // =====================================================================
@@ -1419,13 +1756,203 @@
       catSel.innerHTML = '<option value="">全部</option>';
       [...catSet].sort().forEach(c => { catSel.innerHTML += '<option value="' + c + '">' + c + '</option>'; });
       catSel.value = curCat;
+
+      // v2.0：同步任务列表筛选下拉（当 allRules 有数据后触发）
+      // 但需先保存任务组视图的下拉状态，避免被明细视图数据覆盖
+      var savedTgRule = (document.getElementById('tgFilterRule') || {}).value || '';
+      var savedTgInst = (document.getElementById('tgFilterInstance') || {}).value || '';
+      _syncTaskGroupDropdowns();
+      if (document.getElementById('tgFilterRule')) document.getElementById('tgFilterRule').value = savedTgRule;
+      if (document.getElementById('tgFilterInstance')) document.getElementById('tgFilterInstance').value = savedTgInst;
+    }
+
+    /** v2.0：同步任务列表筛选下拉（从 allRules / allInstances 填充） */
+    function _syncTaskGroupDropdowns() {
+      var ruleSel = document.getElementById('tgFilterRule');
+      var instSel = document.getElementById('tgFilterInstance');
+      if (!ruleSel || !instSel) return;
+      // 规则下拉
+      ruleSel.innerHTML = '<option value="">全部</option>';
+      (allRules || []).forEach(function(r) { ruleSel.innerHTML += '<option value="' + r + '">' + r + '</option>'; });
+      // 实例下拉
+      instSel.innerHTML = '<option value="">全部</option>';
+      (allInstances || []).forEach(function(i) {
+        var name = window.APP_CONFIG ? window.APP_CONFIG.getInstanceName(i) : i;
+        instSel.innerHTML += '<option value="' + i + '">' + name + '</option>';
+      });
+    }
+
+    // =====================================================================
+    // v2.0 任务列表视图（默认视图）
+    // =====================================================================
+
+    let tgPage = 1;
+    let tgPerPage = 20;
+    let tgTotal = 0;
+    let tgAll = [];       // 本次加载的全量任务组数据
+    let tgFilterRule = '';
+    let tgFilterInstance = '';
+    let tgFilterDate = '';
+
+    /** 切换到任务列表视图 */
+    function switchToTaskGroupView() {
+      document.getElementById('taskGroupView').classList.add('active');
+      document.getElementById('detailSection').classList.remove('active');
+    }
+
+    /** 切换到商品明细视图 */
+    function switchToDetailView() {
+      document.getElementById('detailSection').classList.add('active');
+      document.getElementById('taskGroupView').classList.remove('active');
+    }
+
+    /** 加载任务列表（默认视图） */
+    function loadTaskGroups(page, extraParams) {
+      if (isLoading) return;
+      isLoading = true;
+      tgPage = page || 1;
+      var params = Object.assign({
+        page: tgPage,
+        per_page: tgPerPage,
+        rule_name: tgFilterRule,
+        instance: tgFilterInstance,
+      }, extraParams || {});
+      var qs = Object.entries(params).filter(function([, v]) { return v !== '' && v !== null; })
+        .map(function([k, v]) { return k + '=' + encodeURIComponent(v); }).join('&');
+      safeFetch('/api/annotation/my-task-groups?' + qs, { credentials: 'same-origin' })
+        .then(function(res) {
+          if (!res || !res.success) { showToast('加载任务列表失败', true); return; }
+          tgAll = res.items || [];
+          tgTotal = res.total || 0;
+          renderTaskGroupTable(tgAll);
+          renderTaskGroupStats(tgAll);
+          renderTaskGroupPagination();
+          // v2.0：从当前页数据中提取唯一的规则名和实例编码，填充任务组筛选下拉
+          var ruleSet = {};
+          var instSet = {};
+          (tgAll || []).forEach(function(g) {
+            if (g.rule_name) ruleSet[g.rule_name] = true;
+            if (g.instance_code) instSet[g.instance_code] = true;
+          });
+          var ruleSel = document.getElementById('tgFilterRule');
+          var instSel = document.getElementById('tgFilterInstance');
+          if (ruleSel) {
+            var curRule = ruleSel.value;
+            ruleSel.innerHTML = '<option value="">全部</option>';
+            Object.keys(ruleSet).sort().forEach(function(r) {
+              ruleSel.innerHTML += '<option value="' + r + '">' + r + '</option>';
+            });
+            ruleSel.value = curRule;
+          }
+          if (instSel) {
+            var curInst = instSel.value;
+            instSel.innerHTML = '<option value="">全部</option>';
+            Object.keys(instSet).sort().forEach(function(i) {
+              var name = window.APP_CONFIG ? window.APP_CONFIG.getInstanceName(i) : i;
+              instSel.innerHTML += '<option value="' + i + '">' + name + '</option>';
+            });
+            instSel.value = curInst;
+          }
+          // 默认显示任务列表视图
+          switchToTaskGroupView();
+        })
+        .catch(function(err) { showToast('网络错误：' + (err && err.message) || err, true); })
+        .finally(function() { isLoading = false; });
+    }
+
+    /** 渲染任务列表统计摘要 */
+    function renderTaskGroupStats(items) {
+      var totalGroups = items.length;
+      var totalItems = items.reduce(function(s, g) { return s + (g.total_count || 0); }, 0);
+      var totalPending = items.reduce(function(s, g) { return s + (g.pending_count || 0); }, 0);
+      var totalDone = items.reduce(function(s, g) { return s + (g.annotated_count || 0); }, 0);
+      var el = document.getElementById('tgStatsSummary');
+      if (!el) return;
+      el.innerHTML =
+        '<div class="stat-item"><span class="stat-label">任务分组</span><span class="stat-value">' + totalGroups + '</span></div>' +
+        '<div class="stat-item"><span class="stat-label">总条数</span><span class="stat-value">' + totalItems + '</span></div>' +
+        '<div class="stat-item"><span class="stat-label">待标注</span><span class="stat-value stat-pending">' + totalPending + '</span></div>' +
+        '<div class="stat-item"><span class="stat-label">已标注</span><span class="stat-value stat-done">' + totalDone + '</span></div>';
+    }
+
+    /** 渲染任务列表表格 */
+    function renderTaskGroupTable(items) {
+      var tbody = document.getElementById('taskGroupBody');
+      if (!tbody) return;
+      if (!items || items.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="11" style="text-align:center;color:#999;padding:32px 0;">暂无任务数据</td></tr>';
+        return;
+      }
+      var html = '';
+      items.forEach(function(g) {
+        var progress = g.total_count > 0 ? Math.round((g.annotated_count / g.total_count) * 100) : 0;
+        // 任务日期：取 assign_time 的日期部分
+        var taskDateStr = g.assign_time ? g.assign_time.substring(0, 10) : (g.data_date ? g.data_date.substring(0, 10) : '-');
+        var enterBtn = '<button class="btn btn-primary btn-sm" onclick="enterTaskGroup(\'' + (g.task_code || '') + '\', \'' + (g.dispatch_batch_no || '') + '\', \'' + encodeURIComponent(g.rule_name || '') + '\', \'' + (g.data_date || '') + '\')">进入标注</button>';
+        html += '<tr>' +
+          '<td><span class="task-code">' + (g.dispatch_batch_no || g.task_code || '-') + '</span></td>' +
+          '<td>' + (g.rule_name || '-') + '</td>' +
+          '<td>' + taskDateStr + '</td>' +
+          '<td class="stat-num">' + (g.total_count || 0) + '</td>' +
+          '<td class="stat-num stat-pending">' + (g.pending_count || 0) + '</td>' +
+          '<td class="stat-num stat-done">' + (g.annotated_count || 0) + '</td>' +
+          '<td class="stat-num stat-correct">' + (g.correct_count || 0) + '</td>' +
+          '<td class="stat-num stat-error">' + (g.error_count || 0) + '</td>' +
+          '<td class="stat-num stat-ignore">' + (g.ignore_count || 0) + '</td>' +
+          '<td><div class="progress-cell">' +
+            '<span class="progress-pct">' + progress + '%</span>' +
+            '<div class="progress-bar-wrap"><div class="progress-bar-bg"><div class="progress-bar-fill' + (progress >= 100 ? ' full' : '') + '" style="width:' + progress + '%"></div></div></div>' +
+          '</div></td>' +
+          '<td>' + enterBtn + '</td>' +
+        '</tr>';
+      });
+      tbody.innerHTML = html;
+    }
+
+    /** 渲染任务列表分页 */
+    function renderTaskGroupPagination() {
+      var totalPages = Math.ceil(tgTotal / tgPerPage) || 1;
+      var center = document.getElementById('tgPaginationCenter');
+      if (!center) return;
+      var html = '';
+      html += '<button class="pg-btn"' + (tgPage <= 1 ? ' disabled' : '') + ' onclick="loadTaskGroups(' + (tgPage - 1) + ')">上一页</button>';
+      html += '<span class="pg-info">第 ' + tgPage + ' / ' + totalPages + ' 页，共 ' + tgTotal + ' 条</span>';
+      html += '<button class="pg-btn"' + (tgPage >= totalPages ? ' disabled' : '') + ' onclick="loadTaskGroups(' + (tgPage + 1) + ')">下一页</button>';
+      center.innerHTML = html;
+    }
+
+    /** 进入标注：加载该任务组的商品明细 */
+    function enterTaskGroup(taskCode, dispatchBatchNo, ruleName, dataDate) {
+      // 读取筛选条件（去除 URL encode）
+      var rule = decodeURIComponent(ruleName || '');
+      var date = dataDate || '';
+      // 切换视图
+      switchToDetailView();
+      // 滚动到明细区
+      document.getElementById('detailSection').scrollIntoView({ behavior: 'smooth' });
+      // 触发 fetchTasks，按 taskCode 或 dispatchBatchNo 过滤
+      fetchTasks({
+        task_code: taskCode,
+        dispatch_batch_no: dispatchBatchNo,
+        rule_name: rule,
+      });
+    }
+
+    /** 处理任务列表视图筛选变化 */
+    function handleTaskGroupFilter() {
+      tgFilterRule = (document.getElementById('tgFilterRule') || {}).value || '';
+      tgFilterInstance = (document.getElementById('tgFilterInstance') || {}).value || '';
+      loadTaskGroups(1);
     }
 
     /** 填充标签下拉（弹窗内） */
     function populateLabelOptions() {
-      const sel = document.getElementById('inputNote');
-      sel.innerHTML = '<option value="">请选择</option>';
-      labelsData.forEach(l => { sel.innerHTML += '<option value="' + l + '">' + l + '</option>'; });
+      // 标注弹窗标签下拉
+      const annotSel = document.getElementById('annotInputNote');
+      if (annotSel) {
+        annotSel.innerHTML = '<option value="">请选择</option>';
+        labelsData.forEach(function(l) { annotSel.innerHTML += '<option value="' + l + '">' + l + '</option>'; });
+      }
     }
 
     /** 填充标注备注筛选项 */
@@ -1433,6 +1960,21 @@
       const sel = document.getElementById('filterAnnotateNote');
       sel.innerHTML = '<option value="">全部</option>';
       labelsData.forEach(l => { sel.innerHTML += '<option value="' + l + '">' + l + '</option>'; });
+
+      // 从 apiData 中提取标注人列表，填充标注人下拉
+      var annotatorSet = {};
+      (apiData || []).forEach(function(t) {
+        if (t.annotator) annotatorSet[t.annotator] = true;
+      });
+      var annotatorSel = document.getElementById('filterAnnotator');
+      if (annotatorSel) {
+        var cur = annotatorSel.value;
+        annotatorSel.innerHTML = '<option value="">全部</option>';
+        Object.keys(annotatorSet).sort().forEach(function(a) {
+          annotatorSel.innerHTML += '<option value="' + a + '">' + a + '</option>';
+        });
+        annotatorSel.value = cur;
+      }
     }
 
     // =====================================================================
@@ -1442,6 +1984,7 @@
     function handleFilterChange() {
       // 叠加 client-side 过滤（在 apiData 基础上逐步过滤）
       // rule_name / instance / status(pending/done) 由后端过滤，这里只叠加 client-side 条件
+      annotAllItems = [];  // 清空弹窗缓存，下次打开时重新加载
       filteredData = apiData.filter(t => {
         // 标注状态细分过滤（correct / error / ignore）
         const statusVal = document.getElementById('filterAnnotateStatus').value;
@@ -1457,6 +2000,9 @@
         // 类目过滤
         const category = document.getElementById('filterCategory').value;
         if (category && t.category !== category) return false;
+        // 标注人过滤
+        const annotator = document.getElementById('filterAnnotator').value;
+        if (annotator && t.annotator !== annotator) return false;
         return true;
       });
       totalItems = filteredData.length;
@@ -1502,7 +2048,7 @@
           '<td>' + aiRes + '</td>' +
           '<td>' + modelBRes + '</td>' +
           '<td><span class="' + annClass + '">' + annText + '</span></td>' +
-          '<td><button class="btn btn-sm ' + btnClass + '" onclick="openDetailModal(' + realIndex + ')">' + btnText + '</button></td>' +
+          '<td><a class="btn btn-sm ' + btnClass + '" href="javascript:void(0)" onclick="openAnnotationPopup(' + realIndex + ')">' + btnText + '</a></td>' +
           '</tr>';
       });
       tbody.innerHTML = html;
@@ -1550,316 +2096,8 @@
     }
 
     // =====================================================================
-    // 弹窗
-    // =====================================================================
+    // 辅助函数（标注操作已迁移至 annotation_detail.html）
 
-    function openDetailModal(index) {
-      currentIndex = index;
-      const item = filteredData[index];
-      if (!item) return;
-
-      document.getElementById('modalProductTitle').textContent = item.product_name || '-';
-      document.getElementById('modalCategory').textContent = item.category || '-';
-      document.getElementById('modalShop').textContent = item.instance_code ? (window.APP_CONFIG ? window.APP_CONFIG.getInstanceName(item.instance_code) : item.instance_code) : '-';
-      document.getElementById('modalProductId').textContent = item.product_id || '-';
-      document.getElementById('modalProductLink').href = '#';
-
-      const aiRes = item.ai_result || '-';
-      document.getElementById('modalAiResult').textContent = aiRes;
-      document.getElementById('modalAiResult').className = 'value';
-      document.getElementById('modalAiRejectReason').textContent = item.ai_reject_reason || '-';
-
-      const modelBRes = mapModelBResult(item.modelb_result);
-      document.getElementById('modalModelBResult').textContent = modelBRes;
-      document.getElementById('modalModelBRejectReason').textContent = item.modelb_reason || '-';
-
-      // 恢复标注状态
-      selectedAnnotation = item.check_result || '';
-      updateAnnotationUI();
-      updateImageGrid(item);
-      updateProgress();
-
-      document.getElementById('detailModal').classList.add('active');
-    }
-
-    function closeDetailModal() {
-      document.getElementById('detailModal').classList.remove('active');
-      // 刷新列表
-      fetchTasks();
-    }
-
-    function updateImageGrid(item) {
-      const grid = document.getElementById('imageGrid');
-      imageList = [];
-      let html = '';
-
-      function addSection(label, url) {
-        if (!url) return;
-        imageList.push(url);
-        html += '<div class="thumbnail-row"><div class="thumbnail-label">' + label + '</div><div class="thumbnail-wrapper">' +
-          '<img class="thumbnail-img" src="' + url + '" onclick="openImagePreview(' + (imageList.length - 1) + ')">' +
-          '</div></div>';
-      }
-
-      addSection('主图', item.main_image);
-      addSection('详情图', item.detail_image);
-      addSection('SKU图', item.sku_image);
-
-      if (imageList.length === 0) {
-        html = '<div style="padding:40px;text-align:center;color:var(--text-muted);">暂无图片</div>';
-      }
-      grid.innerHTML = html;
-    }
-
-    function updateAnnotationUI() {
-      document.querySelectorAll('.annotation-btn').forEach(b => b.classList.remove('active'));
-      document.getElementById('annotationInputs').classList.remove('show');
-
-      if (selectedAnnotation === 'correct') {
-        document.getElementById('btnCorrect').classList.add('active');
-      } else if (selectedAnnotation === 'error') {
-        document.getElementById('btnError').classList.add('active');
-        document.getElementById('annotationInputs').classList.add('show');
-        // 回填已有标签
-        const curItem = filteredData[currentIndex];
-        if (curItem && curItem.annotation) {
-          document.getElementById('inputNote').value = curItem.annotation;
-        }
-      } else if (selectedAnnotation === 'ignore') {
-        document.getElementById('btnIgnore').classList.add('active');
-      }
-    }
-
-    // =====================================================================
-    // 标注操作
-    // =====================================================================
-
-    function selectAnnotation(type) {
-      selectedAnnotation = type;
-      document.querySelectorAll('.annotation-btn').forEach(b => b.classList.remove('active'));
-
-      if (type === 'correct') {
-        document.getElementById('btnCorrect').classList.add('active');
-        document.getElementById('annotationInputs').classList.remove('show');
-        saveAndNavigateNext();
-
-      } else if (type === 'error') {
-        document.getElementById('btnError').classList.add('active');
-        document.getElementById('annotationInputs').classList.add('show');
-        // 不自动提交，等用户选标签再点"下一条"
-
-      } else if (type === 'ignore') {
-        document.getElementById('btnIgnore').classList.add('active');
-        document.getElementById('annotationInputs').classList.remove('show');
-        saveAndNavigateNext();
-      }
-    }
-
-    /** 正确/忽略自动提交并跳下一条 */
-    function saveAndNavigateNext() {
-      const item = filteredData[currentIndex];
-      const result = selectedAnnotation;
-      submitAnnotation(item.id, result, '', '')
-        .then(function(res) {
-          if (!res) { showTaskToast('提交失败，请重新登录', true); return; }
-          if (res.success) {
-            // 更新本地数据
-            item.check_result = result;
-            showTaskToast('标注已保存');
-            renderTable();
-            updateStats();
-            // 跳下一条
-            if (currentIndex < filteredData.length - 1) {
-              currentIndex++;
-              openDetailModal(currentIndex);
-            } else {
-              updateProgress();
-              showTaskToast('全部完成，太棒了！');
-              setTimeout(closeDetailModal, 1500);
-            }
-          } else {
-            showToast(res.error || '提交失败', true);
-          }
-        })
-        .catch(err => showToast('网络错误', true));
-    }
-
-    /** 错误选标签后提交并跳下一条 */
-    function saveCurrentAndNavigateNext() {
-      if (selectedAnnotation === 'error') {
-        const note = document.getElementById('inputNote').value;
-        if (!note) {
-          showToastErr('请先选择错误标签');
-          return;
-        }
-      }
-      const item = filteredData[currentIndex];
-      const errorTag = selectedAnnotation === 'error' ? document.getElementById('inputNote').value : '';
-      const note     = selectedAnnotation === 'error' ? document.getElementById('inputComment').value : '';
-
-      submitAnnotation(item.id, selectedAnnotation, errorTag, note)
-        .then(function(res) {
-          if (!res) { showTaskToast('提交失败，请重新登录', true); return; }
-          if (res.success) {
-            item.check_result = selectedAnnotation;
-            showTaskToast('标注已保存');
-            renderTable();
-            updateStats();
-            if (currentIndex < filteredData.length - 1) {
-              currentIndex++;
-              openDetailModal(currentIndex);
-            } else {
-              updateProgress();
-              showTaskToast('全部完成，太棒了！');
-              setTimeout(closeDetailModal, 1500);
-            }
-          } else {
-            showToast(res.error || '提交失败', true);
-          }
-        })
-        .catch(err => showToast('网络错误', true));
-    }
-
-    // 列表页操作（兼容 AC-12）
-    function quickSave(index, btn) {
-      const item = filteredData[index];
-      if (!item.check_result) {
-        showToast('请先选择标注结果', true);
-        return;
-      }
-      renderTable();
-      showTaskToast();
-      const row = btn.closest('tr');
-      if (row) { row.classList.add('row-flash'); setTimeout(() => row.classList.remove('row-flash'), 1000); }
-    }
-
-    function quickSubmit(index) {
-      const item = filteredData[index];
-      if (!item.check_result) {
-        showToast('请先选择标注结果', true);
-        return;
-      }
-      pendingSubmitIndex = index;
-      document.querySelector('#confirmOverlay .confirm-message').textContent = '确认提交此任务？提交后将不可再修改标注。';
-      document.getElementById('confirmOverlay').classList.add('active');
-    }
-
-    // =====================================================================
-    // 批量操作
-    // =====================================================================
-
-    // 批量操作逻辑重构：不再有"保存"操作，提交直接落库
-    function batchSave() {
-      showToast('已标注任务已自动保存，无需手动保存', false);
-    }
-
-    function batchSubmit() {
-      const pageData = filteredData.slice((currentPage - 1) * pageSize, currentPage * pageSize);
-      const pending = pageData.filter(t => !t.check_result);
-      if (pending.length > 0) {
-        showToast('有 ' + pending.length + ' 条待标注数据，请先完成标注', true);
-        return;
-      }
-      batchPendingIndexes = pageData.map((t, i) => (currentPage - 1) * pageSize + i);
-      document.querySelector('#confirmOverlay .confirm-message').textContent =
-        '确认提交当前页面全部 ' + batchPendingIndexes.length + ' 条标注结果？提交后将不可再修改。';
-      document.getElementById('confirmOverlay').classList.add('active');
-    }
-
-    function batchConfirmSubmit() {
-      if (!batchPendingIndexes || batchPendingIndexes.length === 0) return;
-      let done = 0;
-      batchPendingIndexes.forEach(idx => {
-        const item = filteredData[idx];
-        if (item && item.check_result) {
-          submitAnnotation(item.id, item.check_result, item.annotation || '', '')
-            .then(() => { done++; if (done === batchPendingIndexes.length) onBatchDone(done); })
-            .catch(() => { done++; if (done === batchPendingIndexes.length) onBatchDone(done); });
-        } else { done++; if (done === batchPendingIndexes.length) onBatchDone(done); }
-      });
-    }
-
-    function onBatchDone(count) {
-      renderTable();
-      updateStats();
-      closeConfirm();
-      showTaskToast('已提交 ' + count + ' 条任务');
-      batchPendingIndexes = [];
-    }
-
-    function confirmSubmit() {
-      if (pendingSubmitIndex !== null) {
-        const item = filteredData[pendingSubmitIndex];
-        if (!item || !item.check_result) { showToast('请先选择标注结果', true); return; }
-        submitAnnotation(item.id, item.check_result, item.annotation || '', '')
-          .then(function(res) {
-            if (!res) { showToast('提交失败，请重新登录', true); return; }
-            if (res.success) { renderTable(); closeConfirm(); showTaskToast(); }
-            else showToast(res.error || '提交失败', true);
-          });
-        pendingSubmitIndex = null;
-      } else if (batchPendingIndexes && batchPendingIndexes.length > 0) {
-        batchConfirmSubmit();
-      }
-    }
-
-    function closeConfirm() {
-      document.getElementById('confirmOverlay').classList.remove('active');
-      pendingSubmitIndex = null;
-    }
-
-    // =====================================================================
-    // 导航
-    // =====================================================================
-
-    function prevRecord() {
-      if (currentIndex > 0) { currentIndex--; openDetailModal(currentIndex); }
-    }
-
-    function nextRecord() {
-      if (selectedAnnotation === 'error') {
-        saveCurrentAndNavigateNext();
-      } else if (selectedAnnotation === 'correct' || selectedAnnotation === 'ignore') {
-        saveAndNavigateNext();
-      } else {
-        if (currentIndex < filteredData.length - 1) { currentIndex++; openDetailModal(currentIndex); }
-      }
-    }
-
-    function updateProgress() {
-      document.getElementById('progressInfo').textContent = (currentIndex + 1) + ' / ' + filteredData.length;
-      document.getElementById('prevBtn').disabled = currentIndex === 0;
-      document.getElementById('nextBtn').disabled = currentIndex === filteredData.length - 1;
-    }
-
-    // =====================================================================
-    // 图片预览
-    // =====================================================================
-
-    function openImagePreview(idx) {
-      currentImageIndex = idx;
-      showPreviewImage();
-      document.getElementById('imagePreview').classList.add('active');
-    }
-
-    function closeImagePreview() {
-      document.getElementById('imagePreview').classList.remove('active');
-    }
-
-    function showPreviewImage() {
-      document.getElementById('previewImg').src = imageList[currentImageIndex] || '';
-      document.getElementById('previewCounter').textContent = (currentImageIndex + 1) + ' / ' + imageList.length;
-    }
-
-    function prevImage() {
-      if (currentImageIndex > 0) { currentImageIndex--; showPreviewImage(); }
-    }
-
-    function nextImage() {
-      if (currentImageIndex < imageList.length - 1) { currentImageIndex++; showPreviewImage(); }
-    }
-
-    // =====================================================================
     // 辅助函数
     // =====================================================================
 
@@ -1890,6 +2128,7 @@
     function handleSearch() { handleFilterChange(); }
 
     function clearSearch() {
+      annotAllItems = [];  // 清空弹窗缓存
       document.getElementById('searchProductId').value = '';
       document.getElementById('filterAiResult').value = '';
       document.getElementById('filterAnnotateStatus').value = '';
@@ -1897,6 +2136,7 @@
       document.getElementById('filterAnnotateNote').value = '';
       document.getElementById('filterCategory').value = '';
       document.getElementById('filterInstance').value = '';
+      document.getElementById('filterAnnotator').value = '';
       filteredData = [...apiData];
       totalItems = filteredData.length;
       currentPage = 1;
@@ -1907,21 +2147,369 @@
     function exportAnnotation() { showToast('导出功能开发中', false); }
 
     // =====================================================================
-    // 快捷键
+    // 标注弹窗 — 打开 / 关闭
+    // =====================================================================
+
+    /**
+     * 打开标注弹窗（从 filteredData[pageItemIndex] 开始，加载全量筛选列表用于导航）
+     */
+    function openAnnotationPopup(pageItemIndex) {
+      // 1. 加载全量筛选数据用于弹窗内 prev/next 导航
+      loadAnnotAllItems(function() {
+        // 2. 在全量列表中定位当前商品
+        const pageItem = filteredData[pageItemIndex];
+        annotCurrentIdx = annotAllItems.findIndex(function(it) { return String(it.id) === String(pageItem.id); });
+        if (annotCurrentIdx < 0) annotCurrentIdx = 0;
+        // 3. 加载当前商品数据
+        loadAnnotItem(annotCurrentIdx);
+        // 4. 显示弹窗
+        document.getElementById('annotPopupOverlay').classList.add('active');
+        // 5. 聚焦到弹窗（便于快捷键）
+        document.getElementById('annotPopupOverlay').focus();
+      });
+    }
+
+    /** 加载弹窗内全量筛选列表（用于 prev/next 导航） */
+    function loadAnnotAllItems(callback) {
+      if (annotAllItems.length > 0) { callback(); return; }
+      // 按当前筛选项拉取大量数据（最多1000条）
+      var params = {
+        page: 1, per_page: 1000,
+        rule_name: document.getElementById('filterRule').value,
+        status: document.getElementById('filterAnnotateStatus').value,
+        instance: document.getElementById('filterInstance').value,
+        dispatch_batch_no: new URLSearchParams(window.location.search).get('dispatch_batch_no') || ''
+      };
+      var qs = Object.entries(params).filter(function(v) { return v[1] !== '' && v[1] !== null; })
+        .map(function(v) { return v[0] + '=' + encodeURIComponent(v[1]); }).join('&');
+      safeFetch('/api/annotation/my-tasks?' + qs, { credentials: 'same-origin' })
+        .then(function(res) {
+          if (res && res.success) {
+            // 叠加 client-side 过滤（AI审核结果、类目、搜索框）
+            annotAllItems = (res.items || []).filter(function(t) {
+              var aiResult = document.getElementById('filterAiResult').value;
+              if (aiResult && t.ai_result !== aiResult) return false;
+              var cat = document.getElementById('filterCategory').value;
+              if (cat && t.category !== cat) return false;
+              var kw = (document.getElementById('searchProductId').value || '').trim().toLowerCase();
+              if (kw && !(t.product_name || '').toLowerCase().includes(kw) && !(t.product_id || '').toLowerCase().includes(kw)) return false;
+              return true;
+            });
+          }
+        })
+        .catch(function() { annotAllItems = []; })
+        .finally(function() { if (callback) callback(); });
+    }
+
+    function closeAnnotationPopup() {
+      document.getElementById('annotPopupOverlay').classList.remove('active');
+      // 刷新表格（反映已标注状态变化）
+      renderTable();
+      updateStats();
+    }
+
+    // =====================================================================
+    // 标注弹窗 — 加载商品数据
+    // =====================================================================
+
+    function loadAnnotItem(idx) {
+      if (idx < 0 || idx >= annotAllItems.length) return;
+      annotCurrentIdx = idx;
+      var item = annotAllItems[idx];
+
+      // 标题和基本信息
+      document.getElementById('annotPopupTitle').textContent = '标注任务 - ' + (item.product_id || '-');
+      document.getElementById('annotProdTitle').textContent = item.product_name || '-';
+      document.getElementById('annotCategory').textContent = item.category || '-';
+      document.getElementById('annotShop').textContent = item.instance_code
+        ? (window.APP_CONFIG ? window.APP_CONFIG.getInstanceName(item.instance_code) : item.instance_code) : '-';
+      document.getElementById('annotProductId').textContent = item.product_id || '-';
+      document.getElementById('annotBatchNo').textContent = item.dispatch_batch_no
+        || new URLSearchParams(window.location.search).get('dispatch_batch_no') || '-';
+      document.getElementById('annotAnnotator').textContent = item.annotator || '-';
+
+      // 模型A
+      var aiRes = item.ai_result || '-';
+      var aiEl = document.getElementById('annotAiResult');
+      aiEl.textContent = aiRes;
+      aiEl.className = 'value';
+      if (aiRes === '合规' || aiRes === 'pass') aiEl.classList.add('ai-pass');
+      else if (aiRes === '违规' || aiRes === 'fail') aiEl.classList.add('ai-fail');
+      else aiEl.classList.add('ai-pending');
+      document.getElementById('annotAiReject').textContent = item.ai_reject_reason || '-';
+
+      // 模型B
+      document.getElementById('annotModelBResult').textContent = mapModelBResult(item.modelb_result);
+      document.getElementById('annotModelBReason').textContent = item.modelb_reason || '-';
+
+      // 恢复标注状态
+      annotSelectedType = item.check_result || '';
+      updateAnnotBtns();
+      updateAnnotNav();
+
+      // 加载图片
+      loadAnnotImages(item);
+    }
+
+    function loadAnnotImages(item) {
+      annotImageList = [];
+      document.getElementById('annotImageGrid').innerHTML = '';
+      switchAnnotTab('main');
+
+      var imgs = [
+        { key: 'main_image', tab: 'main', label: '主图' },
+        { key: 'sku_image', tab: 'sku', label: 'SKU图' },
+        { key: 'detail_image', tab: 'detail', label: '详情图' }
+      ];
+      imgs.forEach(function(img) {
+        if (item[img.key]) {
+          annotImageList.push({ src: item[img.key], label: img.label, tab: img.tab });
+        }
+      });
+
+      // 默认显示主图
+      switchAnnotTab('main');
+    }
+
+    function switchAnnotTab(tab) {
+      // 更新 tab 样式
+      ['main','sku','detail'].forEach(function(t) {
+        document.getElementById('annotTab' + t.charAt(0).toUpperCase() + t.slice(1)).classList.toggle('active', t === tab);
+      });
+      // 筛选当前 tab 图片
+      var filtered = annotImageList.filter(function(img) { return img.tab === tab; });
+      var grid = document.getElementById('annotImageGrid');
+      if (filtered.length === 0) {
+        grid.innerHTML = '<div class="annot-no-img">该分类暂无图片</div>';
+        return;
+      }
+      var html = '';
+      filtered.forEach(function(img, i) {
+        var realIdx = annotImageList.indexOf(img);
+        html += '<div class="annot-img-card" onclick="openAnnotImagePreview(' + realIdx + ')">' +
+          '<div class="annot-img-card-label">' + img.label + '</div>' +
+          '<img src="' + img.src + '" alt="' + img.label + '">' +
+        '</div>';
+      });
+      grid.innerHTML = html;
+    }
+
+    // =====================================================================
+    // 标注弹窗 — 标注操作
+    // =====================================================================
+
+    function annotSelectType(type) {
+      annotSelectedType = type;
+      document.querySelectorAll('.annot-btn').forEach(function(b) { b.classList.remove('active'); });
+
+      if (type === 'correct') {
+        document.getElementById('annotBtnCorrect').classList.add('active');
+        document.getElementById('annotInputs').classList.remove('show');
+        annotSubmitAndNext();
+
+      } else if (type === 'error') {
+        document.getElementById('annotBtnError').classList.add('active');
+        document.getElementById('annotInputs').classList.add('show');
+        // 恢复已有标签
+        var item = annotAllItems[annotCurrentIdx];
+        if (item && item.annotation) {
+          document.getElementById('annotInputNote').value = item.annotation;
+        }
+
+      } else if (type === 'ignore') {
+        document.getElementById('annotBtnIgnore').classList.add('active');
+        document.getElementById('annotInputs').classList.remove('show');
+        annotSubmitAndNext();
+      }
+      updateAnnotBtns();
+    }
+
+    /** 提交当前 + 导航下一条 */
+    function annotSubmitAndNext() {
+      annotSubmit(function() {
+        if (annotCurrentIdx < annotAllItems.length - 1) {
+          loadAnnotItem(annotCurrentIdx + 1);
+        } else {
+          showTaskToast('🎉 本批全部标注完成！');
+          closeAnnotationPopup();
+        }
+      });
+    }
+
+    /** 提交当前记录 */
+    function annotSubmit(onSuccess) {
+      if (annotIsSubmitting) return;
+      annotIsSubmitting = true;
+      var item = annotAllItems[annotCurrentIdx];
+      var result = annotSelectedType;
+      var errorTag = '', note = '';
+
+      if (result === 'error') {
+        errorTag = document.getElementById('annotInputNote').value;
+        note = document.getElementById('annotInputComment').value;
+        if (!errorTag) {
+          annotIsSubmitting = false;
+          showToast('请先选择错误标签', true);
+          return;
+        }
+      }
+
+      safeFetch('/api/annotation/submit', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({ raw_data_id: item.id, result: result, error_tag: errorTag, note: note })
+      })
+        .then(function(res) {
+          annotIsSubmitting = false;
+          if (!res) { showToast('提交失败，请重新登录', true); return; }
+          if (res.success) {
+            item.check_result = result;
+            item.annotation = errorTag;
+            showTaskToast('标注已保存');
+            if (onSuccess) onSuccess();
+          } else {
+            showToast(res.error || '提交失败', true);
+          }
+        })
+        .catch(function() { annotIsSubmitting = false; showToast('网络错误', true); });
+    }
+
+    /** 更新标注按钮和状态栏 */
+    function updateAnnotBtns() {
+      document.querySelectorAll('.annot-btn').forEach(function(b) { b.classList.remove('active'); });
+      document.getElementById('annotInputs').classList.remove('show');
+
+      var statusBar = document.getElementById('annotStatusBar');
+      var statusIcon = document.getElementById('annotStatusIcon');
+      var statusText = document.getElementById('annotStatusText');
+      var statusTag = document.getElementById('annotStatusTag');
+
+      if (annotSelectedType === 'correct') {
+        document.getElementById('annotBtnCorrect').classList.add('active');
+        statusBar.className = 'annot-action-status done-correct';
+        statusIcon.textContent = '✓'; statusText.textContent = '已标注：正确'; statusTag.textContent = '';
+      } else if (annotSelectedType === 'error') {
+        document.getElementById('annotBtnError').classList.add('active');
+        document.getElementById('annotInputs').classList.add('show');
+        var item = annotAllItems[annotCurrentIdx];
+        if (item && item.annotation) {
+          document.getElementById('annotInputNote').value = item.annotation;
+          statusTag.textContent = '（' + item.annotation + '）';
+        }
+        statusBar.className = 'annot-action-status done-error';
+        statusIcon.textContent = '✗'; statusText.textContent = '已标注：错误';
+      } else if (annotSelectedType === 'ignore') {
+        document.getElementById('annotBtnIgnore').classList.add('active');
+        statusBar.className = 'annot-action-status done-ignore';
+        statusIcon.textContent = '⊘'; statusText.textContent = '已标注：忽略'; statusTag.textContent = '';
+      } else {
+        statusBar.className = 'annot-action-status pending';
+        statusIcon.textContent = '○'; statusText.textContent = '待标注'; statusTag.textContent = '';
+      }
+    }
+
+    /** 更新导航状态 */
+    function updateAnnotNav() {
+      var total = annotAllItems.length;
+      var idx = annotCurrentIdx + 1;
+      document.getElementById('annotNavInfo').textContent = idx + ' / ' + total;
+      document.getElementById('annotPrevBtn').disabled = annotCurrentIdx <= 0;
+      document.getElementById('annotNextBtn').disabled = annotCurrentIdx >= total - 1;
+    }
+
+    // =====================================================================
+    // 标注弹窗 — prev / next
+    // =====================================================================
+
+    function annotPrevRecord() {
+      if (annotCurrentIdx <= 0) return;
+      // 如果是 error 态且未选标签，提示
+      if (annotSelectedType === 'error') {
+        var tag = document.getElementById('annotInputNote').value;
+        if (!tag) { showToast('请先选择错误标签', true); return; }
+        annotSubmit(function() { loadAnnotItem(annotCurrentIdx - 1); });
+      } else if (annotSelectedType === 'correct' || annotSelectedType === 'ignore') {
+        annotSubmit(function() { loadAnnotItem(annotCurrentIdx - 1); });
+      } else {
+        loadAnnotItem(annotCurrentIdx - 1);
+      }
+    }
+
+    function annotNextRecord() {
+      if (annotSelectedType === 'error') {
+        var tag = document.getElementById('annotInputNote').value;
+        if (!tag) { showToast('请先选择错误标签', true); return; }
+        annotSubmitAndNext();
+      } else if (annotSelectedType === 'correct' || annotSelectedType === 'ignore') {
+        annotSubmitAndNext();
+      } else {
+        if (annotCurrentIdx < annotAllItems.length - 1) {
+          loadAnnotItem(annotCurrentIdx + 1);
+        }
+      }
+    }
+
+    // =====================================================================
+    // 标注弹窗 — 图片预览
+    // =====================================================================
+
+    function openAnnotImagePreview(idx) {
+      if (idx < 0 || idx >= annotImageList.length) return;
+      annotImgIdx = idx;
+      document.getElementById('annotPreviewImg').src = annotImageList[idx].src;
+      document.getElementById('annotPreviewCounter').textContent = (idx + 1) + ' / ' + annotImageList.length;
+      document.getElementById('annotPreviewOverlay').classList.add('active');
+    }
+
+    function closeAnnotImagePreview() {
+      document.getElementById('annotPreviewOverlay').classList.remove('active');
+    }
+
+    function annotPrevImage() {
+      if (annotImgIdx > 0) openAnnotImagePreview(annotImgIdx - 1);
+    }
+
+    function annotNextImage() {
+      if (annotImgIdx < annotImageList.length - 1) openAnnotImagePreview(annotImgIdx + 1);
+    }
+
+    // =====================================================================
+    // 标注弹窗 — 模型B折叠
+    // =====================================================================
+
+    function toggleAnnotModelB() {
+      var content = document.getElementById('annotModelBContent');
+      var arrow = document.getElementById('annotModelBArrow');
+      var isHidden = content.style.display === 'none';
+      content.style.display = isHidden ? 'block' : 'none';
+      arrow.textContent = isHidden ? '▲' : '▼';
+    }
+
+    // =====================================================================
+    // 标注弹窗 — 快捷键（监听 document 级别）
     // =====================================================================
 
     document.addEventListener('keydown', function(e) {
-      if (!document.getElementById('detailModal').classList.contains('active')) return;
-      if (e.key === 'Escape') closeDetailModal();
-      if (e.key === 'ArrowLeft') prevRecord();
-      if (e.key === 'ArrowRight') nextRecord();
-    });
-
-    document.addEventListener('keydown', function(e) {
-      if (!document.getElementById('imagePreview').classList.contains('active')) return;
-      if (e.key === 'Escape') closeImagePreview();
-      if (e.key === 'ArrowLeft') prevImage();
-      if (e.key === 'ArrowRight') nextImage();
+      // 图片预览模式
+      if (document.getElementById('annotPreviewOverlay').classList.contains('active')) {
+        if (e.key === 'Escape') closeAnnotImagePreview();
+        if (e.key === 'ArrowLeft') annotPrevImage();
+        if (e.key === 'ArrowRight') annotNextImage();
+        return;
+      }
+      // 弹窗模式
+      if (!document.getElementById('annotPopupOverlay').classList.contains('active')) return;
+      if (e.key === 'Escape') { closeAnnotationPopup(); return; }
+      // 不在输入框时响应
+      var tag = document.activeElement && document.activeElement.tagName;
+      if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
+      if (e.key === 'ArrowLeft') { annotPrevRecord(); return; }
+      if (e.key === 'ArrowRight') { annotNextRecord(); return; }
+      if (e.key === 'Enter') { annotNextRecord(); return; }
+      if (e.key === '1') annotSelectType('correct');
+      if (e.key === '2') annotSelectType('error');
+      if (e.key === '3') annotSelectType('ignore');
     });
 
     // =====================================================================

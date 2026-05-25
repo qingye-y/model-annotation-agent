@@ -47,6 +47,23 @@ def today_str():
     return date.today().isoformat()
 
 
+def fmt_bj(dt, fmt='%Y-%m-%d %H:%M:%S'):
+    """UTC datetime → 北京时间（UTC+8）格式化字符串"""
+    if not dt:
+        return ''
+    from datetime import timedelta
+    return (dt + timedelta(hours=8)).strftime(fmt)
+
+
+def bj_today_utc():
+    """当前北京时间 00:00 对应的 UTC datetime（用于过滤 created_at）"""
+    from datetime import timedelta
+    utc_now = datetime.utcnow()
+    bj_now = utc_now + timedelta(hours=8)
+    bj_today = bj_now.date()
+    return datetime.combine(bj_today, datetime.min.time()) - timedelta(hours=8)
+
+
 # ---------------------------------------------------------------------------
 # API-1: GET /api/dispatch/task-pool
 # 获取待分配任务池，按规则聚合
@@ -59,11 +76,12 @@ def api_task_pool():
     from services.fetch_service import get_instance_rule_mapping
     instance_rule_map = get_instance_rule_mapping()
 
-    # 待分配记录：已互检 + 未标注 + 未分配
+    # 待分配记录：已互检 + 未标注 + 未分配 + 未被撤回
     base_filter = [
         RawData.modelb_reviewed == True,
         RawData.annotator == '',
         RawData.check_result == '',
+        RawData.revoked_batch == '',   # 排除已撤回批次的记录
     ]
 
     # 获取所有待分配记录
@@ -94,29 +112,49 @@ def api_task_pool():
         g['instances'].add(r.instance_code or '')
         g['batch_ids'].add(r.fetch_batch_id or '')
 
-    # 计算已分配量（给标注员但未标注完成的）
+    # 计算已分配量（给标注员但未标注完成的，排除已撤回批次）
     assigned_rows = RawData.query.filter(
         RawData.modelb_reviewed == True,
         RawData.annotator != '',
         RawData.check_result == '',
+        RawData.revoked_batch == '',   # 排除已撤回批次的 pending 记录
     ).all()
 
-    for r in assigned_rows:
-        rule_name = instance_rule_map.get(r.instance_code, '') if r.instance_code else ''
+    # 已完成的任务（分配给标注员且已标注，排除已撤回批次）
+    completed_rows = RawData.query.filter(
+        RawData.modelb_reviewed == True,
+        RawData.annotator != '',
+        RawData.check_result != '',
+        RawData.revoked_batch == '',   # 兜底：已完成记录理论上无 revoked_batch，但加过滤更严谨
+    ).all()
+
+    def _add_to_group(record):
+        rule_name = instance_rule_map.get(record.instance_code, '') if record.instance_code else ''
         if not rule_name:
-            rule_name = '未关联规则' + ('/' + r.instance_code if r.instance_code else '')
-        data_type = '不一致数据' if r.modelb_consistent == False else '一致性抽检'
-        if rule_name in rule_groups and data_type in rule_groups[rule_name]:
-            rule_groups[rule_name][data_type]['assigned'] += 1
+            rule_name = '未关联规则' + ('/' + record.instance_code if record.instance_code else '')
+        data_type = '不一致数据' if record.modelb_consistent == False else '一致性抽检'
+        # 延迟初始化：若该规则在 rule_groups 中不存在（说明此前无未分配记录），先初始化
+        if rule_name not in rule_groups:
+            rule_groups[rule_name] = {
+                '不一致数据': {'total': 0, 'assigned': 0, 'instances': set(), 'batch_ids': set()},
+                '一致性抽检': {'total': 0, 'assigned': 0, 'instances': set(), 'batch_ids': set()},
+            }
+        rule_groups[rule_name][data_type]['assigned'] += 1
+
+    for r in assigned_rows:
+        _add_to_group(r)
+    for r in completed_rows:
+        _add_to_group(r)
 
     # 构建输出 — 一个规则一张卡，合并不一致+抽检
+    # total = assigned(pending+completed) + remaining(unassigned)
     rules_output = []
     for rule_name, types in rule_groups.items():
         inc = types['不一致数据']
         con = types['一致性抽检']
-        total = inc['total'] + con['total']
-        assigned = inc['assigned'] + con['assigned']
-        remaining = total - assigned
+        remaining = inc['total'] + con['total']  # remaining = unassigned count (from base_filter)
+        assigned = inc['assigned'] + con['assigned']  # assigned = pending + completed
+        total = assigned + remaining               # total = all in pool
         instances = sorted(set(list(inc['instances']) + list(con['instances'])))
         batch_ids = list(inc['batch_ids'] | con['batch_ids'])
         date_range = _get_date_range(batch_ids)
@@ -222,7 +260,7 @@ def api_assign():
 
     # 计算每人分配数量
     n = len(annotators)
-    if assign_method == '平均分配':
+    if assign_method == 'manual':
         shares = [assign_count // n] * n
         for i in range(assign_count % n):
             shares[i] += 1
@@ -242,6 +280,8 @@ def api_assign():
     # 执行分配
     idx = 0
     actual_assigned = 0  # 实际分配数量（可能小于 assign_count）
+    logs = []   # 暂存 DispatchLog 对象，提交后再统一更新 batch_no
+    log_to_records = []  # [(log, [rec, ...]), ...]，用于提交后写入 dispatch_batch_no
     for annotator, share in zip(annotators, shares):
         if share <= 0:
             continue
@@ -250,6 +290,7 @@ def api_assign():
 
         for rec in records_to_assign:
             rec.annotator = annotator.username
+            rec.assigned_at = datetime.utcnow()  # 记录分配时间
 
         actual_assigned += len(records_to_assign)
 
@@ -260,11 +301,37 @@ def api_assign():
             annotator_id=annotator.id,
             count=len(records_to_assign),
             assign_method=assign_method,
-            data_type=data_type,
+            data_type='全部',  # 不再区分不一致/一致性
             batch_id=records_to_assign[0].fetch_batch_id if records_to_assign else None,
         )
         db.session.add(log)
+        logs.append(log)
+        log_to_records.append((log, records_to_assign))
 
+    db.session.commit()  # 先提交，获取各 log.id
+
+    # 统一生成批次号（DISP-YYYYMMDD-NNN）
+    # 同一管理员同日同一次分配操作的所有标注员，共用同一个批次号
+    today = date.today().strftime('%Y%m%d')
+    existing_count = DispatchLog.query.filter(
+        DispatchLog.admin_id == current_user.id,
+        DispatchLog.batch_no.like(f'DISP-{today}-%')
+    ).count()
+    seq = existing_count - len(logs) + 1 if existing_count >= len(logs) else 1
+    shared_batch_no = f"DISP-{today}-{str(seq).zfill(3)}"
+
+    # 生成任务编码（ANN-YYYYMMDD-NNN）
+    # 同一日同一操作的所有记录共用同一 task_code
+    existing_task = RawData.query.filter(RawData.task_code.like(f'ANN-{today}-%')).count()
+    task_seq = existing_task + 1
+    shared_task_code = f"ANN-{today}-{str(task_seq).zfill(3)}"
+
+    # 所有标注员共用同一批次号和任务编码
+    for i, log in enumerate(logs):
+        log.batch_no = shared_batch_no
+        for rec in log_to_records[i][1]:
+            rec.dispatch_batch_no = shared_batch_no
+            rec.task_code = shared_task_code
     db.session.commit()
 
     # 返回实际分配数量；若与请求不符，给出提示
@@ -277,19 +344,19 @@ def api_assign():
 
 
 def _today_assigned(annotator_id):
-    """今日已分配给该标注员的数量"""
-    today = datetime.combine(date.today(), datetime.min.time())
+    """今日已分配给该标注员的总数量（含已完成，v2.3：完成任务也占据额度）"""
+    today_cutoff = bj_today_utc()  # 北京今日 00:00 UTC
     return db.session.query(db.func.count(RawData.id)).filter(
         RawData.annotator == User.query.get(annotator_id).username,
         RawData.annotator != '',
-        RawData.check_result == '',
-        RawData.created_at >= today,
+        # v2.3 改动：移除 check_result == '' 过滤，已完成的任务也占据额度
+        RawData.assigned_at >= today_cutoff,  # 用 assigned_at 而非 created_at（后者是抓取时间）
     ).scalar() or 0
 
 
 # ---------------------------------------------------------------------------
 # API-3: GET /api/dispatch/history
-# 分配历史
+# 分配历史（按 batch_no 分组返回，支持展开查看每个标注员明细）
 # ---------------------------------------------------------------------------
 
 @dispatch_bp.route('/api/dispatch/history', methods=['GET'])
@@ -298,20 +365,76 @@ def api_history():
     page = int(request.args.get('page', 1))
     per_page = int(request.args.get('per_page', 50))
 
+    # 每条 DispatchLog 独立返回一条（不再按 batch_no 合并）
+    # 这样任务池按 rule 聚合时不会因 batch_no 共享而重复计数
     query = DispatchLog.query.order_by(DispatchLog.created_at.desc())
     total = query.count()
     logs = query.offset((page - 1) * per_page).limit(per_page).all()
 
-    items = [{
-        'id': log.id,
-        'created_at': log.created_at.strftime('%Y-%m-%d %H:%M:%S') if log.created_at else '',
-        'admin_name': log.admin.name or log.admin.username if log.admin else '',
-        'rule_name': log.rule_name,
-        'annotator_name': log.annotator.name or log.annotator.username if log.annotator else '',
-        'count': log.count,
-        'assign_method': log.assign_method or '',
-        'data_type': log.data_type or '',
-    } for log in logs]
+    items = []
+    for log in logs:
+        bn = log.batch_no or ''
+        log_id = log.id
+
+        # 查询该批次对应的全部 RawData（不过滤 annotator，
+        # 因为 api_revoke_batch 会清空已撤回记录的 annotator 字段，
+        # 导致查不到数据使 revoked_count 始终为 0）
+        all_records = RawData.query.filter(
+            RawData.dispatch_batch_no == bn,
+        ).all() if bn else []
+
+        # 分类统计（revoked_batch 在撤回后才写入，撤回前为 None 或 ''）
+        completed_count_calc = sum(1 for r in all_records if r.check_result != '')
+        revoked_pending = sum(1 for r in all_records if r.revoked_batch == bn and r.check_result == '')
+        non_revoked_pending = sum(1 for r in all_records if not r.revoked_batch and r.check_result == '')
+        pending_count = revoked_pending + non_revoked_pending  # 所有待标注（含已撤回的）
+        revoked_count = revoked_pending  # 撤回的待标注记录数
+
+        # 状态判断
+        if revoked_count > 0:
+            status = 'partially_revoked'
+            display_total = len(all_records)  # 总数 = 已完成 + 已撤回待标注 + 未撤回待标注
+        elif pending_count == 0:
+            status = 'done'
+            display_total = completed_count_calc
+        else:
+            status = 'active'
+            display_total = pending_count
+
+        # ---- FIX Issue #1 & #3: per-annotator 统计 ----
+        # 该 DispatchLog 对应的标注员的用户名
+        log_annotator_name = log.annotator.username if log.annotator else ''
+        # 仅属于该标注员的 RawData 记录（用于计算该人的完成数和分配数）
+        per_annot_records = [r for r in all_records if r.annotator == log_annotator_name] if log_annotator_name else []
+        per_annot_completed = sum(1 for r in per_annot_records if r.check_result != '')
+        per_annot_pending = sum(1 for r in per_annot_records if r.check_result == '')
+        per_annot_count = len(per_annot_records)  # 该标注员在此批次的总分配数
+
+        items.append({
+            'batch_no': bn,
+            'rule_name': log.rule_name or '',
+            'admin_name': log.admin.name or log.admin.username if log.admin else '',
+            'created_at': fmt_bj(log.created_at),
+            'assign_method': log.assign_method or '',
+            'total_count': log.count or 0,
+            'completed_count': completed_count_calc,  # 批次维度（所有人合计），前端用于概览
+            'pending_count': pending_count,
+            'revoked_count': revoked_count,
+            'status': status,
+            'display_total': display_total,
+            'isDone': pending_count == 0 and revoked_count == 0,
+            'isPartiallyRevoked': revoked_count > 0,
+            'annotators': [{
+                'log_id': log_id,
+                'annotator_name': log_annotator_name,
+                # FIX Issue #1: count 用该标注员的实际分配数，而非批次总数
+                'count': per_annot_count,
+                # FIX Issue #3: completed_count 仅属于该标注员，而非批次所有人合计
+                'completed_count': per_annot_completed,
+                'pending_count': per_annot_pending,
+                'isDone': per_annot_pending == 0,
+            }],
+        })
 
     return jsonify({
         'success': True,
@@ -322,8 +445,96 @@ def api_history():
 
 
 # ---------------------------------------------------------------------------
+# API-REVOKE-BATCH: POST /api/dispatch/revoke-batch
+# 按批次号撤回分配（仅撤回 check_result 为空的记录）
+# 支持单个 batch_no 或批量 batch_nos 数组（v3.0）
+# ---------------------------------------------------------------------------
+
+@dispatch_bp.route('/api/dispatch/revoke-batch', methods=['POST'])
+@login_required
+def api_revoke_batch():
+    """撤回一个或多个批次（v2.3：区分已完成/未完成）
+    - 未完成：标记 revoked_batch，清空 annotator，退回待分配池
+    - 已完成：保留分配关系，占据今日额度
+    - DispatchLog：改为 partially_revoked 状态（不删除），保留 completed_count
+    - 返回 revoked_count（退回池中）+ kept_count（保留已完成）
+    """
+    if current_user.role != 'admin':
+        return jsonify({'success': False, 'error': '权限不足'}), 403
+
+    data = request.get_json() or {}
+
+    single_no = (data.get('batch_no') or '').strip()
+    batch_nos = data.get('batch_nos') or []
+    if isinstance(batch_nos, str):
+        batch_nos = [batch_nos]
+    if single_no and single_no not in batch_nos:
+        batch_nos = [single_no] + batch_nos
+    batch_nos = [bn.strip() for bn in batch_nos if bn and bn.strip()]
+    batch_nos = list(dict.fromkeys(batch_nos))  # 去重保留顺序
+
+    if not batch_nos:
+        return jsonify({'success': False, 'error': '批次号不能为空'}), 400
+
+    total_revoked = 0       # 退回池中的未完成任务数
+    total_kept = 0           # 保留的已完成任务数
+    per_batch = {}           # {batch_no: {revoked, kept}}
+
+    for batch_no in batch_nos:
+        logs = DispatchLog.query.filter(DispatchLog.batch_no == batch_no).all()
+        if not logs:
+            continue
+
+        all_records = RawData.query.filter(
+            RawData.dispatch_batch_no == batch_no,
+        ).all()
+
+        batch_revoked = 0
+        batch_kept = 0
+
+        for rec in all_records:
+            if rec.check_result == '':
+                # 未完成 → 撤回：标记 revoked_batch，清空 annotator
+                rec.revoked_batch = batch_no
+                rec.annotator = ''
+                batch_revoked += 1
+            else:
+                # 已完成 → 保留分配关系，占据额度
+                # 不动任何字段，但标注 revoked_batch 以标识该记录曾经历撤回
+                rec.revoked_batch = batch_no
+                batch_kept += 1
+
+        total_revoked += batch_revoked
+        total_kept += batch_kept
+        per_batch[batch_no] = {'revoked': batch_revoked, 'kept': batch_kept}
+
+        # 不更新 DispatchLog.count：保留原始分配数（如每标注员 1 条）。
+        # display_total 从 RawData 实时统计，通过 api_history 的 display_total 字段传给前端。
+
+    db.session.commit()
+
+    if len(batch_nos) == 1:
+        msg = f'已撤回批次 {batch_nos[0]}（退回 {total_revoked} 条 / 保留 {total_kept} 条已完成）'
+    else:
+        msg = f'已撤回 {len(batch_nos)} 个批次（退回 {total_revoked} 条 / 保留 {total_kept} 条已完成）'
+
+    return jsonify({
+        'success': True,
+        'revoked_count': total_revoked,
+        'kept_count': total_kept,
+        'total_count': total_revoked + total_kept,
+        'per_batch': per_batch,
+        'batch_nos': batch_nos,
+        'message': msg,
+    })
+
+
+# ---------------------------------------------------------------------------
 # API-4: DELETE /api/dispatch/revoke
-# 清空分配（撤回已分配但未标注的任务）
+# 撤回已分配但未标注的任务
+# - 无参数：撤回全部已分配未标注记录
+# - 带 rule_name：撤回指定规则的全部分配
+# - 带 rule_name + annotator_id：撤回指定规则+标注员的分配
 # ---------------------------------------------------------------------------
 
 @dispatch_bp.route('/api/dispatch/revoke', methods=['DELETE'])
@@ -333,37 +544,116 @@ def api_revoke():
         return jsonify({'success': False, 'error': '权限不足'}), 403
 
     data = request.get_json() or {}
-    rule_name = data.get('rule_name')
+    rule_name = data.get('rule_name') or ''
     annotator_id = data.get('annotator_id')
-
-    if not rule_name:
-        return jsonify({'success': False, 'error': '规则名不能为空'}), 400
-
-    # 加载实例→规则映射
-    from services.fetch_service import get_instance_rule_mapping
-    instance_rule_map = get_instance_rule_mapping()
-    matched_instances = [inst for inst, rule in instance_rule_map.items() if rule == rule_name]
+    batch_nos = data.get('batch_nos') or []
 
     base = [
         RawData.annotator != '',
         RawData.check_result == '',
     ]
-    if matched_instances:
-        from sqlalchemy import or_
-        base.append(or_(*[RawData.instance_code == inst for inst in matched_instances]))
 
+    # v3.0: 若指定了 batch_nos，只撤回选中批次的分配（支持撤回全部已分配的场景）
+    if batch_nos:
+        from sqlalchemy import or_
+        batch_nos = [bn for bn in batch_nos if bn]
+        if batch_nos:
+            base.append(or_(*[RawData.dispatch_batch_no == bn for bn in batch_nos]))
+
+    # 若指定了 rule_name，按规则过滤（与 batch_nos 同时生效）
+    if rule_name:
+        from services.fetch_service import get_instance_rule_mapping
+        instance_rule_map = get_instance_rule_mapping()
+        matched_instances = [inst for inst, rule in instance_rule_map.items() if rule == rule_name]
+        if matched_instances:
+            from sqlalchemy import or_
+            base.append(or_(*[RawData.instance_code == inst for inst in matched_instances]))
+
+    # 若指定了标注员，进一步过滤
     if annotator_id:
         user = User.query.get(int(annotator_id))
         if user:
             base.append(RawData.annotator == user.username)
+        else:
+            return jsonify({'success': False, 'error': '标注员不存在'}), 400
 
     records = RawData.query.filter(*base).all()
     count = len(records)
     for rec in records:
+        rec.revoked_batch = rec.dispatch_batch_no or 'REVOKE'   # v2.2：标记已撤回
         rec.annotator = ''
+        rec.dispatch_batch_no = None
 
     db.session.commit()
-    return jsonify({'success': True, 'revoked_count': count, 'message': f'已撤回 {count} 条分配'})
+
+    if batch_nos and not rule_name and not annotator_id:
+        msg = f'已撤回选中 {len(batch_nos)} 个批次的 {count} 条分配'
+    elif not rule_name and not annotator_id:
+        msg = f'已撤回全部 {count} 条已分配未标注任务'
+    elif annotator_id:
+        msg = f'已撤回 {count} 条分配'
+    else:
+        msg = f'已撤回规则 [{rule_name}] 的 {count} 条分配'
+
+    return jsonify({'success': True, 'revoked_count': count, 'message': msg})
+
+
+# ---------------------------------------------------------------------------
+# API-REVOKE-LOG: POST /api/dispatch/revoke-log
+# 按 DispatchLog ID 撤回单条分配记录（仅撤回该标注员的分配）
+# v2.2：对待标注和已标注记录统一标记 revoked_batch，任务列表不再显示
+# ---------------------------------------------------------------------------
+
+@dispatch_bp.route('/api/dispatch/revoke-log', methods=['POST'])
+@login_required
+def api_revoke_log():
+    if current_user.role != 'admin':
+        return jsonify({'success': False, 'error': '权限不足'}), 403
+
+    data = request.get_json() or {}
+    log_id = data.get('log_id')
+
+    if not log_id:
+        return jsonify({'success': False, 'error': 'log_id 不能为空'}), 400
+
+    log_entry = DispatchLog.query.get(int(log_id))
+    if not log_entry:
+        return jsonify({'success': False, 'error': '分配记录不存在'}), 404
+
+    batch_no = log_entry.batch_no
+    annotator_name = log_entry.annotator.username if log_entry.annotator else ''
+
+    # 找出该批次该标注员的全部记录（pending + completed）
+    all_records = RawData.query.filter(
+        RawData.annotator == annotator_name,
+        RawData.dispatch_batch_no == batch_no,
+    ).all()
+
+    revoked_count = 0    # 退回池中的未完成任务
+    kept_count = 0       # 保留的已完成任务
+    for rec in all_records:
+        if rec.check_result == '':
+            # 未完成 → 撤回：标记 revoked_batch，清空 annotator
+            rec.revoked_batch = batch_no
+            rec.annotator = ''
+            revoked_count += 1
+        else:
+            # 已完成 → 保留分配关系，但标注 revoked_batch
+            rec.revoked_batch = batch_no
+            kept_count += 1
+
+    # 更新 DispatchLog count（不删除，保留记录以供历史查看）
+    log_entry.count = kept_count
+    # completed_count 保持不变
+
+    db.session.commit()
+
+    return jsonify({
+        'success': True,
+        'revoked_count': revoked_count,
+        'kept_count': kept_count,
+        'message': f'已撤回 [{log_entry.annotator.name or annotator_name}] 的分配（退回 {revoked_count} 条 / 保留 {kept_count} 条已完成）'
+    })
 
 
 # ---------------------------------------------------------------------------
@@ -386,6 +676,8 @@ def api_my_tasks():
     rule_filter = request.args.get('rule_name', '')
     status_filter = request.args.get('status', '')  # pending / done
     instance_filter = request.args.get('instance', '')
+    dispatch_batch_no = request.args.get('dispatch_batch_no', '').strip()  # 分配批次号（v2.1）
+    task_code_filter = request.args.get('task_code', '').strip()  # 任务编码（v2.0）
     page = int(request.args.get('page', 1))
     per_page = int(request.args.get('per_page', 20))
 
@@ -393,6 +685,41 @@ def api_my_tasks():
         RawData.modelb_reviewed == True,
         RawData.annotator != '',
     ] + annotator_filter
+
+    # FIX Issue #2（revoked_batch 过滤修正）：
+    # 部分撤回后，completed 记录保留 check_result 且 revoked_batch = batch_no，
+    # pending 记录 revoked_batch = batch_no 且 annotator 被清空。
+    # 正确逻辑：排除"此批次撤回的 pending 记录"，保留"此批次的 completed 记录"。
+    has_batch_filter = bool(dispatch_batch_no)
+    if has_batch_filter:
+        if status_filter == 'done':
+            # 仅已完成：包含该批次中所有已完成记录（含部分撤回后保留的）
+            base.append(RawData.check_result != '')
+        else:
+            # pending 或全部：已完成永远可见；pending 仅显示未被此批次撤回的
+            base.append(db.or_(
+                RawData.check_result != '',
+                db.and_(
+                    RawData.check_result == '',
+                    RawData.revoked_batch != dispatch_batch_no,  # pending 且未被此批次撤回
+                )
+            ))
+    else:
+        # 无 batch_no 过滤：已完成永远可见；pending 仅显示从未被撤回的
+        base.append(db.or_(
+            RawData.check_result != '',  # 已完成：永远可见
+            RawData.revoked_batch == None,  # pending：从未被撤回
+        ))
+
+    # 加载 instance→rule 映射（v2.0：rule_name 从映射表读取，而非 computed_error_reason）
+    from services.fetch_service import get_instance_rule_mapping
+    instance_rule_map = get_instance_rule_mapping()
+
+    if dispatch_batch_no:
+        base.append(RawData.dispatch_batch_no == dispatch_batch_no)  # v2.1：按批次号精确过滤
+
+    if task_code_filter:
+        base.append(RawData.task_code == task_code_filter)  # v2.0：按任务编码精确过滤
 
     if rule_filter:
         # 通过规则名找对应实例
@@ -433,9 +760,11 @@ def api_my_tasks():
             'ai_reject_reason': truncate(r.ai_reject_reason),
             'modelb_result': r.modelb_result or '',
             'modelb_reason': truncate(r.modelb_reason),
-            'rule_name': r.computed_error_reason or ('合规抽检' if r.modelb_consistent else '其他违规'),
+            'rule_name': instance_rule_map.get(r.instance_code, '') or r.computed_error_reason or '',
             'data_date': str(r.created_date or '')[:10].replace('-','/'),
             'check_result': r.check_result or '',
+            'task_code': r.task_code or '',  # 任务编码（历史兼容）
+            'dispatch_batch_no': r.dispatch_batch_no or '',  # 分配批次号（v2.1）
             'main_image': truncate(r.main_image),
             'detail_image': truncate(r.detail_image),
             'sku_image': truncate(r.sku_image),
@@ -449,6 +778,163 @@ def api_my_tasks():
         'total': total,
         'pages': (total + per_page - 1) // per_page,
         'items': items,
+    })
+
+
+# ---------------------------------------------------------------------------
+# API-5b: GET /api/annotation/my-task-groups
+# 任务级聚合视图（v2.0 新增）
+# 按 task_code 聚合，统计总数/待标注/正确/错误/忽略
+# ---------------------------------------------------------------------------
+
+@dispatch_bp.route('/api/annotation/my-task-groups', methods=['GET'])
+@login_required
+def api_my_task_groups():
+    """标注员获取任务级聚合列表"""
+    if current_user.role not in ('annotator', 'admin'):
+        return jsonify({'success': False, 'error': '权限不足'}), 403
+
+    # 管理员查看所有；标注员只看自己的
+    if current_user.role == 'admin':
+        annotator_filter = []
+    else:
+        annotator_filter = [RawData.annotator == current_user.username]
+
+    instance_filter = request.args.get('instance', '').strip()
+    rule_filter = request.args.get('rule_name', '').strip()
+    dispatch_batch_filter = request.args.get('dispatch_batch_no', '').strip()
+    page = int(request.args.get('page', 1))
+    per_page = int(request.args.get('per_page', 20))
+
+    base = [
+        RawData.modelb_reviewed == True,
+        RawData.annotator != '',
+    ] + annotator_filter
+
+    # FIX Issue #2（revoked_batch 过滤修正）：与 api_my_tasks 保持一致
+    # 已完成记录永远可见（不可撤回）；仅 pending 记录受 revoked_batch 过滤
+    if dispatch_batch_filter:
+        base.append(
+            db.or_(
+                RawData.check_result != '',  # 已完成：永远可见
+                db.and_(
+                    RawData.check_result == '',
+                    RawData.revoked_batch != dispatch_batch_filter,  # pending 且未被此批次撤回
+                )
+            )
+        )
+    else:
+        # 无 batch_no 过滤：已完成永远可见；pending 仅显示从未被撤回的
+        base.append(db.or_(
+            RawData.check_result != '',  # 已完成：永远可见
+            RawData.revoked_batch == None,  # pending：从未被撤回
+        ))
+
+    if instance_filter:
+        base.append(RawData.instance_code == instance_filter)
+
+    if rule_filter:
+        from services.fetch_service import get_instance_rule_mapping
+        instance_rule_map = get_instance_rule_mapping()
+        matched_instances = [inst for inst, rule in instance_rule_map.items() if rule == rule_filter]
+        if matched_instances:
+            from sqlalchemy import or_
+            base.append(or_(*[RawData.instance_code == inst for inst in matched_instances]))
+
+    # 加载 instance→rule 映射（用于显示规则名）
+    from services.fetch_service import get_instance_rule_mapping
+    instance_rule_map = get_instance_rule_mapping()
+
+    # 查询所有匹配的记录（用于前端分组；最多查 5000 条）
+    records = RawData.query.filter(*base).order_by(RawData.id.desc()).limit(5000).all()
+
+    # 按 task_code 分组（无 task_code 则用 created_date+instance_code 拼装虚拟 key）
+    groups = {}
+    for r in records:
+        key = r.task_code
+        if not key:
+            # 无 task_code 时，用虚拟编码：ANN-VIRTUAL-{date}-{instance}
+            key = f'ANN-VIRTUAL-{str(r.created_date or "")[:8]}-{r.instance_code or ""}'
+        if key not in groups:
+            groups[key] = {
+                'task_code': r.task_code or key,
+                'rule_name': instance_rule_map.get(r.instance_code, '') or r.rule_name or '',
+                'data_date': str(r.created_date or '')[:10].replace('-', '/'),
+                'instance_code': r.instance_code or '',
+                'total_count': 0,
+                'pending_count': 0,
+                'annotated_count': 0,
+                'correct_count': 0,
+                'error_count': 0,
+                'ignore_count': 0,
+                'dispatch_batch_no': r.dispatch_batch_no or '',
+                'annotator': r.annotator or '',
+            }
+        g = groups[key]
+        g['total_count'] += 1
+        if r.check_result == 'correct':
+            g['correct_count'] += 1
+            g['annotated_count'] += 1
+        elif r.check_result == 'error':
+            g['error_count'] += 1
+            g['annotated_count'] += 1
+        elif r.check_result == 'ignore':
+            g['ignore_count'] += 1
+            g['annotated_count'] += 1
+        else:
+            g['pending_count'] += 1
+
+    # 从 DispatchLog 补充分配人和分配时间
+    task_codes = [g['task_code'] for g in groups.values()]
+    batch_nos = [g['dispatch_batch_no'] for g in groups.values() if g['dispatch_batch_no']]
+    log_map = {}
+    if batch_nos:
+        logs = DispatchLog.query.filter(DispatchLog.batch_no.in_(batch_nos)).all()
+        for log in logs:
+            log_map[log.batch_no] = log
+
+    # 计算进度百分比
+    items = []
+    for g in groups.values():
+        progress = (g['annotated_count'] / g['total_count'] * 100) if g['total_count'] > 0 else 0
+        # 分配人/时间：从第一条记录对应的 DispatchLog 获取
+        admin_name = ''
+        assign_time = ''
+        log = log_map.get(g['dispatch_batch_no'])
+        if log:
+            admin_name = log.admin.name or log.admin.username if log.admin else ''
+            assign_time = log.created_at.strftime('%Y-%m-%d %H:%M') if log.created_at else ''
+        items.append({
+            'task_code': g['task_code'],
+            'rule_name': g['rule_name'],
+            'data_date': g['data_date'],
+            'instance_code': g['instance_code'],
+            'total_count': g['total_count'],
+            'pending_count': g['pending_count'],
+            'annotated_count': g['annotated_count'],
+            'correct_count': g['correct_count'],
+            'error_count': g['error_count'],
+            'ignore_count': g['ignore_count'],
+            'progress': round(progress, 1),
+            'admin_name': admin_name,
+            'assign_time': assign_time,
+            'dispatch_batch_no': g['dispatch_batch_no'],
+        })
+
+    # 按 task_code 降序排序
+    items.sort(key=lambda x: x['task_code'], reverse=True)
+
+    # 分页
+    total = len(items)
+    start = (page - 1) * per_page
+    end = start + per_page
+    paged = items[start:end]
+
+    return jsonify({
+        'success': True,
+        'total': total,
+        'pages': (total + per_page - 1) // per_page,
+        'items': paged,
     })
 
 
@@ -532,16 +1018,27 @@ def api_annotator_load():
 
     items = []
     for a in annotators:
-        today_assigned = RawData.query.filter(
-            RawData.annotator == a.username,
-            RawData.created_at >= today_start,
-        ).count()
+        # today_assigned：仍用 SQL 过滤（从 _today_assigned 逻辑复用，created_at>=北京今日0点的UTC）
+        today_assigned = _today_assigned(a.id)
 
-        today_completed = RawData.query.filter(
-            RawData.annotator == a.username,
-            RawData.check_result != '',
-            RawData.created_at >= today_start,
-        ).count()
+        # today_completed：使用 Python 级日期比较（UTC+8 处理）
+        from datetime import timedelta
+        bj_today = (datetime.utcnow() + timedelta(hours=8)).date()
+        bj_today_start_utc = datetime.combine(bj_today, datetime.min.time()) - timedelta(hours=8)
+        bj_today_end_utc = datetime.combine(bj_today, datetime.max.time()) - timedelta(hours=8)
+
+        # 查询今日有效标注记录（用于统计准确率）
+        today_ann_records = db.session.query(Annotation).join(
+            RawData, Annotation.raw_data_id == RawData.id
+        ).filter(
+            Annotation.annotator_id == a.id,
+            Annotation.is_submitted == True,
+            Annotation.created_at >= bj_today_start_utc,
+            Annotation.created_at <= bj_today_end_utc,
+        ).all()
+        today_completed = len(today_ann_records)
+        correct_count = sum(1 for r in today_ann_records if r.result == 'correct')
+        today_accuracy = round(correct_count / today_completed * 100, 1) if today_completed > 0 else None
 
         quota = a.daily_quota or 200
         remaining = max(0, quota - today_assigned)
@@ -563,10 +1060,122 @@ def api_annotator_load():
             'today_assigned': today_assigned,
             'today_completed': today_completed,
             'remaining': remaining,
+            'today_accuracy': today_accuracy,  # 今日标注准确率（v2.0 新增）
             'bound_rules': bound,
         })
 
     return jsonify({'success': True, 'items': items})
+
+
+# ---------------------------------------------------------------------------
+# API: GET /api/dispatch/annotator-stats
+# 标注员历史标注统计：按日期+规则聚合，准确率计算
+# ---------------------------------------------------------------------------
+
+@dispatch_bp.route('/api/dispatch/annotator-stats', methods=['GET'])
+@login_required
+def api_annotator_stats():
+    from datetime import timedelta
+    try:
+        annotator_id = int(request.args.get('annotator_id', 0))
+    except (ValueError, TypeError):
+        return jsonify({'success': False, 'error': '无效的 annotator_id'}), 400
+
+    try:
+        days = int(request.args.get('days', 30))
+        if days < 0:
+            days = 0
+    except (ValueError, TypeError):
+        days = 30
+
+    rule_name = request.args.get('rule_name', '').strip()
+
+    # 时间范围过滤（北京时区）
+    cutoff_bj = None
+    if days > 0:
+        bj_now = datetime.utcnow() + timedelta(hours=8)
+        cutoff_bj = bj_now.date() - timedelta(days=days - 1)  # 含起始日
+        # 转换为 UTC 00:00（北京时间次日的 16:00）
+        cutoff_utc = datetime.combine(cutoff_bj, datetime.min.time()) - timedelta(hours=8)
+
+    # 标注员存在性校验
+    annotator = User.query.get(annotator_id)
+    if not annotator:
+        return jsonify({'success': False, 'error': '标注员不存在'}), 404
+
+    # 基础查询：只查已提交的
+    q = db.session.query(
+        Annotation.created_at,
+        Annotation.result,
+        DispatchLog.rule_name,
+    ).join(
+        RawData, Annotation.raw_data_id == RawData.id
+    ).outerjoin(
+        DispatchLog,
+        db.and_(
+            RawData.dispatch_batch_no == DispatchLog.batch_no,
+            DispatchLog.annotator_id == Annotation.annotator_id,
+        )
+    ).filter(
+        Annotation.annotator_id == annotator_id,
+        Annotation.is_submitted == True,
+    )
+
+    # 时间范围过滤（UTC 存储，UTC+8 比较）
+    if cutoff_utc:
+        q = q.filter(Annotation.created_at >= cutoff_utc)
+
+    # 规则过滤
+    if rule_name:
+        q = q.filter(DispatchLog.rule_name == rule_name)
+
+    rows = q.all()
+
+    # 按 (date_bj, rule_name) 分组聚合
+    grouped = {}
+    for row in rows:
+        created_at, result, rn = row
+        if created_at is None:
+            continue
+        bj_dt = created_at + timedelta(hours=8)
+        date_key = bj_dt.strftime('%Y-%m-%d')
+        rn = rn or '未分类'
+        key = (date_key, rn)
+        if key not in grouped:
+            grouped[key] = {'annotated': 0, 'correct': 0}
+        grouped[key]['annotated'] += 1
+        if result == 'correct':
+            grouped[key]['correct'] += 1
+
+    # 构建 items
+    items = []
+    total_annotated = 0
+    total_correct = 0
+    for (date_key, rn), counts in sorted(grouped.items()):
+        ann = counts['annotated']
+        cor = counts['correct']
+        acc = round(cor / ann * 100, 1) if ann > 0 else 0.0
+        items.append({
+            'date': date_key,
+            'rule_name': rn,
+            'annotated_count': ann,
+            'correct_count': cor,
+            'accuracy': acc,
+        })
+        total_annotated += ann
+        total_correct += cor
+
+    overall = round(total_correct / total_annotated * 100, 1) if total_annotated > 0 else 0.0
+
+    return jsonify({
+        'success': True,
+        'items': items,
+        'summary': {
+            'total_annotated': total_annotated,
+            'total_correct': total_correct,
+            'overall_accuracy': overall,
+        }
+    })
 
 
 # ---------------------------------------------------------------------------

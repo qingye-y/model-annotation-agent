@@ -496,6 +496,33 @@
         }
       }
 
+      // 暴露给 iframe 调用的导航函数（v3.0：iframe 跳转时同步更新侧边栏激活状态）
+      window.navigateTo = function(page) {
+        contentFrame.src = page;
+        // 去掉查询参数后匹配菜单项（如 annotation_list.html?dispatch_batch_no=xxx → annotation_list.html）
+        var pageBase = page.split('?')[0];
+        var menuItem = document.querySelector('.menu-item[data-page="' + pageBase + '"]');
+        if (menuItem) {
+          setActiveMenu(menuItem);
+          breadcrumbCurrent.textContent = menuItem.querySelector('.menu-label').textContent;
+        } else if (pageBase === 'annotation_detail.html' || page.startsWith('annotation_detail')) {
+          // 详情页：在侧栏高亮"标注任务"菜单，顶部显示二级标题
+          var annotMenu = document.querySelector('.menu-item[data-page="annotation_list.html"]');
+          if (annotMenu) { setActiveMenu(annotMenu); }
+          breadcrumbCurrent.textContent = '标注任务 > 商品标注';
+        }
+      };
+
+      // iframe 内页面控制侧边栏显隐
+      window.hideSidebar = function() {
+        sidebar.classList.add('collapsed');
+        sidebarToggle.textContent = '»';
+      };
+      window.showSidebar = function() {
+        sidebar.classList.remove('collapsed');
+        sidebarToggle.textContent = '☰';
+      };
+
       // 菜单项点击切换
       menuItems.forEach(function(item) {
         item.addEventListener('click', function() {

@@ -44,10 +44,13 @@ class RawData(db.Model):
     instance_code = db.Column(db.String(50))
     created_date = db.Column(db.String(50))
     annotator = db.Column(db.String(100))
+    assigned_at = db.Column(db.DateTime, nullable=True)  # 分配时间，用于今日已分配统计
     random_num = db.Column(db.Float)
     change_category = db.Column(db.String(200))
     gmt_created = db.Column(db.String(50))
     fetch_batch_id = db.Column(db.String(100))
+    task_code = db.Column(db.String(20), comment='标注任务编码，格式 ANN-YYYYMMDD-NNN')  # 标注任务编码（v2.0）
+    dispatch_batch_no = db.Column(db.String(50), comment='分配批次号，如 DISP-20260525-001（v2.1）')
     source = db.Column(db.String(20), default='fetch')  # 数据来源：fetch（线上获取）/ upload（文件上传）
     modelb_result = db.Column(db.String(20))  # 模型B审核结果
     modelb_reason = db.Column(db.String(200))  # 模型B审核原因（简短）
@@ -56,6 +59,7 @@ class RawData(db.Model):
     modelb_reviewed = db.Column(db.Boolean, default=False)  # 是否已互检
     computed_error_reason = db.Column(db.String(200))  # 从AI拒绝原因提取的简短原因标签
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    revoked_batch = db.Column(db.String(50))  # 撤回所属批次号；非空表示该记录已撤回（v2.2）
 
 class FetchLog(db.Model):
     __tablename__ = 'fetch_log'
@@ -181,9 +185,11 @@ class DispatchLog(db.Model):
     rule_name = db.Column(db.String(100), nullable=False, comment='规则名，如"水印违规"、"合规抽检"')
     annotator_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     count = db.Column(db.Integer, nullable=False, comment='分配数量')
+    completed_count = db.Column(db.Integer, default=0, comment='已完成标注数量')
     assign_method = db.Column(db.String(20), comment='平均分配 / 按额度比例')
     data_type = db.Column(db.String(20), comment='不一致数据 / 一致性抽检')
     batch_id = db.Column(db.String(100), comment='关联 FetchLog 批次')
+    batch_no = db.Column(db.String(50), comment='分配批次号，如 DISP-20260525-001')
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     admin = db.relationship('User', foreign_keys=[admin_id], backref='dispatch_logs')

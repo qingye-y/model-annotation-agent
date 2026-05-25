@@ -1,0 +1,1262 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>商品标注</title>
+  <link rel="stylesheet" href="/static/common.css">
+  <script src="/static/config.js"></script>
+  <script src="/static/common.js"></script>
+  <style>
+    /* =====================================================================
+       页面布局
+       ===================================================================== */
+    .detail-page {
+      padding: 20px 24px;
+      min-height: 100vh;
+      box-sizing: border-box;
+    }
+
+    /* =====================================================================
+       顶部导航栏
+       ===================================================================== */
+    .detail-header {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      margin-bottom: 20px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid var(--border-light);
+    }
+
+    .back-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 14px;
+      background: var(--white);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      color: var(--text-primary);
+      font-size: 13px;
+      cursor: pointer;
+      text-decoration: none;
+      transition: all 0.2s;
+      flex-shrink: 0;
+    }
+    .back-btn:hover {
+      background: var(--bg);
+      border-color: var(--primary);
+      color: var(--primary);
+    }
+
+    .detail-title {
+      font-size: 16px;
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+
+    .detail-breadcrumb {
+      font-size: 13px;
+      color: var(--text-secondary);
+    }
+
+    .detail-breadcrumb span {
+      color: var(--primary);
+    }
+
+    .progress-badge {
+      margin-left: auto;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-secondary);
+      background: var(--bg);
+      padding: 4px 12px;
+      border-radius: var(--radius);
+      border: 1px solid var(--border-light);
+      flex-shrink: 0;
+    }
+
+    /* =====================================================================
+       主内容区（左右两栏）
+       ===================================================================== */
+    .detail-content {
+      display: grid;
+      grid-template-columns: 55% 1fr;
+      gap: 20px;
+      align-items: start;
+    }
+
+    /* =====================================================================
+       左侧：商品信息 + 图片
+       ===================================================================== */
+    .product-panel {
+      background: var(--white);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow);
+      padding: 20px;
+    }
+
+    .product-title {
+      font-size: 16px;
+      font-weight: 600;
+      color: var(--text-primary);
+      margin-bottom: 12px;
+      line-height: 1.5;
+    }
+
+    .product-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0;
+      margin-bottom: 16px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--border-light);
+    }
+
+    .product-meta-item {
+      font-size: 13px;
+      color: var(--text-secondary);
+      margin-right: 24px;
+      line-height: 1.8;
+    }
+
+    .product-meta-item .label {
+      color: var(--text-muted);
+      margin-right: 4px;
+    }
+
+    .product-meta-item .value {
+      color: var(--text-primary);
+      font-weight: 500;
+    }
+
+    /* 图片区 */
+    .image-section-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-secondary);
+      margin-bottom: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .image-grid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+
+    .image-card {
+      flex: 1;
+      min-width: 0;
+      cursor: pointer;
+    }
+
+    .image-card-label {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-bottom: 4px;
+    }
+
+    .image-card-img {
+      width: 100%;
+      aspect-ratio: 4/3;
+      object-fit: cover;
+      border-radius: var(--radius);
+      border: 1px solid var(--border-light);
+      background: var(--bg);
+      transition: all 0.2s;
+    }
+
+    .image-card-img:hover {
+      border-color: var(--primary);
+      box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+    }
+
+    .no-image {
+      width: 100%;
+      aspect-ratio: 4/3;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--bg);
+      border-radius: var(--radius);
+      border: 1px dashed var(--border);
+      color: var(--text-muted);
+      font-size: 12px;
+    }
+
+    /* =====================================================================
+       右侧：审核结果 + 标注操作
+       ===================================================================== */
+    .review-panel {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .review-card {
+      background: var(--white);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow);
+      padding: 16px 20px;
+    }
+
+    .review-card-header {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text-primary);
+      margin-bottom: 12px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--border-light);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .review-card-header .model-badge {
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: 10px;
+      font-weight: 500;
+    }
+
+    .model-badge.model-a {
+      background: var(--primary-light);
+      color: var(--primary);
+    }
+
+    .model-badge.model-b {
+      background: var(--warning-light);
+      color: var(--warning-dark);
+    }
+
+    .review-item {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 8px;
+      font-size: 13px;
+      line-height: 1.6;
+    }
+
+    .review-item:last-child {
+      margin-bottom: 0;
+    }
+
+    .review-item .label {
+      color: var(--text-secondary);
+      flex-shrink: 0;
+      min-width: 90px;
+    }
+
+    .review-item .value {
+      color: var(--text-primary);
+      word-break: break-all;
+    }
+
+    .review-item .value.ai-pass {
+      color: var(--success);
+    }
+
+    .review-item .value.ai-fail {
+      color: var(--danger);
+    }
+
+    .review-item .value.ai-pending {
+      color: var(--warning);
+    }
+
+    /* 模型B可折叠 */
+    .model-b-card .collapse-toggle {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text-primary);
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--border-light);
+      margin-bottom: 12px;
+    }
+
+    .model-b-card .collapse-toggle:hover {
+      color: var(--primary);
+    }
+
+    .model-b-card .collapse-toggle .arrow {
+      font-size: 10px;
+      transition: transform 0.2s;
+    }
+
+    .model-b-card .collapse-content {
+      display: block;
+    }
+
+    /* =====================================================================
+       标注操作区
+       ===================================================================== */
+    .annotation-card {
+      background: var(--white);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow);
+      padding: 20px;
+    }
+
+    .annotation-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text-primary);
+      margin-bottom: 16px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--border-light);
+    }
+
+    /* 标注按钮 */
+    .annotation-buttons {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+
+    .annotation-btn {
+      flex: 1;
+      padding: 12px 16px;
+      font-size: 14px;
+      font-weight: 600;
+      border: 2px solid transparent;
+      border-radius: var(--radius);
+      cursor: pointer;
+      transition: all 0.2s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+    }
+
+    .annotation-btn.correct {
+      background: var(--success-light);
+      color: var(--success-dark);
+      border-color: var(--success);
+    }
+    .annotation-btn.correct:hover,
+    .annotation-btn.correct.active {
+      background: var(--success);
+      color: white;
+    }
+
+    .annotation-btn.error {
+      background: var(--danger-light);
+      color: var(--danger-dark);
+      border-color: var(--danger);
+    }
+    .annotation-btn.error:hover,
+    .annotation-btn.error.active {
+      background: var(--danger);
+      color: white;
+    }
+
+    .annotation-btn.ignore {
+      background: var(--warning-light);
+      color: var(--warning-dark);
+      border-color: var(--warning);
+    }
+    .annotation-btn.ignore:hover,
+    .annotation-btn.ignore.active {
+      background: var(--warning);
+      color: white;
+    }
+
+    /* 错误标签输入区 */
+    .annotation-inputs {
+      display: none;
+      margin-bottom: 16px;
+      padding: 14px;
+      background: var(--bg);
+      border-radius: var(--radius);
+      border: 1px solid var(--border-light);
+    }
+
+    .annotation-inputs.show {
+      display: block;
+    }
+
+    .form-group {
+      margin-bottom: 12px;
+    }
+
+    .form-group:last-child {
+      margin-bottom: 0;
+    }
+
+    .form-group label {
+      display: block;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text-secondary);
+      margin-bottom: 4px;
+    }
+
+    .form-group label .required {
+      color: var(--danger);
+    }
+
+    .form-select,
+    .form-input {
+      width: 100%;
+      padding: 8px 12px;
+      font-size: 13px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--white);
+      color: var(--text-primary);
+      box-sizing: border-box;
+      transition: border-color 0.2s;
+    }
+
+    .form-select:focus,
+    .form-input:focus {
+      outline: none;
+      border-color: var(--primary);
+    }
+
+    /* 导航按钮 */
+    .annotation-nav {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .nav-btn {
+      padding: 10px 20px;
+      font-size: 13px;
+      font-weight: 500;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--white);
+      color: var(--text-primary);
+      cursor: pointer;
+      transition: all 0.2s;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .nav-btn:hover:not(:disabled) {
+      background: var(--primary);
+      border-color: var(--primary);
+      color: white;
+    }
+
+    .nav-btn:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+
+    .nav-btn.next-btn {
+      background: var(--primary);
+      border-color: var(--primary);
+      color: white;
+    }
+
+    .nav-btn.next-btn:hover:not(:disabled) {
+      background: var(--primary-dark);
+      border-color: var(--primary-dark);
+    }
+
+    .nav-info {
+      font-size: 13px;
+      color: var(--text-secondary);
+      min-width: 60px;
+      text-align: center;
+    }
+
+    /* =====================================================================
+       图片预览
+       ===================================================================== */
+    .preview-overlay {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0,0,0,0.85);
+      z-index: 9999;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+    }
+
+    .preview-overlay.active {
+      display: flex;
+    }
+
+    .preview-close {
+      position: absolute;
+      top: 20px;
+      right: 24px;
+      font-size: 28px;
+      color: white;
+      background: none;
+      border: none;
+      cursor: pointer;
+      opacity: 0.8;
+      line-height: 1;
+      padding: 8px;
+    }
+
+    .preview-close:hover {
+      opacity: 1;
+    }
+
+    .preview-img {
+      max-width: 90vw;
+      max-height: 80vh;
+      object-fit: contain;
+      border-radius: 4px;
+    }
+
+    .preview-nav {
+      position: absolute;
+      top: 50%;
+      transform: translateY(-50%);
+      background: rgba(255,255,255,0.15);
+      border: none;
+      color: white;
+      font-size: 32px;
+      cursor: pointer;
+      padding: 16px 12px;
+      transition: background 0.2s;
+    }
+
+    .preview-nav:hover {
+      background: rgba(255,255,255,0.3);
+    }
+
+    .preview-nav.prev {
+      left: 20px;
+    }
+
+    .preview-nav.next {
+      right: 20px;
+    }
+
+    .preview-counter {
+      color: rgba(255,255,255,0.7);
+      font-size: 13px;
+      margin-top: 12px;
+    }
+
+    .preview-label {
+      color: rgba(255,255,255,0.5);
+      font-size: 12px;
+      margin-top: 4px;
+    }
+
+    /* =====================================================================
+       Toast 提示
+       ===================================================================== */
+    .task-toast {
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%) translateY(100px);
+      padding: 10px 20px;
+      border-radius: var(--radius);
+      color: white;
+      font-size: 13px;
+      font-weight: 500;
+      z-index: 10000;
+      opacity: 0;
+      transition: all 0.3s;
+      pointer-events: none;
+    }
+
+    .task-toast.show {
+      transform: translateX(-50%) translateY(0);
+      opacity: 1;
+    }
+
+    .task-toast.error {
+      background: var(--danger);
+    }
+
+    /* =====================================================================
+       响应式
+       ===================================================================== */
+    @media (max-width: 900px) {
+      .detail-content {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    /* 已标注状态显示 */
+    .annotation-status {
+      padding: 10px 16px;
+      border-radius: var(--radius);
+      font-size: 13px;
+      font-weight: 500;
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .annotation-status.pending {
+      background: var(--bg);
+      color: var(--text-secondary);
+      border: 1px dashed var(--border);
+    }
+
+    .annotation-status.done-correct {
+      background: var(--success-light);
+      color: var(--success-dark);
+      border: 1px solid var(--success);
+    }
+
+    .annotation-status.done-error {
+      background: var(--danger-light);
+      color: var(--danger-dark);
+      border: 1px solid var(--danger);
+    }
+
+    .annotation-status.done-ignore {
+      background: var(--warning-light);
+      color: var(--warning-dark);
+      border: 1px solid var(--warning);
+    }
+
+    /* 快捷键提示 */
+    .shortcut-hint {
+      margin-top: 12px;
+      padding: 10px 14px;
+      background: var(--bg);
+      border-radius: var(--radius);
+      font-size: 12px;
+      color: var(--text-muted);
+      border: 1px solid var(--border-light);
+    }
+
+    .shortcut-hint kbd {
+      display: inline-block;
+      padding: 1px 5px;
+      background: var(--white);
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      font-family: monospace;
+      font-size: 11px;
+      color: var(--text-primary);
+      margin: 0 2px;
+    }
+  </style>
+</head>
+<body>
+  <div class="detail-page">
+
+    <!-- 顶部导航栏 -->
+    <div class="detail-header">
+      <button class="back-btn" id="backBtn" onclick="backToList()">← 返回列表</button>
+      <div class="detail-breadcrumb">
+        <span>标注任务</span> &gt; <span id="breadcrumbProductId">-</span>
+      </div>
+      <div class="progress-badge" id="progressInfo">- / -</div>
+    </div>
+
+    <!-- 主内容区 -->
+    <div class="detail-content">
+
+      <!-- 左侧：商品信息 + 图片 -->
+      <div class="product-panel">
+        <div class="product-title" id="productTitle">-</div>
+        <div class="product-meta">
+          <div class="product-meta-item">
+            <span class="label">类目：</span>
+            <span class="value" id="category">-</span>
+          </div>
+          <div class="product-meta-item">
+            <span class="label">店铺：</span>
+            <span class="value" id="shop">-</span>
+          </div>
+          <div class="product-meta-item">
+            <span class="label">商品ID：</span>
+            <span class="value" id="productId">-</span>
+          </div>
+          <div class="product-meta-item">
+            <span class="label">规则：</span>
+            <span class="value" id="ruleName">-</span>
+          </div>
+          <div class="product-meta-item">
+            <span class="label">批次：</span>
+            <span class="value" id="batchNo">-</span>
+          </div>
+        </div>
+
+        <!-- 图片区 -->
+        <div class="image-section-title">商品图片</div>
+        <div class="image-grid" id="imageGrid"></div>
+      </div>
+
+      <!-- 右侧：审核结果 + 标注操作 -->
+      <div class="review-panel">
+
+        <!-- 模型A审核结果 -->
+        <div class="review-card">
+          <div class="review-card-header">
+            <span class="model-badge model-a">模型A</span>
+            AI审核结果
+          </div>
+          <div class="review-item">
+            <span class="label">AI判断：</span>
+            <span class="value" id="aiResult">-</span>
+          </div>
+          <div class="review-item">
+            <span class="label">AI拒绝原因：</span>
+            <span class="value" id="aiRejectReason">-</span>
+          </div>
+        </div>
+
+        <!-- 模型B审核结果 -->
+        <div class="review-card model-b-card">
+          <div class="collapse-toggle" onclick="toggleModelB()">
+            <span>
+              <span class="model-badge model-b">模型B</span>
+              交叉验证结果
+            </span>
+            <span class="arrow" id="modelBArrow">▼</span>
+          </div>
+          <div class="collapse-content" id="modelBContent">
+            <div class="review-item">
+              <span class="label">模型B判断：</span>
+              <span class="value" id="modelBResult">-</span>
+            </div>
+            <div class="review-item">
+              <span class="label">模型B原因：</span>
+              <span class="value" id="modelBReason">-</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 标注操作 -->
+        <div class="annotation-card">
+          <div class="annotation-title">标注操作</div>
+
+          <!-- 已标注状态提示 -->
+          <div class="annotation-status" id="annotationStatus" style="display:none;">
+            <span id="statusIcon">✓</span>
+            <span id="statusText">-</span>
+            <span id="statusTag" style="margin-left:auto;font-size:11px;"></span>
+          </div>
+
+          <!-- 标注按钮 -->
+          <div class="annotation-buttons">
+            <button class="annotation-btn correct" id="btnCorrect" onclick="selectAnnotation('correct')">✓ 正确</button>
+            <button class="annotation-btn error" id="btnError" onclick="selectAnnotation('error')">✗ 错误</button>
+            <button class="annotation-btn ignore" id="btnIgnore" onclick="selectAnnotation('ignore')">⊘ 忽略</button>
+          </div>
+
+          <!-- 错误标签输入（error 时显示） -->
+          <div class="annotation-inputs" id="annotationInputs">
+            <div class="form-group">
+              <label>错误标签 <span class="required">*</span></label>
+              <select class="form-select" id="inputNote">
+                <option value="">请选择</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>补充说明</label>
+              <input type="text" class="form-input" id="inputComment" placeholder="选填">
+            </div>
+          </div>
+
+          <!-- 导航按钮 -->
+          <div class="annotation-nav">
+            <button class="nav-btn" id="prevBtn" onclick="prevRecord()">← 上一条</button>
+            <span class="nav-info" id="navInfo">- / -</span>
+            <button class="nav-btn next-btn" id="nextBtn" onclick="nextRecord()">下一条 →</button>
+          </div>
+
+          <!-- 快捷键提示 -->
+          <div class="shortcut-hint">
+            <kbd>←</kbd><kbd>→</kbd> 切换商品 &nbsp;|&nbsp;
+            <kbd>1</kbd> 正确 &nbsp;<kbd>2</kbd> 错误 &nbsp;<kbd>3</kbd> 忽略 &nbsp;|&nbsp;
+            <kbd>Enter</kbd> 提交并下一条 &nbsp;|&nbsp;
+            <kbd>Esc</kbd> 返回列表
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- 图片预览 -->
+  <div class="preview-overlay" id="previewOverlay">
+    <button class="preview-close" onclick="closeImagePreview()">×</button>
+    <button class="preview-nav prev" onclick="prevImage()">‹</button>
+    <img class="preview-img" id="previewImg" src="" alt="">
+    <button class="preview-nav next" onclick="nextImage()">›</button>
+    <div class="preview-counter" id="previewCounter">- / -</div>
+    <div class="preview-label" id="previewLabel"></div>
+  </div>
+
+  <!-- Toast 提示 -->
+  <div class="task-toast" id="taskToast">标注已保存</div>
+
+  <script>
+    // =====================================================================
+    // 全局状态
+    // =====================================================================
+    let apiData = [];
+    let filteredData = [];
+    let labelsData = [];
+    let currentIndex = 0;
+    let imageList = [];       // [{src, label}]
+    let currentImageIndex = 0;
+    let selectedAnnotation = '';  // 'correct' | 'error' | 'ignore'
+    let isSubmitting = false;    // 防重复提交
+
+    // 上下文参数（从 URL 提取）
+    let ctxBatchNo = '';
+    let ctxRuleName = '';
+    let ctxStatus = '';
+    let ctxInstance = '';
+    let ctxItemId = '';  // 当前查看的商品 id
+
+    // =====================================================================
+    // 初始化
+    // =====================================================================
+    function init() {
+      // 解析 URL 参数
+      const urlParams = new URLSearchParams(window.location.search);
+      ctxItemId = urlParams.get('id') || '';
+      ctxBatchNo = urlParams.get('batch_no') || '';
+      ctxRuleName = urlParams.get('rule_name') || '';
+      ctxStatus = urlParams.get('status') || '';
+      ctxInstance = urlParams.get('instance') || '';
+
+      // 渲染顶部批次号
+      if (ctxBatchNo) {
+        document.getElementById('batchNo').textContent = ctxBatchNo;
+      } else {
+        document.getElementById('batchNo').closest('.product-meta-item').style.display = 'none';
+      }
+
+      // 获取数据
+      fetchAllTasks();
+      fetchLabels();
+    }
+
+    // 获取全量数据（用于上一条/下一条导航）
+    function fetchAllTasks() {
+      const params = {};
+      if (ctxBatchNo)   params.dispatch_batch_no = ctxBatchNo;
+      if (ctxRuleName)  params.rule_name = ctxRuleName;
+      if (ctxStatus)    params.status = ctxStatus;
+      if (ctxInstance)  params.instance = ctxInstance;
+      params.page = 1;
+      params.per_page = 1000;  // 取大量数据用于导航
+
+      const qs = Object.entries(params)
+        .filter(([,v]) => v !== '' && v !== null)
+        .map(([k,v]) => k + '=' + encodeURIComponent(v))
+        .join('&');
+
+      safeFetch('/api/annotation/my-tasks?' + qs, { credentials: 'same-origin' })
+        .then(res => {
+          if (!res || !res.success) {
+            showToast(res && res.error || '加载数据失败', true);
+            return;
+          }
+          apiData = res.items || [];
+          // 在 apiData 中定位 ctxItemId 对应的 index
+          currentIndex = apiData.findIndex(item => String(item.id) === String(ctxItemId));
+          if (currentIndex < 0) currentIndex = 0;
+          filteredData = apiData;
+          openDetail(currentIndex);
+        })
+        .catch(err => showToast('网络错误: ' + (err && err.message) || err, true));
+    }
+
+    // 获取标签列表
+    function fetchLabels() {
+      safeFetch('/api/config/labels', { credentials: 'same-origin' })
+        .then(res => {
+          if (res && res.success) {
+            labelsData = res.labels || [];
+            populateLabelOptions();
+          }
+        })
+        .catch(err => console.error('加载标签失败', err));
+    }
+
+    // 填充标签下拉
+    function populateLabelOptions() {
+      const sel = document.getElementById('inputNote');
+      sel.innerHTML = '<option value="">请选择</option>';
+      labelsData.forEach(l => { sel.innerHTML += '<option value="' + l + '">' + l + '</option>'; });
+    }
+
+    // =====================================================================
+    // 打开详情
+    // =====================================================================
+    function openDetail(index) {
+      if (index < 0 || index >= filteredData.length) return;
+      currentIndex = index;
+      const item = filteredData[index];
+
+      // 更新 URL（不刷新页面，用于浏览器前进/后退）
+      updateUrlParam(item.id);
+
+      // 商品基本信息
+      document.getElementById('breadcrumbProductId').textContent = item.product_id || '-';
+      document.getElementById('productTitle').textContent = item.product_name || '-';
+      document.getElementById('category').textContent = item.category || '-';
+      document.getElementById('shop').textContent = item.instance_code ? (window.APP_CONFIG ? window.APP_CONFIG.getInstanceName(item.instance_code) : item.instance_code) : '-';
+      document.getElementById('productId').textContent = item.product_id || '-';
+      document.getElementById('ruleName').textContent = item.rule_name || '-';
+      if (ctxBatchNo) document.getElementById('batchNo').textContent = ctxBatchNo;
+
+      // 模型A审核结果
+      const aiRes = item.ai_result || '-';
+      const aiResultEl = document.getElementById('aiResult');
+      aiResultEl.textContent = aiRes;
+      aiResultEl.className = 'value';
+      if (aiRes === '合规' || aiRes === 'pass') aiResultEl.classList.add('ai-pass');
+      else if (aiRes === '违规' || aiRes === 'fail') aiResultEl.classList.add('ai-fail');
+      else aiResultEl.classList.add('ai-pending');
+
+      document.getElementById('aiRejectReason').textContent = item.ai_reject_reason || '-';
+
+      // 模型B审核结果
+      document.getElementById('modelBResult').textContent = mapModelBResult(item.modelb_result);
+      document.getElementById('modelBReason').textContent = item.modelb_reason || '-';
+
+      // 图片
+      updateImageGrid(item);
+
+      // 恢复标注状态
+      selectedAnnotation = item.check_result || '';
+      updateAnnotationUI();
+      updateProgress();
+    }
+
+    // =====================================================================
+    // 标注操作
+    // =====================================================================
+    function selectAnnotation(type) {
+      selectedAnnotation = type;
+      document.querySelectorAll('.annotation-btn').forEach(b => b.classList.remove('active'));
+
+      if (type === 'correct') {
+        document.getElementById('btnCorrect').classList.add('active');
+        document.getElementById('annotationInputs').classList.remove('show');
+        submitAndNavigateNext();
+
+      } else if (type === 'error') {
+        document.getElementById('btnError').classList.add('active');
+        document.getElementById('annotationInputs').classList.add('show');
+        // 不自动提交，等用户选标签后点"下一条"
+
+      } else if (type === 'ignore') {
+        document.getElementById('btnIgnore').classList.add('active');
+        document.getElementById('annotationInputs').classList.remove('show');
+        submitAndNavigateNext();
+      }
+    }
+
+    // 提交并跳转下一条（正确/忽略）
+    function submitAndNavigateNext() {
+      submitCurrent(() => {
+        if (currentIndex < filteredData.length - 1) {
+          openDetail(currentIndex + 1);
+        } else {
+          showTaskToast('全部完成，太棒了！');
+        }
+      });
+    }
+
+    // 提交当前记录
+    function submitCurrent(onSuccess) {
+      if (isSubmitting) return;
+      isSubmitting = true;
+
+      const item = filteredData[currentIndex];
+      const result = selectedAnnotation;
+      let errorTag = '';
+      let note = '';
+
+      if (result === 'error') {
+        errorTag = document.getElementById('inputNote').value;
+        note = document.getElementById('inputComment').value;
+        if (!errorTag) {
+          isSubmitting = false;
+          showToast('请先选择错误标签', true);
+          return;
+        }
+      }
+
+      safeFetch('/api/annotation/submit', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({ raw_data_id: item.id, result, error_tag: errorTag, note })
+      })
+        .then(res => {
+          isSubmitting = false;
+          if (!res) { showToast('提交失败，请重新登录', true); return; }
+          if (res.success) {
+            item.check_result = result;
+            showTaskToast('标注已保存');
+            if (onSuccess) onSuccess();
+          } else {
+            showToast(res.error || '提交失败', true);
+          }
+        })
+        .catch(err => { isSubmitting = false; showToast('网络错误', true); });
+    }
+
+    // =====================================================================
+    // 导航
+    // =====================================================================
+    function prevRecord() {
+      if (currentIndex <= 0) return;
+      openDetail(currentIndex - 1);
+    }
+
+    function nextRecord() {
+      if (selectedAnnotation === 'error') {
+        // 需要选标签
+        const tag = document.getElementById('inputNote').value;
+        if (!tag) {
+          showToast('请先选择错误标签', true);
+          return;
+        }
+        submitAndNavigateNext();
+      } else if (selectedAnnotation === 'correct' || selectedAnnotation === 'ignore') {
+        submitAndNavigateNext();
+      } else {
+        // 未选标注，只跳转
+        if (currentIndex < filteredData.length - 1) {
+          openDetail(currentIndex + 1);
+        }
+      }
+    }
+
+    // =====================================================================
+    // 进度显示
+    // =====================================================================
+    function updateProgress() {
+      const total = filteredData.length;
+      const idx = currentIndex + 1;
+
+      document.getElementById('progressInfo').textContent = idx + ' / ' + total;
+      document.getElementById('navInfo').textContent = idx + ' / ' + total;
+
+      document.getElementById('prevBtn').disabled = currentIndex <= 0;
+      document.getElementById('nextBtn').disabled = currentIndex >= total - 1;
+    }
+
+    // =====================================================================
+    // 标注 UI 状态
+    // =====================================================================
+    function updateAnnotationUI() {
+      document.querySelectorAll('.annotation-btn').forEach(b => b.classList.remove('active'));
+      document.getElementById('annotationInputs').classList.remove('show');
+
+      // 已标注状态
+      const statusEl = document.getElementById('annotationStatus');
+      const statusIcon = document.getElementById('statusIcon');
+      const statusText = document.getElementById('statusText');
+      const statusTag = document.getElementById('statusTag');
+
+      if (selectedAnnotation === 'correct') {
+        document.getElementById('btnCorrect').classList.add('active');
+        statusEl.style.display = '';
+        statusEl.className = 'annotation-status done-correct';
+        statusIcon.textContent = '✓';
+        statusText.textContent = '已标注：正确';
+        statusTag.textContent = '';
+      } else if (selectedAnnotation === 'error') {
+        document.getElementById('btnError').classList.add('active');
+        document.getElementById('annotationInputs').classList.add('show');
+        const item = filteredData[currentIndex];
+        if (item && item.annotation) {
+          document.getElementById('inputNote').value = item.annotation;
+        }
+        statusEl.style.display = '';
+        statusEl.className = 'annotation-status done-error';
+        statusIcon.textContent = '✗';
+        statusText.textContent = '已标注：错误';
+        statusTag.textContent = item && item.annotation ? '（' + item.annotation + '）' : '';
+      } else if (selectedAnnotation === 'ignore') {
+        document.getElementById('btnIgnore').classList.add('active');
+        statusEl.style.display = '';
+        statusEl.className = 'annotation-status done-ignore';
+        statusIcon.textContent = '⊘';
+        statusText.textContent = '已标注：忽略';
+        statusTag.textContent = '';
+      } else {
+        statusEl.style.display = '';
+        statusEl.className = 'annotation-status pending';
+        statusIcon.textContent = '○';
+        statusText.textContent = '待标注';
+        statusTag.textContent = '';
+      }
+    }
+
+    // =====================================================================
+    // 图片
+    // =====================================================================
+    function updateImageGrid(item) {
+      imageList = [];
+      const grid = document.getElementById('imageGrid');
+      grid.innerHTML = '';
+
+      const imgSources = [
+        { src: item.main_image, label: '主图' },
+        { src: item.detail_image, label: '详情图' },
+        { src: item.sku_image, label: 'SKU图' }
+      ];
+
+      imgSources.forEach((img, idx) => {
+        if (!img.src) {
+          grid.innerHTML += '<div class="image-card"><div class="image-card-label">' + img.label + '</div><div class="no-image">无图片</div></div>';
+          return;
+        }
+        imageList.push({ src: img.src, label: img.label });
+        grid.innerHTML +=
+          '<div class="image-card" onclick="openImagePreview(' + (imageList.length - 1) + ')">' +
+            '<div class="image-card-label">' + img.label + '</div>' +
+            '<img class="image-card-img" src="' + img.src + '" alt="' + img.label + '">' +
+          '</div>';
+      });
+    }
+
+    function openImagePreview(idx) {
+      if (idx < 0 || idx >= imageList.length) return;
+      currentImageIndex = idx;
+      document.getElementById('previewImg').src = imageList[idx].src;
+      document.getElementById('previewCounter').textContent = (idx + 1) + ' / ' + imageList.length;
+      document.getElementById('previewLabel').textContent = imageList[idx].label;
+      document.getElementById('previewOverlay').classList.add('active');
+    }
+
+    function closeImagePreview() {
+      document.getElementById('previewOverlay').classList.remove('active');
+    }
+
+    function prevImage() {
+      if (currentImageIndex > 0) openImagePreview(currentImageIndex - 1);
+    }
+
+    function nextImage() {
+      if (currentImageIndex < imageList.length - 1) openImagePreview(currentImageIndex + 1);
+    }
+
+    // =====================================================================
+    // 模型B折叠
+    // =====================================================================
+    function toggleModelB() {
+      const content = document.getElementById('modelBContent');
+      const arrow = document.getElementById('modelBArrow');
+      const isHidden = content.style.display === 'none';
+      content.style.display = isHidden ? 'block' : 'none';
+      arrow.textContent = isHidden ? '▲' : '▼';
+    }
+
+    // =====================================================================
+    // URL 工具
+    // =====================================================================
+    function updateUrlParam(id) {
+      const url = new URL(window.location);
+      url.searchParams.set('id', id);
+      history.replaceState({}, '', url);
+    }
+
+    function getListUrl() {
+      const params = [];
+      if (ctxBatchNo)  params.push('batch_no=' + encodeURIComponent(ctxBatchNo));
+      if (ctxRuleName) params.push('rule_name=' + encodeURIComponent(ctxRuleName));
+      if (ctxStatus)   params.push('status=' + encodeURIComponent(ctxStatus));
+      if (ctxInstance) params.push('instance=' + encodeURIComponent(ctxInstance));
+      return '/annotation_list.html' + (params.length > 0 ? '?' + params.join('&') : '');
+    }
+
+    // =====================================================================
+    // 返回列表
+    // =====================================================================
+    function backToList() {
+      const listUrl = getListUrl();
+      // 通过 parent.navigateTo 加载列表页（iframe 模式）
+      if (window.self !== window.top && window.parent.navigateTo) {
+        window.parent.navigateTo(listUrl);
+      } else {
+        window.location.href = listUrl;
+      }
+    }
+
+    // =====================================================================
+    // 辅助函数
+    // =====================================================================
+    function mapModelBResult(r) {
+      if (r === 'error') return '违规';
+      if (r === 'correct') return '合规';
+      return '-';
+    }
+
+    function showTaskToast(msg) {
+      const toast = document.getElementById('taskToast');
+      toast.textContent = msg || '标注已保存';
+      toast.classList.remove('error');
+      toast.style.background = 'var(--success)';
+      toast.classList.add('show');
+      setTimeout(() => toast.classList.remove('show'), 3000);
+    }
+
+    function showToast(msg, isError) {
+      const toast = document.getElementById('taskToast');
+      toast.textContent = msg;
+      toast.classList.toggle('error', !!isError);
+      toast.style.background = isError ? 'var(--danger)' : 'var(--success)';
+      toast.classList.add('show');
+      setTimeout(() => toast.classList.remove('show'), 3000);
+    }
+
+    // =====================================================================
+    // 快捷键
+    // =====================================================================
+    document.addEventListener('keydown', function(e) {
+      const overlay = document.getElementById('previewOverlay');
+      if (overlay.classList.contains('active')) {
+        // 图片预览模式
+        if (e.key === 'Escape') closeImagePreview();
+        if (e.key === 'ArrowLeft') prevImage();
+        if (e.key === 'ArrowRight') nextImage();
+        return;
+      }
+
+      // 详情页模式
+      if (e.key === 'Escape') { backToList(); return; }
+
+      // 不在输入框聚焦时响应快捷键
+      const tag = document.activeElement && document.activeElement.tagName;
+      if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
+
+      if (e.key === 'ArrowLeft') { prevRecord(); return; }
+      if (e.key === 'ArrowRight') { nextRecord(); return; }
+      if (e.key === 'Enter') { nextRecord(); return; }
+
+      // 数字快捷键：1=正确，2=错误，3=忽略
+      if (e.key === '1') selectAnnotation('correct');
+      if (e.key === '2') selectAnnotation('error');
+      if (e.key === '3') selectAnnotation('ignore');
+    });
+
+    // =====================================================================
+    // 启动
+    // =====================================================================
+    init();
+  </script>
+</body>
+</html>

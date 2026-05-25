@@ -52,6 +52,16 @@
     .data-table tbody td { padding: 10px 12px; border-bottom: 1px solid var(--border-light); }
     .data-table tbody tr:hover { background: #f8f9ff; }
 
+    /* 批次主行 */
+    .batch-main-row td { font-weight: 500; }
+
+    /* 展开/收起按钮 */
+    .expand-arrow { background: none; border: none; cursor: pointer; font-size: 12px; color: var(--primary); padding: 0 2px; vertical-align: middle; line-height: 1; margin-left: 4px; }
+    .expand-arrow:hover { color: var(--primary-dark); }
+    /* 批次号文字（点击跳转） */
+    .batch-no-text { color: var(--primary); cursor: pointer; font-weight: 500; font-family: monospace; font-size: 12px; }
+    .batch-no-text:hover { text-decoration: underline; }
+
     /* 规则标签 */
     .rule-tag { display: inline-block; font-size: 11px; padding: 2px 8px; background: var(--primary-light); color: var(--primary); border-radius: 10px; margin-right: 4px; }
 
@@ -62,14 +72,10 @@
     .pool-count { font-weight: 600; color: var(--primary); }
     .pool-remaining { color: var(--warning); font-weight: 500; }
 
-    /* 分配面板 */
-    .assign-panel { background: var(--white); border-radius: var(--radius-lg); border: 1px solid var(--border); padding: 20px; min-height: 300px; }
-    .assign-header { font-weight: 600; font-size: 16px; margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid var(--border-light); }
-    .assign-info-row { display: flex; justify-content: space-between; margin-bottom: 12px; font-size: 13px; }
-    .assign-info-label { color: var(--text-secondary); }
-    .assign-info-value { font-weight: 500; }
-    .assign-total { font-size: 15px; padding: 12px; background: var(--bg); border-radius: var(--radius); margin-top: 16px; text-align: center; font-weight: 500; }
-    .assign-total.warning { color: var(--warning); }
+    /* 小按钮 */
+    .btn-xs { font-size: 11px; padding: 2px 8px; border-radius: 3px; border: none; cursor: pointer; }
+    .btn-xs:hover { opacity: 0.85; }
+
 
     /* 智能分配按钮 */
     .smart-actions { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
@@ -124,6 +130,31 @@
     .modal-footer { display: flex; align-items: center; justify-content: flex-end; gap: 8px; padding: 12px 20px; border-top: 1px solid var(--border-light); background: #fafbfc; }
     .modal-footer button:disabled { opacity: 0.5; cursor: not-allowed; }
 
+    /* 标注员详情弹窗 */
+    .detail-modal { max-width: 680px; }
+    .detail-meta { display: flex; gap: 20px; padding: 12px 16px; background: var(--bg); border-radius: var(--radius); margin-bottom: 16px; }
+    .detail-meta-item { text-align: center; }
+    .detail-meta-label { font-size: 11px; color: var(--text-muted); margin-bottom: 4px; }
+    .detail-meta-value { font-size: 18px; font-weight: 700; color: var(--text-primary); }
+    .detail-meta-value.warning { color: var(--warning); }
+    .detail-meta-value.danger { color: var(--danger); }
+    .detail-section { margin-bottom: 20px; }
+    .detail-section-title { font-size: 13px; font-weight: 600; color: var(--text-primary); margin-bottom: 10px; padding-bottom: 6px; border-bottom: 1px solid var(--border-light); }
+    .detail-filter-bar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 10px; }
+    .detail-filter-bar label { font-size: 12px; color: var(--text-secondary); }
+    .detail-filter-bar select { padding: 4px 8px; font-size: 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--white); }
+    .detail-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    .detail-table th { text-align: left; padding: 8px 12px; background: var(--bg); color: var(--text-secondary); font-weight: 500; border-bottom: 1px solid var(--border-light); }
+    .detail-table td { padding: 8px 12px; border-bottom: 1px solid var(--border-light); color: var(--text-primary); }
+    .detail-table tr:last-child td { border-bottom: none; }
+    .detail-table .num { text-align: right; font-variant-numeric: tabular-nums; }
+    .detail-table .acc { text-align: right; font-weight: 600; }
+    .detail-summary { display: flex; gap: 24px; padding: 10px 16px; background: var(--bg); border-radius: var(--radius); margin-top: 10px; }
+    .detail-summary-item { font-size: 13px; }
+    .detail-summary-item span { font-weight: 700; color: var(--primary); }
+    .detail-placeholder { text-align: center; padding: 32px; color: var(--text-muted); font-size: 13px; background: var(--bg); border-radius: var(--radius); }
+    .load-card { cursor: pointer; }
+
     /* 表单 */
     .form-group { margin-bottom: 16px; }
     .form-group label { display: block; font-size: 13px; font-weight: 500; margin-bottom: 6px; color: var(--text-primary); }
@@ -149,9 +180,20 @@
     /* 同步标注员到后端后从load计算used */
     .ann-user-id { display: none; }
 
+    /* 概览区 */
+    .overview-header { margin-bottom: 12px; }
+    .overview-title { font-size: 15px; font-weight: 600; }
+
     /* 任务池筛选栏 */
     .pool-filter-bar { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px solid var(--border-light); }
+
+    /* 历史记录复选框 */
+    .history-cb-wrapper { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text-secondary); cursor: pointer; }
+    .history-cb-wrapper input { cursor: pointer; }
     .pool-filter-label { font-size: 13px; color: var(--text-secondary); white-space: nowrap; }
+
+    /* 历史记录筛选栏 */
+    .history-filter-bar { display: flex; align-items: center; gap: 6px; padding: 8px 0; flex-wrap: wrap; }
     .pool-filter-select { padding: 5px 10px; font-size: 13px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--white); min-width: 160px; cursor: pointer; }
     .pool-filter-select:focus { outline: none; border-color: var(--primary); }
     .pool-filter-count { font-size: 12px; color: var(--text-muted); margin-left: auto; }
@@ -177,6 +219,9 @@
     <!-- Tab1: 任务分配 -->
     <div class="tab-content active" id="tab1">
       <!-- 调度概览 -->
+      <div class="overview-header">
+        <span class="overview-title">📊 调度概览</span>
+      </div>
       <div class="overview-cards">
         <div class="overview-card">
           <div class="overview-card-label">待分配任务总数</div>
@@ -196,75 +241,92 @@
         </div>
       </div>
 
-      <!-- 任务池 -->
-      <div style="display: grid; grid-template-columns: 1fr 380px; gap: 20px;">
-        <div>
-          <div class="card">
-            <div class="card-header">
-              <span class="card-title">待分配任务池</span>
-              <button class="btn btn-sm btn-default" onclick="refreshTaskPool()">🔄 刷新</button>
-            </div>
-            <div class="pool-filter-bar" id="poolFilterBar" style="display:none;">
-              <span class="pool-filter-label">审核规则：</span>
-              <select class="pool-filter-select" id="poolRuleFilter" onchange="onPoolRuleFilterChange()">
-                <option value="">全部规则</option>
-              </select>
-              <span class="pool-filter-count" id="poolFilterCount"></span>
-            </div>
-            <div id="taskPoolLoading" class="loading-spinner">加载中…</div>
-            <table class="data-table" id="taskPoolTable" style="display:none;">
-              <thead>
-                <tr>
-                  <th>规则名称</th>
-                  <th>适用实例</th>
-                  <th>原始</th>
-                  <th>已分配</th>
-                  <th>剩余</th>
-                  <th>日期</th>
-                  <th>操作</th>
-                </tr>
-              </thead>
-              <tbody id="taskPoolBody"></tbody>
-            </table>
-          </div>
-
-          <!-- 最近分配记录 -->
-          <div class="card history-section">
-            <div class="history-toggle" onclick="toggleHistory()">
-              <span class="history-toggle-arrow" id="historyArrow">▶</span>
-              <span>最近分配记录</span>
-              <button class="btn btn-sm btn-default" style="margin-left:auto;" onclick="refreshHistory()">🔄 刷新</button>
-            </div>
-            <div class="history-content show" id="historyContent">
-              <div id="historyLoading" class="loading-spinner">加载中…</div>
-              <table class="data-table" id="historyTable" style="display:none;">
-                <thead>
-                  <tr>
-                    <th>时间</th>
-                    <th>规则</th>
-                    <th>分配至</th>
-                    <th>数量</th>
-                    <th>状态</th>
-                  </tr>
-                </thead>
-                <tbody id="historyBody"></tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-
-        <!-- 分配面板 -->
-        <div class="assign-panel" id="assignPanel">
-          <div class="empty-state">请从左侧选择一个规则进行分配</div>
-        </div>
-      </div>
-
       <!-- 标注员负载概览 -->
       <div class="card load-overview">
         <div class="load-overview-title">📊 标注员今日负载概览</div>
         <div id="loadCardsLoading" class="loading-spinner">加载中…</div>
         <div class="load-cards" id="loadCards"></div>
       </div>
+
+      <!-- 任务池 -->
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">待分配任务池</span>
+          <button class="btn btn-sm btn-default" onclick="refreshTaskPool()">🔄 刷新</button>
+        </div>
+        <div class="pool-filter-bar" id="poolFilterBar" style="display:none;">
+          <span class="pool-filter-label">审核规则：</span>
+          <select class="pool-filter-select" id="poolRuleFilter" onchange="onPoolRuleFilterChange()">
+            <option value="">全部规则</option>
+          </select>
+          <span class="pool-filter-count" id="poolFilterCount"></span>
+        </div>
+        <div id="taskPoolLoading" class="loading-spinner">加载中…</div>
+        <table class="data-table" id="taskPoolTable" style="display:none;">
+          <thead>
+            <tr>
+              <th>规则名称</th>
+              <th>适用实例</th>
+              <th>原始</th>
+              <th>已分配</th>
+              <th>剩余</th>
+              <th>日期</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody id="taskPoolBody"></tbody>
+        </table>
+      </div>
+
+      <!-- 最近分配记录 -->
+      <div class="card history-section">
+        <div class="history-toggle" onclick="toggleHistory()">
+          <span class="history-toggle-arrow" id="historyArrow">▶</span>
+          <span>最近分配记录</span>
+          <!-- 撤回按钮：默认隐藏，至少勾选一个批次后才显示 -->
+          <button class="btn btn-sm" id="revokeAllBtn" style="background:var(--danger);color:#fff;display:none;" onclick="revokeAllAssigned(); event.stopPropagation();" title="撤回所有已分配未标注的任务，释放回任务池">⚠️ 撤回全部已分配</button>
+          <button class="btn btn-sm btn-default" style="margin-left:auto;" onclick="refreshHistory(); event.stopPropagation();">🔄 刷新</button>
+        </div>
+        <div class="history-content show" id="historyContent">
+          <div id="historyLoading" class="loading-spinner">加载中…</div>
+          <!-- 历史筛选栏 -->
+          <div class="history-filter-bar" id="historyFilterBar">
+            <span class="pool-filter-label">标注人：</span>
+            <select class="pool-filter-select" id="historyAnnotatorFilter" onchange="onHistoryFilterChange()">
+              <option value="">全部标注人</option>
+            </select>
+            <span class="pool-filter-label" style="margin-left:12px;">分配日期：</span>
+            <input type="date" id="historyDateFrom" class="pool-filter-select" style="width:140px;" onchange="onHistoryFilterChange()">
+            <span style="color:var(--text-muted);margin:0 4px;">~</span>
+            <input type="date" id="historyDateTo" class="pool-filter-select" style="width:140px;" onchange="onHistoryFilterChange()">
+            <button class="btn btn-sm btn-default" style="margin-left:8px;font-size:12px;padding:3px 10px;" onclick="clearHistoryFilters()">重置</button>
+          </div>
+          <table class="data-table" id="historyTable" style="display:none;">
+            <thead>
+              <tr>
+                <th style="width:40px;text-align:center;">
+                  <input type="checkbox" id="historyCheckAll" title="全选/取消全选" onchange="toggleHistoryCheckAll()">
+                </th>
+                <th>批次号</th>
+                <th>规则</th>
+                <th>状态</th>
+                <th>数量</th>
+                <th>分配时间</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody id="historyBody"></tbody>
+            <tfoot id="historyFoot" style="display:none;">
+              <tr>
+                <td colspan="7" style="padding:8px 12px;background:#fafbfc;border-top:1px solid var(--border);text-align:center;">
+                  <span id="historyCountNote" style="font-size:13px;color:var(--text-secondary);"></span>
+                </td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      </div>
+
     </div>
 
     <!-- Tab2: 人员与规则管理 -->
@@ -428,6 +490,19 @@
     </div>
   </div>
 
+  <!-- 模态框：标注员详情 -->
+  <div class="modal-overlay" id="annotatorDetailModal">
+    <div class="modal detail-modal">
+      <div class="modal-header">
+        <span class="modal-title" id="annotatorDetailTitle">标注详情</span>
+        <button class="modal-close" onclick="closeModal('annotatorDetailModal')">×</button>
+      </div>
+      <div class="modal-body" id="annotatorDetailBody">
+        <div id="annotatorDetailLoading" style="text-align:center;padding:32px;color:var(--text-muted);">加载中…</div>
+      </div>
+    </div>
+  </div>
+
   <script>
     // ================================================================
     // API 工具函数（已迁移至 /static/common.js，全局共享）
@@ -559,25 +634,16 @@
           return { id: k, name: k };
         });
 
-        // 合并 history 中的 assigned 数量
-        return fetchAssignHistory().then(function() {
-          // 按 rule_name 聚合 history 中的 assigned 数量
-          var assignedByRule = {};
-          _cachedHistory.forEach(function(h) {
-            assignedByRule[h.rule] = (assignedByRule[h.rule] || 0) + h.annotated;
-          });
-
+          // 直接使用后端返回的 assigned/remaining/total，不再从 history 重复计算
+          // 后端 api_task_pool 已按规则聚合：assigned=pending+completed，remaining=unassigned，total=assigned+remaining
           _cachedTaskPool = rules.map(function(r) {
-            var remaining = r.remaining || 0;
-            var assigned = assignedByRule[r.rule_name] || 0;
-            var total = remaining + assigned;
             return {
               ruleId: r.rule_name,
               ruleName: r.rule_name,
               instanceIds: r.instances || [],
-              total: total,
-              assigned: assigned,
-              remaining: remaining,
+              total: (r.total || 0),
+              assigned: (r.assigned || 0),
+              remaining: (r.remaining || 0),
               date: r.date_range || ''
             };
           });
@@ -585,12 +651,12 @@
           populatePoolRuleFilter();
           renderTaskPool();
           renderOverview();
-        });
-      });
-    }
+      });  // closes apiGet().then()
+    }      // closes function fetchTaskPool()
 
     // ================================================================
     // API：获取分配历史（GET /api/dispatch/history）
+    // 新版按 batch_no 分组返回（支持展开查看每个标注员明细）
     // ================================================================
     function fetchAssignHistory() {
       return apiGet('/api/dispatch/history?page=1&per_page=20').then(function(data) {
@@ -600,15 +666,26 @@
         }
         _cachedHistory = (data.items || []).map(function(h) {
           return {
-            time: h.assign_time ? h.assign_time.substring(11, 16) : '',
+            batch_no: h.batch_no || '',
+            time: h.created_at || '',
             rule: h.rule_name || '',
-            annotator: h.annotator_name || '',
-            count: h.assign_count || 0,
-            annotated: h.completed_count || 0,
-            total: h.assign_count || 0
+            admin: h.admin_name || '',
+            total: h.total_count || 0,
+            completed: h.completed_count || 0,
+            pending: h.pending_count || 0,
+            revoked_count: h.revoked_count || 0,
+            isDone: !!h.isDone,
+            isPartiallyRevoked: !!h.isPartiallyRevoked,
+            display_total: h.display_total || h.total_count || 0,
+            assign_method: h.assign_method || '',
+            annotators: h.annotators || [],
           };
         });
-        renderHistory();
+        populateHistoryAnnotatorFilter();
+        renderHistoryFiltered(_cachedHistory);
+      }).catch(function() {
+        var el = document.getElementById('historyLoading');
+        if (el) el.style.display = 'none';
       });
     }
 
@@ -618,11 +695,15 @@
     function fetchAnnotators() {
       return apiGet('/api/auth/users').then(function(data) {
         if (!data || !data.success) {
+          console.warn('[fetchAnnotators] API 返回失败', data);
           _cachedAnnotators = [];
+          renderAnnotatorTable(currentRuleId);
           return;
         }
+        var allUsers = data.data || [];
+        console.log('[fetchAnnotators] 总用户数:', allUsers.length, 'role=annotator数:', allUsers.filter(function(u){return u.role==='annotator'}).length);
         var bindings = getRuleBindings();
-        _cachedAnnotators = (data.data || [])
+        _cachedAnnotators = allUsers
           .filter(function(u) { return u.role === 'annotator'; })
           .map(function(u) {
             // 从 bindings 中查找该标注员的绑定规则（支持新旧两种存储格式）
@@ -651,9 +732,8 @@
               used: 0
             };
           });
+        console.log('[fetchAnnotators] _cachedAnnotators 填充完毕，数量:', _cachedAnnotators.length);
         renderAnnotatorTable(currentRuleId);
-        renderLoadCards();
-        renderOverview();
       });
     }
 
@@ -662,21 +742,32 @@
     // ================================================================
     function fetchAnnotatorLoad() {
       return apiGet('/api/dispatch/annotator-load').then(function(data) {
-        if (!data || !data.success) return;
-        // annotator-load API 返回的 items 以 id（username）为键
+        if (!data || !data.success) {
+          console.warn('[fetchAnnotatorLoad] API 返回失败', data);
+          return;
+        }
+        console.log('[fetchAnnotatorLoad] API 返回 items 数:', (data.items || []).length);
+        // annotator-load API 返回的 it.id 是 DB id（数字），_cachedAnnotators 的 a.id 是 String(u.id)
+        // 统一用字符串 key 避免类型不匹配
         var loadMap = {};
         (data.items || []).forEach(function(it) {
-          loadMap[it.id] = it;  // it.id = username（标注员标识）
+          loadMap[String(it.id)] = it;
         });
-        // 同步到 _cachedAnnotators
+        // a.id = String(u.id) = DB id 字符串，与 loadMap 的字符串 key 对应
         _cachedAnnotators.forEach(function(a) {
-          var ld = loadMap[a.username] || {};
+          var ld = loadMap[a.id] || {};
           a.used = ld.today_assigned || 0;
           a.quota = ld.daily_quota || a.quota || 200;
+          console.log('[fetchAnnotatorLoad] 标注员', a.username, '→ used:', a.used, 'quota:', a.quota);
         });
         renderAnnotatorTable(currentRuleId);
         renderLoadCards();
         renderOverview();
+      }).catch(function(err) {
+        console.error('[fetchAnnotatorLoad] 异常:', err);
+        var loading = document.getElementById('loadCardsLoading');
+        if (loading) loading.style.display = 'none';
+        renderLoadCards();
       });
     }
 
@@ -737,7 +828,7 @@
 
       if (tabId === 'tab1') {
         renderTaskPool();
-        renderHistory();
+        renderHistoryFiltered(_cachedHistory);
         renderOverview();
       } else {
         renderRuleList();
@@ -768,6 +859,7 @@
       document.getElementById('overviewWorkers').textContent = workers;
     }
 
+    // 复选框控制撤回按钮显隐
     // ================================================================
     // 任务池规则筛选
     // ================================================================
@@ -790,6 +882,218 @@
         opt.textContent = r.name;
         select.appendChild(opt);
       });
+    }
+
+    // ================================================================
+    // 历史记录筛选
+    // ================================================================
+    function populateHistoryAnnotatorFilter() {
+      var select = document.getElementById('historyAnnotatorFilter');
+      if (!select) return;
+      // 从 _cachedHistory 的 annotators 中提取所有标注人
+      var names = {};
+      _cachedHistory.forEach(function(h) {
+        (h.annotators || []).forEach(function(a) {
+          if (a.annotator_name) names[a.annotator_name] = true;
+        });
+      });
+      select.innerHTML = '<option value="">全部标注人</option>';
+      Object.keys(names).sort().forEach(function(name) {
+        var opt = document.createElement('option');
+        opt.value = name;
+        opt.textContent = name;
+        select.appendChild(opt);
+      });
+    }
+
+    window.clearHistoryFilters = function() {
+      document.getElementById('historyAnnotatorFilter').value = '';
+      document.getElementById('historyDateFrom').value = '';
+      document.getElementById('historyDateTo').value = '';
+      onHistoryFilterChange();
+    };
+
+    window.onHistoryFilterChange = function() {
+      var annotatorFilter = document.getElementById('historyAnnotatorFilter').value;
+      var dateFrom = document.getElementById('historyDateFrom').value;  // YYYY-MM-DD
+      var dateTo = document.getElementById('historyDateTo').value;
+
+      var filtered = _cachedHistory.filter(function(h) {
+        // 标注人过滤：只要 h.annotators 中有一个标注人匹配即通过
+        if (annotatorFilter) {
+          var hasAnnotator = (h.annotators || []).some(function(a) {
+            return a.annotator_name === annotatorFilter;
+          });
+          if (!hasAnnotator) return false;
+        }
+        // 日期过滤：按分配时间的前10位（YYYY-MM-DD）比较
+        if (dateFrom || dateTo) {
+          var d = (h.time || '').substring(0, 10);
+          if (dateFrom && d < dateFrom) return false;
+          if (dateTo && d > dateTo) return false;
+        }
+        return true;
+      });
+
+      renderHistoryFiltered(filtered);
+    };
+
+    // 渲染过滤后的历史记录
+    function renderHistoryFiltered(filteredHistory) {
+      var foot = document.getElementById('historyFoot');
+      var body = document.getElementById('historyBody');
+      var table = document.getElementById('historyTable');
+      var loading = document.getElementById('historyLoading');
+      if (loading) loading.style.display = 'none';
+      if (table) table.style.display = '';
+      if (!body) return;
+
+      if (filteredHistory.length === 0) {
+        body.innerHTML = '<tr><td colspan="7" class="empty-state">无匹配记录</td></tr>';
+        if (foot) foot.style.display = 'none';
+        return;
+      }
+
+      var html = [];
+
+      // ── 两级 Map：先按 batch_no 登记规则出现顺序，再聚合 ──
+      // 同 batch_no 下多个规则时，显示 batch_no-1、batch_no-2 … 以区分
+      var batchRulesMap = {};  // bn → 规则数组（记录顺序）
+      var batchMap = {};        // bn+'||'+rn → 聚合对象
+
+      filteredHistory.forEach(function(h) {
+        var bn = h.batch_no || '__none__';
+        var rn = h.rule_name || '';
+        var key = bn + '||' + rn;
+
+        // 记录该规则在此 batch_no 下的顺序编号
+        if (!batchRulesMap[bn]) batchRulesMap[bn] = [];
+        if (batchRulesMap[bn].indexOf(rn) === -1) batchRulesMap[bn].push(rn);
+        var seq = batchRulesMap[bn].indexOf(rn) + 1;
+
+        if (!batchMap[key]) {
+          batchMap[key] = {
+            batch_no: h.batch_no || '',
+            rule_name: rn,
+            time: h.created_at || h.time || '',
+            seq: seq,   // 同 batch_no 下的序号，用于显示后缀
+            total_count: 0,
+            completed_count: 0,
+            pending_count: 0,
+            revoked_count: 0,
+            isPartiallyRevoked: false,
+            display_total: 0,
+            annotators: [],
+          };
+        }
+        var b = batchMap[key];
+        b.total_count += (h.total_count || h.total || 0);
+        b.completed_count += (h.completed_count || h.completed || 0);
+        b.pending_count += (h.pending_count || h.pending || 0);
+        b.revoked_count += (h.revoked_count || 0);
+        if (h.isPartiallyRevoked) b.isPartiallyRevoked = true;
+        b.display_total += (h.display_total || 0);
+        (h.annotators || []).forEach(function(a) { b.annotators.push(a); });
+      });
+
+      var batchList = Object.values(batchMap);
+
+      batchList.forEach(function(h) {
+        var pending = h.pending_count || 0;
+        var total = h.display_total || h.total_count || 0;  // 部分撤回时 display_total 含撤回记录
+        var completed = h.completed_count || 0;
+        var annotatorList = h.annotators || [];
+        var hasAnnotators = annotatorList.length > 0;
+
+        var statusText;
+        if (h.isPartiallyRevoked) {
+          var displayTotal = h.display_total || completed;
+          statusText = '<span style="color:var(--warning);">部分撤回（已完成 ' + completed + '/' + displayTotal + '）</span>';
+        } else if (pending === 0 && completed === 0) {
+          statusText = '<span style="color:var(--text-muted);">已撤回</span>';
+        } else if (pending === 0 && completed > 0) {
+          statusText = '<span style="color:var(--success);">已完成 ' + completed + '/' + total + '</span>';
+        } else if (pending > 0 && completed > 0) {
+          statusText = '<span style="color:var(--warning);">已部分完成 ' + completed + '/' + total + '</span>';
+        } else {
+          statusText = '<span style="color:#0099ff;">进行中 ' + completed + '/' + total + '</span>';
+        }
+
+        // 同一 batch_no 多个规则时：seq>1 加后缀-1 -2 …区分；onclick 仍用原始 batch_no
+        var bn = h.batch_no || '';
+        var bnSeq = h.seq > 1 ? bn + '-' + h.seq : bn;
+        var subRowClass = h.seq > 1 ? bn + '-' + h.seq : bn;
+
+        var batchNoCell = '<span class="batch-no-text" onclick="window.location.href=\'/annotation_list.html?batch_no=' + encodeURIComponent(bn) + '\'" title="点击查看该批次的标注任务" style="cursor:pointer;">' + escHtml(bnSeq) + '</span>' +
+          (hasAnnotators
+            ? '<button class="expand-arrow" id="expand-btn-' + escAttr(subRowClass) + '" onclick="toggleHistoryExpand(\'' + escAttr(subRowClass) + '\')" title="展开/收起标注员明细" style="margin-left:4px;cursor:pointer;background:none;border:none;color:var(--primary);">▶</button>'
+            : '');
+
+        var actionCell;
+        if (h.isPartiallyRevoked) {
+          actionCell = '<button class="btn btn-xs" style="background:var(--primary);color:#fff;padding:3px 10px;border:none;border-radius:4px;cursor:pointer;font-size:12px;" onclick="window.location.href=\'/annotation_list.html?batch_no=' + encodeURIComponent(bn) + '&status=done\'">查看已完成任务</button>';
+        } else {
+          actionCell = '' +
+            '<button class="btn btn-xs" style="background:var(--primary);color:#fff;padding:3px 10px;border:none;border-radius:4px;cursor:pointer;font-size:12px;" onclick="window.location.href=\'/annotation_list.html?batch_no=' + encodeURIComponent(bn) + '\'">查看任务</button> ' +
+            (pending > 0
+              ? '<button class="btn btn-xs" style="background:var(--warning);color:#fff;padding:3px 10px;border:none;border-radius:4px;cursor:pointer;font-size:12px;" onclick="revokeBatch(\'' + escAttr(bn) + '\', \'revoke\')">撤回整批</button>'
+              : '<span style="color:var(--text-muted);font-size:12px;">—</span>'
+            );
+        }
+
+        html.push(
+          '<tr class="batch-main-row" data-batch-no="' + escAttr(bn) + '">' +
+          '<td style="text-align:center;"><input type="checkbox" class="history-row-cb" value="' + escAttr(bn) + '" onchange="onHistoryRowCheckChange()"></td>' +
+          '<td style="white-space:nowrap;">' + batchNoCell + '</td>' +
+          '<td><span class="rule-tag">' + escHtml(h.rule_name || h.rule || '') + '</span></td>' +
+          '<td>' + statusText + '</td>' +
+          '<td>' + total + '</td>' +
+          '<td style="white-space:nowrap;">' + escHtml(h.time || '') + '</td>' +
+          '<td style="white-space:nowrap;">' + actionCell + '</td>' +
+          '</tr>'
+        );
+
+        annotatorList.forEach(function(a) {
+          var aCount = a.count || 0;
+          var aCompletedCount = a.completed_count || 0;
+          var aPending = aCount - aCompletedCount;
+          var aCompleted = aCompletedCount;
+          var aTotal = aCount;
+          var aStatus;
+          if (aPending === 0 && aCompleted === 0) {
+            aStatus = '<span style="color:var(--text-muted);font-size:12px;">已撤回</span>';
+          } else if (aPending === 0 && aCompleted > 0) {
+            aStatus = '<span style="color:var(--success);font-size:12px;">已完成 ' + aCompleted + '/' + aTotal + '</span>';
+          } else if (aPending > 0 && aCompleted > 0) {
+            aStatus = '<span style="color:var(--warning);font-size:12px;">已部分完成 ' + aCompleted + '/' + aTotal + '</span>';
+          } else {
+            aStatus = '<span style="color:#0099ff;font-size:12px;">进行中 ' + aCompleted + '/' + aTotal + '</span>';
+          }
+          var aRevokeBtn = aPending > 0
+            ? '<button class="btn btn-xs" style="background:var(--warning);color:#fff;padding:2px 8px;border:none;border-radius:3px;cursor:pointer;font-size:11px;" onclick="revokeAnnotatorLog(\'' + escAttr(String(a.log_id || '')) + '\', \'' + escAttr(bn) + '\', \'' + escAttr(a.annotator_name || '') + '\')">撤回</button>'
+            : '<span style="color:var(--text-muted);font-size:12px;">—</span>';
+          html.push(
+            '<tr class="annotator-sub-row sub-row-' + escAttr(subRowClass) + '" style="display:none;background:#f8f9fa;font-size:13px;">' +
+            '<td></td>' +
+            '<td style="padding-left:28px;color:var(--text-secondary);"><span style="color:#ccc;margin-right:6px;">↳</span>' + escHtml(a.annotator_name || '') + '</td>' +
+            '<td></td>' +
+            '<td>' + aStatus + '</td>' +
+            '<td>' + aTotal + '</td>' +
+            '<td></td>' +
+            '<td>' + aRevokeBtn + '</td>' +
+            '</tr>'
+          );
+        });
+      });
+
+      body.innerHTML = html.join('');
+      if (foot) {
+        foot.style.display = batchList.length > 0 ? '' : 'none';
+        var noteEl = document.getElementById('historyCountNote');
+        if (noteEl) {
+          noteEl.innerHTML = '共 ' + batchList.length + ' 个批次，已选 <span id="historySelectedCount" style="color:var(--primary);font-weight:600;">0</span> 个';
+        }
+      }
     }
 
     // ================================================================
@@ -826,37 +1130,299 @@
           '<td>' + t.assigned + '</td>' +
           '<td class="pool-remaining">' + t.remaining + '</td>' +
           '<td>' + escHtml(t.date) + '</td>' +
-          '<td><button class="btn btn-sm btn-primary" onclick="openAssignPanel(\'' + escAttr(t.ruleId) + '\')" ' + (t.remaining <= 0 ? 'disabled' : '') + '>分配</button></td>' +
+          '<td><button class="btn btn-sm btn-primary" data-rule-id="' + escAttr(t.ruleId) + '" onclick="openAssignPanel(this.dataset.ruleId)" ' + (t.remaining <= 0 ? 'disabled' : '') + '>分配</button></td>' +
           '</tr>';
       }).join('');
       document.getElementById('taskPoolBody').innerHTML = html || '<tr><td colspan="7" class="empty-state">暂无待分配任务</td></tr>';
     }
 
     // ================================================================
-    // 渲染分配历史
+    // 渲染分配历史（按批次号分组，可展开查看标注员明细）
+    // 列：选择、批次号、规则、状态、数量、分配时间、操作
     // ================================================================
     function renderHistory() {
       var loading = document.getElementById('historyLoading');
       var table = document.getElementById('historyTable');
+      var foot = document.getElementById('historyFoot');
       if (loading) loading.style.display = 'none';
       if (table) table.style.display = '';
 
       var history = _cachedHistory;
-      var html = history.map(function(h) {
-        return '<tr>' +
-          '<td>' + escHtml(h.time) + '</td>' +
-          '<td>' + escHtml(h.rule) + '</td>' +
-          '<td>' + escHtml(h.annotator) + '</td>' +
-          '<td>' + h.count + '</td>' +
-          '<td>' + h.annotated + '/' + h.total + '</td>' +
-          '</tr>';
-      }).join('');
-      document.getElementById('historyBody').innerHTML = html || '<tr><td colspan="5" class="empty-state">暂无分配记录</td></tr>';
+
+      // ── 两级 Map：先按 batch_no 登记规则出现顺序，再聚合 ──
+      // 同 batch_no 下多个规则时，显示 batch_no-1、batch_no-2 … 以区分
+      var batchRulesMap = {};  // bn → 规则数组（记录顺序）
+      var batchMap = {};        // bn+'||'+rn → 聚合对象
+      var batchTotalMap = {};   // bn → 真实批次总数（只取第一个出现的 display_total，避免重复累加）
+
+      history.forEach(function(h) {
+        var bn = h.batch_no || '__none__';
+        var rn = h.rule_name || '';
+        var key = bn + '||' + rn;
+
+        if (!batchRulesMap[bn]) batchRulesMap[bn] = [];
+        if (batchRulesMap[bn].indexOf(rn) === -1) batchRulesMap[bn].push(rn);
+        var seq = batchRulesMap[bn].indexOf(rn) + 1;
+
+        // batchTotalMap：同批次多个 DispatchLog 时，只记录第一个出现的 display_total
+        // 原因：api_history 返回的 display_total 是该 batch_no 的全量 RawData 总数，
+        // 所有 DispatchLog 都相同，累加会导致总数虚高（如 61×6=366）
+        if (!batchTotalMap[bn] && h.display_total) {
+          batchTotalMap[bn] = h.display_total;
+        }
+
+        if (!batchMap[key]) {
+          batchMap[key] = {
+            batch_no: h.batch_no || '',
+            rule_name: rn,
+            time: h.created_at || h.time || '',
+            seq: seq,
+            total_count: 0,
+            completed_count: 0,
+            pending_count: 0,
+            revoked_count: 0,
+            isPartiallyRevoked: false,
+            display_total: 0,   // 批次级别总数（从 batchTotalMap 取，避免重复累加）
+            annotators: [],
+          };
+        }
+        var b = batchMap[key];
+        b.total_count += (h.total_count || h.total || 0);
+        b.completed_count += (h.completed_count || h.completed || 0);
+        b.pending_count += (h.pending_count || h.pending || 0);
+        b.revoked_count += (h.revoked_count || 0);
+        if (h.isPartiallyRevoked) b.isPartiallyRevoked = true;
+        // display_total 改为取 batchTotalMap 的值，而非逐条累加
+        b.display_total = batchTotalMap[bn] || 0;
+        (h.annotators || []).forEach(function(a) { b.annotators.push(a); });
+      });
+
+      var batchList = Object.values(batchMap);
+      var html = [];
+
+      batchList.forEach(function(h) {
+        var pending = h.pending_count || 0;
+        var total = h.display_total || h.total_count || 0;  // 部分撤回时 display_total 含撤回记录
+        var completed = h.completed_count || 0;
+        var annotatorList = h.annotators || [];
+        var hasAnnotators = annotatorList.length > 0;
+
+        var statusText;
+        if (h.isPartiallyRevoked) {
+          var displayTotal = h.display_total || completed;
+          statusText = '<span style="color:var(--warning);">部分撤回（已完成 ' + completed + '/' + displayTotal + '）</span>';
+        } else if (pending === 0 && completed === 0) {
+          statusText = '<span style="color:var(--text-muted);">已撤回</span>';
+        } else if (pending === 0 && completed > 0) {
+          statusText = '<span style="color:var(--success);">已完成 ' + completed + '/' + total + '</span>';
+        } else if (pending > 0 && completed > 0) {
+          statusText = '<span style="color:var(--warning);">已部分完成 ' + completed + '/' + total + '</span>';
+        } else {
+          statusText = '<span style="color:#0099ff;">进行中 ' + completed + '/' + total + '</span>';
+        }
+
+        // 同一 batch_no 多个规则时：seq>1 加后缀-1 -2 …区分；onclick 仍用原始 batch_no
+        var bn = h.batch_no || '';
+        var bnSeq = h.seq > 1 ? bn + '-' + h.seq : bn;
+        var subRowClass = h.seq > 1 ? bn + '-' + h.seq : bn;
+
+        var batchNoCell = '<span class="batch-no-text" onclick="window.location.href=\'/annotation_list.html?batch_no=' + encodeURIComponent(bn) + '\'" title="点击查看该批次的标注任务" style="cursor:pointer;">' + escHtml(bnSeq) + '</span>' +
+          (hasAnnotators
+            ? '<button class="expand-arrow" id="expand-btn-' + escAttr(subRowClass) + '" onclick="toggleHistoryExpand(\'' + escAttr(subRowClass) + '\')" title="展开/收起标注员明细" style="margin-left:4px;cursor:pointer;background:none;border:none;color:var(--primary);">▶</button>'
+            : '');
+
+        var actionCell;
+        if (h.isPartiallyRevoked) {
+          actionCell = '<button class="btn btn-xs" style="background:var(--primary);color:#fff;padding:3px 10px;border:none;border-radius:4px;cursor:pointer;font-size:12px;" onclick="window.location.href=\'/annotation_list.html?batch_no=' + encodeURIComponent(bn) + '&status=done\'">查看已完成任务</button>';
+        } else {
+          actionCell = '' +
+            '<button class="btn btn-xs" style="background:var(--primary);color:#fff;padding:3px 10px;border:none;border-radius:4px;cursor:pointer;font-size:12px;" onclick="window.location.href=\'/annotation_list.html?batch_no=' + encodeURIComponent(bn) + '\'">查看任务</button> ' +
+            (pending > 0
+              ? '<button class="btn btn-xs" style="background:var(--warning);color:#fff;padding:3px 10px;border:none;border-radius:4px;cursor:pointer;font-size:12px;" onclick="revokeBatch(\'' + escAttr(bn) + '\', \'revoke\')">撤回整批</button>'
+              : '<span style="color:var(--text-muted);font-size:12px;">—</span>'
+            );
+        }
+
+        html.push(
+          '<tr class="batch-main-row" data-batch-no="' + escAttr(bn) + '">' +
+          '<td style="text-align:center;">' +
+            '<input type="checkbox" class="history-row-cb" value="' + escAttr(bn) + '" onchange="onHistoryRowCheckChange()">' +
+          '</td>' +
+          '<td style="white-space:nowrap;">' + batchNoCell + '</td>' +
+          '<td><span class="rule-tag">' + escHtml(h.rule_name || h.rule || '') + '</span></td>' +
+          '<td>' + statusText + '</td>' +
+          '<td>' + total + '</td>' +
+          '<td style="white-space:nowrap;">' + escHtml(h.time || '') + '</td>' +
+          '<td style="white-space:nowrap;">' + actionCell + '</td>' +
+          '</tr>'
+        );
+
+        annotatorList.forEach(function(a) {
+          var aCount = a.count || 0;
+          var aCompletedCount = a.completed_count || 0;
+          var aPending = aCount - aCompletedCount;
+          var aCompleted = aCompletedCount;
+          var aTotal = aCount;
+          var aStatus;
+          if (aPending === 0 && aCompleted === 0) {
+            aStatus = '<span style="color:var(--text-muted);font-size:12px;">已撤回</span>';
+          } else if (aPending === 0 && aCompleted > 0) {
+            aStatus = '<span style="color:var(--success);font-size:12px;">已完成 ' + aCompleted + '/' + aTotal + '</span>';
+          } else if (aPending > 0 && aCompleted > 0) {
+            aStatus = '<span style="color:var(--warning);font-size:12px;">已部分完成 ' + aCompleted + '/' + aTotal + '</span>';
+          } else {
+            aStatus = '<span style="color:#0099ff;font-size:12px;">进行中 ' + aCompleted + '/' + aTotal + '</span>';
+          }
+          var aRevokeBtn = aPending > 0
+            ? '<button class="btn btn-xs" style="background:var(--warning);color:#fff;padding:2px 8px;border:none;border-radius:3px;cursor:pointer;font-size:11px;" onclick="revokeAnnotatorLog(\'' + escAttr(String(a.log_id || '')) + '\', \'' + escAttr(bn) + '\', \'' + escAttr(a.annotator_name || '') + '\')">撤回</button>'
+            : '<span style="color:var(--text-muted);font-size:12px;">—</span>';
+          html.push(
+            '<tr class="annotator-sub-row sub-row-' + escAttr(subRowClass) + '" style="display:none;background:#f8f9fa;font-size:13px;">' +
+            '<td></td>' +
+            '<td style="padding-left:28px;color:var(--text-secondary);">' +
+            '  <span style="color:#ccc;margin-right:6px;">↳</span>' + escHtml(a.annotator_name || '') +
+            '</td>' +
+            '<td></td>' +
+            '<td>' + aStatus + '</td>' +
+            '<td>' + aTotal + '</td>' +
+            '<td></td>' +
+            '<td>' + aRevokeBtn + '</td>' +
+            '</tr>'
+          );
+        });
+      });
+
+      var bodyHtml = html.join('');
+      document.getElementById('historyBody').innerHTML = bodyHtml || '<tr><td colspan="7" class="empty-state">暂无分配记录</td></tr>';
+
+      if (foot) {
+        foot.style.display = batchList.length > 0 ? '' : 'none';
+        var noteEl = document.getElementById('historyCountNote');
+        if (noteEl) {
+          noteEl.innerHTML = '共 ' + batchList.length + ' 个批次，已选 <span id="historySelectedCount" style="color:var(--primary);font-weight:600;">0</span> 个';
+        }
+      }
+    }
+
+    // 展开/收起标注员明细（操作同一批次下所有子行）
+    window.toggleHistoryExpand = function(batchNo) {
+      var btn = document.getElementById('expand-btn-' + batchNo);
+      var subRows = document.querySelectorAll('.sub-row-' + batchNo);
+      if (!btn || subRows.length === 0) return;
+      var isHidden = subRows[0].style.display === 'none';
+      subRows.forEach(function(row) {
+        row.style.display = isHidden ? '' : 'none';
+      });
+      btn.textContent = isHidden ? '▼' : '▶';
+    };
+
+    // 撤回单个标注员的任务（按 DispatchLog ID）
+    window.revokeAnnotatorLog = function(logId, batchNo, annotatorName) {
+      if (!confirm('确认撤回 [' + annotatorName + '] 在批次 [' + batchNo + '] 中的任务？\n该操作仅撤回该标注员的分配，其他标注员不受影响。')) return;
+      apiPost('/api/dispatch/revoke-log', { log_id: logId }).then(function(res) {
+        if (res && res.success) {
+          showToast('已撤回 [' + annotatorName + '] 的 ' + (res.revoked_count || 0) + ' 条任务');
+          fetchTaskPool();
+          fetchAssignHistory().then(function() { fetchAnnotatorLoad(); });
+        } else {
+          showToast((res && res.message) ? res.message : '撤回失败', true);
+        }
+      });
+    };
+
+    // 全选 / 取消全选
+    window.toggleHistoryCheckAll = function() {
+      var checkAll = document.getElementById('historyCheckAll');
+      if (!checkAll) return;
+      var cbs = document.querySelectorAll('.history-row-cb');
+      cbs.forEach(function(cb) { cb.checked = checkAll.checked; });
+      updateRevokeAllBtnVisibility();
+    };
+
+    // 单行复选框变化时更新"撤回全部"按钮可见性
+    window.onHistoryRowCheckChange = function() {
+      var checkAll = document.getElementById('historyCheckAll');
+      var cbs = document.querySelectorAll('.history-row-cb');
+      if (!checkAll || cbs.length === 0) return;
+      var allChecked = true, noneChecked = true;
+      cbs.forEach(function(cb) {
+        if (!cb.checked) allChecked = false;
+        if (cb.checked) noneChecked = false;
+      });
+      checkAll.checked = allChecked;
+      checkAll.indeterminate = !allChecked && !noneChecked;
+      updateRevokeAllBtnVisibility();
+    };
+
+    // 根据是否有至少一个批次被勾选来显示/隐藏"撤回全部"按钮
+    function updateRevokeAllBtnVisibility() {
+      var cbs = document.querySelectorAll('.history-row-cb:checked');
+      var btn = document.getElementById('revokeAllBtn');
+      var noteEl = document.getElementById('historyCountNote');
+      var selectedCountEl = document.getElementById('historySelectedCount');
+      if (btn) btn.style.display = cbs.length > 0 ? '' : 'none';
+      if (noteEl) {
+        if (cbs.length > 0) {
+          noteEl.innerHTML = '共 ' + _cachedHistory.length + ' 个批次，已选 <span id="historySelectedCount" style="color:var(--primary);font-weight:600;">' + cbs.length + '</span> 个';
+        } else {
+          noteEl.innerHTML = '共 ' + _cachedHistory.length + ' 个批次';
+        }
+      }
     }
 
     window.toggleHistory = function() {
       document.getElementById('historyContent').classList.toggle('show');
       document.getElementById('historyArrow').classList.toggle('expanded');
+    };
+
+    // ================================================================
+    // ================================================================
+    // 撤回 / 删除 批次
+    // ================================================================
+    var _revokingBatchNo = null;  // 防重复提交
+
+    window.revokeBatch = function(batchNo, revokeType) {
+      if (_revokingBatchNo) { showToast('撤回操作进行中，请稍候…', true); return; }
+      if (!confirm('确认' + (revokeType === 'delete' ? '删除' : '撤回') + '批次 [' + batchNo + ']？' + (revokeType === 'revoke' ? '未完成的任务将被释放回任务池' : ''))) return;
+
+      _revokingBatchNo = batchNo;
+      apiPost('/api/dispatch/revoke-batch', { batch_no: batchNo }).then(function(res) {
+        _revokingBatchNo = null;
+        if (res && res.success) {
+          var msg = '已撤回批次 [' + batchNo + ']';
+          if (res.revoked_count > 0) msg += '，退回 ' + res.revoked_count + ' 条';
+          if (res.kept_count > 0) msg += '，保留 ' + res.kept_count + ' 条已完成';
+          showToast(msg);
+          fetchTaskPool();
+          fetchAssignHistory().then(function() { fetchAnnotatorLoad(); });
+        } else {
+          showToast((res && res.message) ? res.message : (revokeType === 'delete' ? '删除失败' : '撤回失败'), true);
+        }
+      });
+    };
+
+    // 撤回全部已分配未标注任务（仅撤回已勾选的历史批次）
+    window.revokeAllAssigned = function() {
+      var cbs = document.querySelectorAll('.history-row-cb:checked');
+      var selectedBatches = Array.prototype.slice.call(cbs).map(function(cb) { return cb.value; });
+      if (selectedBatches.length === 0) {
+        showToast('请先勾选要撤回的批次', true);
+        return;
+      }
+      if (!confirm('确认撤回已勾选的 ' + selectedBatches.length + ' 个批次？\n选中批次的未完成任务将被释放回任务池。')) return;
+      apiDelete('/api/dispatch/revoke', { batch_nos: selectedBatches }).then(function(res) {
+        if (res && res.success) {
+          showToast(res.message || '已撤回选中批次的分配');
+          fetchTaskPool();
+          fetchAssignHistory().then(function() { fetchAnnotatorLoad(); });
+          // 撤回成功后清除所有勾选
+          document.querySelectorAll('.history-row-cb').forEach(function(cb) { cb.checked = false; });
+          document.getElementById('historyCheckAll').checked = false;
+          updateRevokeAllBtnVisibility();
+        } else {
+          showToast((res && res.message) ? res.message : '撤回失败', true);
+        }
+      });
     };
 
     // ================================================================
@@ -956,6 +1522,7 @@
 
       var annotators = _cachedAnnotators;
       var rules = getRules();
+      console.log('[renderLoadCards] 调用，_cachedAnnotators 长度:', annotators.length, '规则数:', rules.length);
 
       var html = annotators.map(function(a) {
         var ruleTags = (a.ruleIds || []).map(function(rid) {
@@ -969,7 +1536,7 @@
         if (percent >= 100) progressClass = 'red';
         else if (percent >= 80) progressClass = 'orange';
 
-        return '<div class="load-card">' +
+        return '<div class="load-card" onclick="openAnnotatorDetail(' + a.id + ', \'' + escAttr(a.name) + '\')" title="点击查看标注详情">' +
           '<div class="load-card-name">' + escHtml(a.name) + '</div>' +
           '<div class="load-card-rules">' + ruleTags + '</div>' +
           '<div class="load-card-stats">' +
@@ -1462,21 +2029,229 @@
     });
 
     // ================================================================
+    // 标注员详情弹窗
+    // ================================================================
+    var _detailAnnotatorId = null;
+    var _detailAnnotatorName = null;
+    var _detailCurrentDays = 30;
+    var _detailCurrentRule = '';
+
+    window.openAnnotatorDetail = function(annotatorId, annotatorName) {
+      _detailAnnotatorId = String(annotatorId);
+      _detailAnnotatorName = annotatorName;
+      _detailCurrentDays = 30;
+      _detailCurrentRule = '';
+
+      document.getElementById('annotatorDetailLoading').style.display = '';
+      document.getElementById('annotatorDetailBody').innerHTML = '<div id="annotatorDetailLoading" style="text-align:center;padding:32px;color:var(--text-muted);">加载中…</div>';
+      document.getElementById('annotatorDetailTitle').textContent = '标注详情 — ' + escHtml(annotatorName);
+      document.getElementById('annotatorDetailModal').classList.add('active');
+
+      // 今日规则从缓存的历史记录中提取
+      var todayRules = _getTodayRulesForAnnotator(annotatorId);
+      // 异步拉取历史统计数据
+      _fetchAnnotatorStats(30, '').then(function(statsData) {
+        renderAnnotatorDetailModal(todayRules, statsData, 30, '');
+      });
+    };
+
+    function _getTodayRulesForAnnotator(annotatorId) {
+      var today = new Date();
+      var todayStr = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0');
+      var rules = {};
+      _cachedHistory.forEach(function(h) {
+        // h.created_at 格式: "2026-05-25 10:30"
+        if (!h.created_at || !h.created_at.startsWith(todayStr)) return;
+        var rn = h.rule_name || '未分类';
+        (h.annotators || []).forEach(function(ann) {
+          // 通过 annotator_name 匹配（annotator_id 不在 history 缓存结构中）
+          // 标注员名字唯一，所以用名字匹配
+          if (String(ann.annotator_name || '') === String(_detailAnnotatorName || '')) {
+            if (!rules[rn]) rules[rn] = { rule_name: rn, count: 0 };
+            rules[rn].count += ann.count || 0;
+          }
+        });
+      });
+      return Object.values(rules);
+    }
+
+    function _fetchAnnotatorStats(days, ruleName) {
+      var url = '/api/dispatch/annotator-stats?annotator_id=' + _detailAnnotatorId + '&days=' + days;
+      if (ruleName) url += '&rule_name=' + encodeURIComponent(ruleName);
+      return fetch(url, { credentials: 'same-origin' })
+        .then(function(r) { return r.json(); });
+    }
+
+    function renderAnnotatorDetailModal(todayRules, statsData, days, ruleName) {
+      _detailCurrentDays = days;
+      _detailCurrentRule = ruleName;
+
+      var body = document.getElementById('annotatorDetailBody');
+      if (!body) return;
+
+      var success = statsData && statsData.success;
+      var items = success ? (statsData.items || []) : [];
+      var summary = success ? (statsData.summary || {}) : {};
+      var totalAnn = summary.total_annotated || 0;
+      var totalCor = summary.total_correct || 0;
+      var totalAcc = summary.overall_accuracy || 0;
+
+      // Meta 统计
+      var accColor = 'var(--primary)';
+      if (totalAcc > 0 && totalAcc < 70) accColor = 'var(--danger)';
+      else if (totalAcc >= 70 && totalAcc < 85) accColor = 'var(--warning)';
+      else if (totalAcc >= 85) accColor = 'var(--success)';
+
+      var metaHtml = '<div class="detail-meta">' +
+        '<div class="detail-meta-item">' +
+          '<div class="detail-meta-label">总标注数</div>' +
+          '<div class="detail-meta-value">' + totalAnn + '</div>' +
+        '</div>' +
+        '<div class="detail-meta-item">' +
+          '<div class="detail-meta-label">正确数</div>' +
+          '<div class="detail-meta-value" style="color:var(--success)">' + totalCor + '</div>' +
+        '</div>' +
+        '<div class="detail-meta-item">' +
+          '<div class="detail-meta-label">总体准确率</div>' +
+          '<div class="detail-meta-value" style="color:' + accColor + '">' + (totalAnn > 0 ? totalAcc + '%' : '—') + '</div>' +
+        '</div>' +
+      '</div>';
+
+      // 今日规则分配
+      var todaySection = '<div class="detail-section"><div class="detail-section-title">今日规则分配</div>';
+      if (todayRules.length === 0) {
+        todaySection += '<div class="empty-state">今日暂无分配记录</div>';
+      } else {
+        todaySection += '<table class="detail-table"><thead><tr><th>规则</th><th>分配数</th></tr></thead><tbody>';
+        todayRules.forEach(function(r) {
+          todaySection += '<tr><td>' + escHtml(r.rule_name) + '</td><td class="num">' + r.count + '</td></tr>';
+        });
+        todaySection += '</tbody></table>';
+      }
+      todaySection += '</div>';
+
+      // 历史统计（筛选栏 + 表格）
+      var rules = getRules();
+      var allRuleOptions = '<option value="">全部规则</option>' + rules.map(function(r) {
+        return '<option value="' + escAttr(r.name) + '">' + escHtml(r.name) + '</option>';
+      }).join('');
+
+      var daysOptions = [
+        { label: '近7天', value: 7 },
+        { label: '近15天', value: 15 },
+        { label: '近30天', value: 30 },
+        { label: '近60天', value: 60 },
+        { label: '近90天', value: 90 },
+      ].map(function(d) {
+        return '<option value="' + d.value + '"' + (d.value === days ? ' selected' : '') + '>' + d.label + '</option>';
+      }).join('');
+
+      var historySection = '<div class="detail-section"><div class="detail-section-title">历史标注统计</div>';
+      historySection += '<div class="detail-filter-bar">' +
+        '<label>规则：</label>' +
+        '<select id="detailRuleFilter" onchange="onDetailRuleChange(this.value)">' + allRuleOptions + '</select>' +
+        '<label style="margin-left:12px;">时间：</label>' +
+        '<select id="detailDaysFilter" onchange="onDetailDaysChange(this.value)">' + daysOptions + '</select>' +
+      '</div>';
+
+      if (!success) {
+        historySection += '<div class="empty-state">加载失败：' + escHtml(statsData.error || '未知错误') + '</div>';
+      } else if (items.length === 0) {
+        historySection += '<div class="empty-state">暂无历史标注记录</div>';
+      } else {
+        historySection += '<table class="detail-table"><thead><tr>' +
+          '<th>日期</th><th>规则</th><th class="num">标注数</th><th class="num">正确数</th><th class="num acc">准确率</th>' +
+        '</tr></thead><tbody>';
+        items.forEach(function(item) {
+          var a = item.accuracy;
+          var accStyle = 'var(--primary)';
+          if (a > 0 && a < 70) accStyle = 'var(--danger)';
+          else if (a >= 70 && a < 85) accStyle = 'var(--warning)';
+          else if (a >= 85) accStyle = 'var(--success)';
+          historySection += '<tr>' +
+            '<td>' + escHtml(item.date) + '</td>' +
+            '<td>' + escHtml(item.rule_name) + '</td>' +
+            '<td class="num">' + item.annotated_count + '</td>' +
+            '<td class="num">' + item.correct_count + '</td>' +
+            '<td class="num acc" style="color:' + accStyle + '">' + (item.annotated_count > 0 ? a + '%' : '—') + '</td>' +
+          '</tr>';
+        });
+        historySection += '</tbody></table>';
+        historySection += '<div class="detail-summary">' +
+          '<div class="detail-summary-item">合计：<span>' + totalAnn + '</span> 条标注，<span>' + totalCor + '</span> 条正确，' +
+          '准确率 <span>' + (totalAnn > 0 ? totalAcc + '%' : '—') + '</span></div>' +
+        '</div>';
+      }
+      historySection += '</div>';
+
+      // 准确率趋势（预留）
+      var trendSection = '<div class="detail-section"><div class="detail-section-title">准确率趋势（预留）</div>' +
+        '<div class="detail-placeholder">图表区域 — 后续接入真实数据后展示准确率趋势</div></div>';
+
+      body.innerHTML = metaHtml + todaySection + historySection + trendSection;
+
+      // 同步筛选栏状态
+      var ruleSel = document.getElementById('detailRuleFilter');
+      if (ruleSel) ruleSel.value = ruleName;
+    }
+
+    window.onDetailRuleChange = function(val) {
+      var todayRules = _getTodayRulesForAnnotator(_detailAnnotatorId);
+      _fetchAnnotatorStats(_detailCurrentDays, val).then(function(statsData) {
+        renderAnnotatorDetailModal(todayRules, statsData, _detailCurrentDays, val);
+      });
+    };
+
+    window.onDetailDaysChange = function(val) {
+      var todayRules = _getTodayRulesForAnnotator(_detailAnnotatorId);
+      _fetchAnnotatorStats(parseInt(val) || 30, _detailCurrentRule).then(function(statsData) {
+        renderAnnotatorDetailModal(todayRules, statsData, parseInt(val) || 30, _detailCurrentRule);
+      });
+    };
+
+    // ================================================================
     // 初始化：异步加载所有数据
     // ================================================================
     function init() {
       renderOverview();
-      renderHistory();
-      renderLoadCards();
       renderRuleList();
 
-      // 加载任务池（包含规则列表）
-      fetchTaskPool().then(function() {
-        // 加载标注员
-        return fetchAnnotators();
-      }).then(function() {
-        // 加载标注员负载
-        return fetchAnnotatorLoad();
+      // 并行加载：任务池+规则、标注员列表、分配历史
+      // renderLoadCards() 在 fetchAnnotatorLoad() 的 .then() 里统一调用（避免 _cachedAnnotators 未初始化时渲染"暂无标注员"）
+      Promise.all([
+        fetchTaskPool(),
+        fetchAnnotators()
+      ]).then(function() {
+        return fetchAnnotatorLoad().then(function() {
+          // 看板跳转：检测 open_annotator URL 参数，自动打开标注员详情弹窗
+          var urlParams = new URLSearchParams(window.location.search);
+          var openAnnotatorName = urlParams.get('open_annotator');
+          if (openAnnotatorName) {
+            // 从 _cachedAnnotators 中找到匹配的标注员
+            var matched = _cachedAnnotators.find(function(a) {
+              return a.name === openAnnotatorName || a.username === openAnnotatorName;
+            });
+            if (matched) {
+              openAnnotatorDetail(matched.id, matched.name || matched.username);
+            }
+            // 清除 URL 参数，避免刷新时重复触发
+            var cleanUrl = window.location.pathname;
+            window.history.replaceState({}, '', cleanUrl);
+          }
+        });
+      }).catch(function(err) {
+        // 任意环节出错，隐藏所有 loading 状态
+        var el;
+        el = document.getElementById('loadCardsLoading'); if (el) el.style.display = 'none';
+        el = document.getElementById('taskPoolLoading'); if (el) el.style.display = 'none';
+        el = document.getElementById('annotatorLoading'); if (el) el.style.display = 'none';
+        el = document.getElementById('historyLoading'); if (el) el.style.display = 'none';
+      });
+
+      // 分配历史单独并行（不阻塞主流程）
+      fetchAssignHistory().catch(function() {
+        var el = document.getElementById('historyLoading');
+        if (el) el.style.display = 'none';
       });
     }
 

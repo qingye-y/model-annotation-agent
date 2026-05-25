@@ -12,6 +12,9 @@
  * @param {RequestInit} options
  * @returns {Promise<any>} parsed JSON
  */
+// 防止重复 redirect 到登录页（每次页面生命周期只执行一次）
+var _loginRedirectDone = false;
+
 function safeFetch(url, options) {
   options = options || {};
   var headers = Object.assign(
@@ -24,7 +27,10 @@ function safeFetch(url, options) {
       var isJson = ct.indexOf('application/json') !== -1 || ct.indexOf('text/json') !== -1;
 
       if (r.status === 401) {
-        window.location.href = '/login?next=' + encodeURIComponent(window.location.pathname);
+        if (!_loginRedirectDone && !window.location.pathname.startsWith('/login')) {
+          _loginRedirectDone = true;
+          window.location.href = '/login?next=' + encodeURIComponent(window.location.pathname);
+        }
         return Promise.reject('LOGIN_REQUIRED');
       }
       if (r.status === 403) {
@@ -34,6 +40,16 @@ function safeFetch(url, options) {
       }
       if (r.status === 204) return null;
 
+      // 检测 fetch 自动跟随了 redirect（Flask-Login @login_required 对过期 session 返回 302→/login，
+      // fetch 跟随后 r.url 变成 /login，r.redirected=true）
+      if (r.redirected && !window.location.pathname.startsWith('/login')) {
+        if (!_loginRedirectDone) {
+          _loginRedirectDone = true;
+          window.location.href = '/login?next=' + encodeURIComponent(window.location.pathname);
+        }
+        return Promise.reject('LOGIN_REQUIRED');
+      }
+
       if (!r.ok) {
         return r.text().then(function(text) {
           var errMsg = '请求失败 (' + r.status + ')';
@@ -42,13 +58,17 @@ function safeFetch(url, options) {
         });
       }
 
-      // 防止 HTML 登录页被当 JSON 解析
+      // 防止 HTML 登录页被当 JSON 解析（兜底）
       if (!isJson) {
         return r.text().then(function(text) {
           try { return JSON.parse(text); }
           catch {
-            // 仍是 HTML → 未登录
-            window.location.href = '/login?next=' + encodeURIComponent(window.location.pathname);
+            // 仍是 HTML → 未登录（只 redirect 一次）
+            if (!_loginRedirectDone && !window.location.pathname.startsWith('/login')
+                && (text.indexOf('login') !== -1 || text.indexOf('登录') !== -1)) {
+              _loginRedirectDone = true;
+              window.location.href = '/login?next=' + encodeURIComponent(window.location.pathname);
+            }
             return Promise.reject('LOGIN_REQUIRED');
           }
         });
