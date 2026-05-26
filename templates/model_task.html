@@ -874,21 +874,13 @@
       var todayStr = formatDate(today);
 
       if (period === 'custom') {
-        // 自定义：清除按钮高亮，清空日期输入框，聚焦开始日期
+        // 自定义：清除按钮高亮，预填日期，聚焦开始日期（不联动高级面板）
         clearPeriodHighlight();
         btn.classList.remove('period-btn');
         btn.classList.add('period-btn', 'active');
-        document.getElementById('filterStartDate').value = '';
+        document.getElementById('filterStartDate').value = '2025-01-01';
         document.getElementById('filterEndDate').value = '';
         document.getElementById('filterStartDate').focus();
-        // 自动展开高级筛选面板
-        var panel = document.getElementById('advancedFilterPanel');
-        var cBtn = document.getElementById('btnCustomFilter');
-        if (panel && cBtn) {
-          panel.classList.add('open');
-          cBtn.classList.add('active');
-          cBtn.textContent = '▲ 收起筛选';
-        }
         return;
       }
 
