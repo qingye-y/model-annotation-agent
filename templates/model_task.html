@@ -32,6 +32,13 @@
     .btn-reset:hover { border-color: var(--primary); color: var(--primary); }
     .btn-trigger { padding: 8px 18px; font-size: 14px; font-weight: 500; background: var(--primary); color: #fff; border: none; border-radius: var(--radius); cursor: pointer; display: flex; align-items: center; gap: 6px; }
     .btn-trigger:hover { background: var(--primary-hover); }
+
+    /* 高级筛选项面板：默认隐藏，btnCustomFilter 切换显隐 */
+    .advanced-filter-panel { display: none; align-items: center; flex-wrap: wrap; gap: 12px; }
+    .advanced-filter-panel.open { display: flex; }
+    .btn-custom { padding: 6px 12px; font-size: 13px; background: var(--white); color: var(--text-secondary); border: 1px solid var(--border); border-radius: var(--radius); cursor: pointer; white-space: nowrap; }
+    .btn-custom:hover { border-color: var(--primary); color: var(--primary); }
+    .btn-custom.active { background: var(--primary); color: #fff; border-color: var(--primary); }
     .status-indicator { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text-primary); }
     .status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--success); }
     .status-dot.running { animation: pulse 2s infinite; }
@@ -262,28 +269,32 @@
           <span style="color:var(--text-muted);margin:0 4px;">至</span>
           <input type="date" class="form-input" id="filterEndDate" style="width:130px;">
         </div>
-        <div class="filter-item">
-          <label>数据来源</label>
-          <select class="form-select" id="filterSource">
-            <option value="">全部</option>
-            <option value="fetch">线上获取</option>
-            <option value="upload">文件上传</option>
-          </select>
-        </div>
-        <div class="filter-item">
-          <label>审核规则</label>
-          <select class="form-select" id="filterRule" onchange="loadBatches()">
-            <option value="">全部规则</option>
-          </select>
-        </div>
-        <div class="filter-item">
-          <label>互检状态</label>
-          <select class="form-select" id="filterReviewStatus">
-            <option value="">全部</option>
-            <option value="pending">待互检</option>
-            <option value="running">互检中</option>
-            <option value="completed">已完成</option>
-          </select>
+        <!-- 高级筛选项：默认隐藏，点击"自定义"展开 -->
+        <button class="btn-custom" id="btnCustomFilter" onclick="toggleAdvancedFilter()" title="展开/收起更多筛选条件">▼ 更多筛选</button>
+        <div class="advanced-filter-panel" id="advancedFilterPanel">
+          <div class="filter-item">
+            <label>数据来源</label>
+            <select class="form-select" id="filterSource">
+              <option value="">全部</option>
+              <option value="fetch">线上获取</option>
+              <option value="upload">文件上传</option>
+            </select>
+          </div>
+          <div class="filter-item">
+            <label>审核规则</label>
+            <select class="form-select" id="filterRule" onchange="loadBatches()">
+              <option value="">全部规则</option>
+            </select>
+          </div>
+          <div class="filter-item">
+            <label>互检状态</label>
+            <select class="form-select" id="filterReviewStatus">
+              <option value="">全部</option>
+              <option value="pending">待互检</option>
+              <option value="running">互检中</option>
+              <option value="completed">已完成</option>
+            </select>
+          </div>
         </div>
         <button class="btn-query" onclick="filterByDateRange()">查询</button>
         <button class="btn-reset" onclick="resetFilter()">重置</button>
@@ -841,6 +852,22 @@
         });
     }
 
+    // ========== 高级筛选面板切换 ==========
+    function toggleAdvancedFilter() {
+      var panel = document.getElementById('advancedFilterPanel');
+      var btn = document.getElementById('btnCustomFilter');
+      if (!panel || !btn) return;
+      if (panel.classList.contains('open')) {
+        panel.classList.remove('open');
+        btn.classList.remove('active');
+        btn.textContent = '▼ 更多筛选';
+      } else {
+        panel.classList.add('open');
+        btn.classList.add('active');
+        btn.textContent = '▲ 收起筛选';
+      }
+    }
+
     // ========== 日期筛选胶囊按钮（与数据看板一致）==========
     function switchPeriod(btn, period) {
       var today = new Date();
@@ -854,6 +881,14 @@
         document.getElementById('filterStartDate').value = '';
         document.getElementById('filterEndDate').value = '';
         document.getElementById('filterStartDate').focus();
+        // 自动展开高级筛选面板
+        var panel = document.getElementById('advancedFilterPanel');
+        var cBtn = document.getElementById('btnCustomFilter');
+        if (panel && cBtn) {
+          panel.classList.add('open');
+          cBtn.classList.add('active');
+          cBtn.textContent = '▲ 收起筛选';
+        }
         return;
       }
 
