@@ -993,3 +993,105 @@ a:hover {
   height: 100%;
   overflow-y: auto;
 }
+
+/* ========== 标注弹窗图片网格（三合一：主图+SKU图+详情图） ========== */
+.annot-prod-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 8px;
+  max-height: 420px;
+  overflow-y: auto;
+}
+
+.annot-prod-img-item {
+  width: 120px;
+  height: 120px;
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  overflow: hidden;
+  cursor: pointer;
+  background: #f8f8f8;
+  flex-shrink: 0;
+}
+
+.annot-prod-img-item img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.annot-prod-img-item:hover {
+  border-color: var(--primary);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+.annot-no-img {
+  width: 100%;
+  text-align: center;
+  color: #999;
+  font-size: 13px;
+  padding: 40px 0;
+}
+
+/* ========== 图片分组标题（按主图/SKU图/详情图分组） ========== */
+.annot-img-group-title {
+  width: 100%;
+  font-size: 13px;
+  font-weight: 600;
+  color: #555;
+  margin: 8px 0 4px 0;
+  padding-left: 4px;
+  border-left: 3px solid var(--primary, #4a90d9);
+}
+
+/* ========== 标签按钮组样式（v1.0：标注任务筛选优化） ========== */
+.filter-tags-row {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+.filter-tag-label {
+  font-size: 13px;
+  color: #555;
+  font-weight: 500;
+  min-width: 36px;
+  margin-right: 8px;
+  flex-shrink: 0;
+}
+.filter-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+.filter-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 12px;
+  border-radius: 16px;
+  border: 1px solid #d9d9d9;
+  background: #fff;
+  color: #555;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  user-select: none;
+  line-height: 1.4;
+}
+.filter-tag:hover {
+  border-color: var(--primary, #4f6ef7);
+  color: var(--primary, #4f6ef7);
+  background: #f0f4ff;
+}
+.filter-tag.active {
+  background: var(--primary, #4f6ef7);
+  border-color: var(--primary, #4f6ef7);
+  color: #fff;
+}
+.filter-tag.active:hover {
+  background: var(--primary-hover, #3d5ce0);
+  border-color: var(--primary-hover, #3d5ce0);
+}

@@ -31,7 +31,7 @@ def api_stats():
             "non_compliant_count": non_compliant,
             "compliance_rate": round(compliant / total * 100, 2) if total > 0 else 0,
             "non_compliance_rate": round(non_compliant / total * 100, 2) if total > 0 else 0,
-            "accuracy_rate": 95.82,
+            "accuracy_rate": 95.82,  # 旧版硬编码，保留兼容
             "inconsistency_rate": 8.67,
             "pending_tasks": total - annotated_count()
         })
@@ -168,23 +168,25 @@ def api_dashboard_stats():
     # 计算总体违规率和不一致率
     violation_rate = round(non_compliant_count / total_count * 100, 2) if total_count > 0 else 0
 
-    # 机审不一致率：改用 FetchLog 口径（已完成互检批次，A/B模型判定不一致比例）
-    # 筛选业务日期与查询范围有重叠的批次
-    fetch_query = FetchLog.query.filter(FetchLog.review_status == 'completed')
+    # 机审不一致率：改用 RawData 实时查询（替代 FetchLog 快照，解决历史数据不同步问题）
+    # 口径：已互检记录中 modelb_consistent=False 的比例
+    inc_query = RawData.query.filter(
+        RawData.modelb_reviewed == True,
+        RawData.modelb_consistent != None
+    )
     if start_date and end_date:
-        fetch_query = fetch_query.filter(
-            FetchLog.data_start_date <= end_date,
-            FetchLog.data_end_date >= start_date
+        start_fmt = f"{start_date[:4]}-{start_date[4:6]}-{start_date[6:8]}"
+        end_fmt   = f"{end_date[:4]}-{end_date[4:6]}-{end_date[6:8]}"
+        inc_query = inc_query.filter(
+            RawData.gmt_created >= start_fmt,
+            RawData.gmt_created <= end_fmt + ' 23:59:59'
         )
     if instance_list:
-        inst_filters = [FetchLog.instances.like('%' + inst + '%') for inst in instance_list]
-        fetch_query = fetch_query.filter(or_(*inst_filters))
-    fetch_batches = fetch_query.all()
-    fl_total = 0
-    fl_inconsistent = 0
-    for fb in fetch_batches:
-        fl_total += fb.total_fetched or 0
-        fl_inconsistent += fb.inconsistent_count or 0
+        inc_query = inc_query.filter(RawData.instance_code.in_(instance_list))
+
+    inc_records = inc_query.all()
+    fl_total = sum(1 for r in inc_records if r.check_result != 'ignore')
+    fl_inconsistent = sum(1 for r in inc_records if r.modelb_consistent == False and r.check_result != 'ignore')
     inconsistent_rate = round(fl_inconsistent / fl_total * 100, 2) if fl_total > 0 else 0
 
     # ====== 构建日期范围内的完整 by_date 数组（补零）======
@@ -283,7 +285,7 @@ def api_dashboard_stats():
             if is_correct is True:
                 acc_correct += 1
 
-        accuracy_rate = round(acc_correct / acc_total * 100, 1) if acc_total > 0 else None
+        accuracy_rate = round(acc_correct / acc_total * 100, 2) if acc_total > 0 else None
         accuracy_empty = acc_total == 0
         print(f"[看板统计] 互检准确率：correct={acc_correct}, total={acc_total}, "
               f"ignored={acc_ignored}, accuracy={accuracy_rate}%")
@@ -750,7 +752,7 @@ def api_accuracy_stats():
             correct_count += 1
         # is_correct is False/null 不计入分子
 
-    accuracy_rate = round(correct_count / total_reviewed * 100, 1) if total_reviewed > 0 else None
+    accuracy_rate = round(correct_count / total_reviewed * 100, 2) if total_reviewed > 0 else None
     empty = total_reviewed == 0
 
     print(f"[AccuracyStats] 结果: correct={correct_count}, total={total_reviewed}, "
@@ -811,7 +813,7 @@ def api_accuracy_trend():
     records = query.all()
 
     # 按天分组统计
-    date_map = {}  # {date_str: {'correct': 0, 'total': 0}}
+    date_map = {}  # {date_str: {'total': 0, 'correct': 0, 'model_consistent': 0, 'human_correct': 0}}
 
     for rec in records:
         # 跳过 ignore
@@ -824,23 +826,31 @@ def api_accuracy_trend():
             continue
 
         if date_str not in date_map:
-            date_map[date_str] = {'correct': 0, 'total': 0}
+            date_map[date_str] = {'total': 0, 'correct': 0, 'model_consistent': 0, 'human_correct': 0}
 
         date_map[date_str]['total'] += 1
-        is_correct = _is_modela_correct(rec)
-        if is_correct is True:
+
+        # model_consistent_count：机审一致且默认正确（未被标注为 error）
+        if rec.modelb_consistent is True and rec.check_result != 'error':
+            date_map[date_str]['model_consistent'] += 1
+            date_map[date_str]['correct'] += 1
+        # human_correct_count：机审不一致但人工标注纠正为正确（标注为 correct）
+        elif rec.modelb_consistent is False and rec.check_result == 'correct':
+            date_map[date_str]['human_correct'] += 1
             date_map[date_str]['correct'] += 1
 
     # 构建趋势数据（按日期升序）
     trend = []
     for date_str in sorted(date_map.keys()):
         data = date_map[date_str]
-        accuracy_rate = round(data['correct'] / data['total'] * 100, 1) if data['total'] > 0 else None
+        accuracy_rate = round(data['correct'] / data['total'] * 100, 2) if data['total'] > 0 else None
         trend.append({
             'date': date_str,
             'accuracy_rate': accuracy_rate,
             'correct_count': data['correct'],
-            'total_reviewed': data['total']
+            'total_reviewed': data['total'],
+            'model_consistent_count': data['model_consistent'],
+            'human_correct_count': data['human_correct']
         })
 
     empty = len(trend) == 0

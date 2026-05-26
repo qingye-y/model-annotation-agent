@@ -742,19 +742,35 @@
           }
           var trend = result.trend || [];
           var categories = trend.map(function(d) {
-            return d.date.substring(4, 6) + '/' + d.date.substring(6, 8);
+            return d.date.substring(5, 7) + '/' + d.date.substring(8, 10);
           });
-          var series = trend.map(function(d) {
+
+          // 提取每日数据构成
+          var modelConsistent = trend.map(function(d) {
+            return d.model_consistent_count != null ? d.model_consistent_count : 0;
+          });
+          var humanCorrect = trend.map(function(d) {
+            return d.human_correct_count != null ? d.human_correct_count : 0;
+          });
+          var accuracySeries = trend.map(function(d) {
             return d.accuracy_rate != null ? d.accuracy_rate : 0;
           });
 
-          // 动态计算 yaxis 范围：以数据为中心 ±5%，保底 [50, 100]
-          var dataMin = series.length > 0 ? Math.min.apply(null, series.filter(function(v) { return v > 0; })) : 95;
-          var dataMax = series.length > 0 ? Math.max.apply(null, series) : 97;
+          // 准确率折线图 yaxis 范围：以数据为中心 ±5%，保底 [50, 100]
+          var dataMin = accuracySeries.length > 0 ? Math.min.apply(null, accuracySeries.filter(function(v) { return v > 0; })) : 95;
+          var dataMax = accuracySeries.length > 0 ? Math.max.apply(null, accuracySeries) : 97;
           var yMin = Math.max(50, Math.floor(dataMin - 5));
           var yMax = Math.min(100, Math.ceil(dataMax + 5));
 
-          initAccuracyChart({ series: series, categories: categories, yMin: yMin, yMax: yMax });
+          initAccuracyChart({
+            categories: categories,
+            modelConsistent: modelConsistent,
+            humanCorrect: humanCorrect,
+            accuracySeries: accuracySeries,
+            trend: trend,
+            yMin: yMin,
+            yMax: yMax
+          });
         })
         .catch(function(err) {
           console.error('获取准确率趋势失败:', err);
@@ -1326,61 +1342,135 @@
         }
         var yMin = (data.yMin !== undefined) ? data.yMin : 50;
         var yMax = (data.yMax !== undefined) ? data.yMax : 100;
+
+        // 堆叠柱状图：下层机审一致正确（蓝色），上层人审纠正正确（绿色）
+        // 折线图：整体准确率（紫色），使用右Y轴
+        // yAxisIndex：0=左轴（柱状图），1=右轴（折线图）
         const options = {
           chart: {
-            type: 'area',
-            height: 260,
+            type: 'bar',
+            height: 280,
             fontFamily: 'inherit',
             toolbar: { show: false },
             animations: { enabled: true }
           },
-          series: [{
-            name: '准确率(%)',
-            data: data.series
-          }],
+          series: [
+            {
+              name: '机审一致正确',
+              type: 'bar',
+              data: data.modelConsistent,
+              yAxisIndex: 0
+            },
+            {
+              name: '人审纠正正确',
+              type: 'bar',
+              data: data.humanCorrect,
+              yAxisIndex: 0
+            },
+            {
+              name: '整体准确率',
+              type: 'line',
+              data: data.accuracySeries,
+              yAxisIndex: 1
+            }
+          ],
           xaxis: {
             categories: data.categories,
             labels: { style: { fontSize: '11px', colors: '#6b7280' } },
             axisBorder: { show: false },
             axisTicks: { show: false }
           },
-          yaxis: {
-            labels: {
-              style: { fontSize: '11px', colors: '#6b7280' },
-              formatter: function(v) { return v.toFixed(1) + '%'; },
+          yaxis: [
+            {
+              // 左Y轴：数据量（柱状图），控制刻度间距
+              opposite: false,
+              min: 0,
+              tickAmount: 5,
+              labels: {
+                style: { fontSize: '11px', colors: '#6b7280' },
+                formatter: function(v) { return Number.isInteger(v) ? v : v.toFixed(0); }
+              },
+              title: { text: '数据量', style: { fontSize: '11px', color: '#6b7280' } }
+            },
+            {
+              // 右Y轴：整体准确率（折线图）
+              opposite: true,
               min: yMin,
-              max: yMax
+              max: yMax,
+              tickAmount: 5,
+              labels: {
+                style: { fontSize: '11px', colors: '#6b7280' },
+                formatter: function(v) { return v.toFixed(1) + '%'; }
+              },
+              title: { text: '整体准确率(%)', style: { fontSize: '11px', color: '#6b7280' } }
+            }
+          ],
+          colors: ['#3498db', '#2ecc71', '#8b5cf6'],
+          plotOptions: {
+            bar: {
+              columnWidth: '55%',
+              endingShape: 'flat',
+              dataLabels: { position: 'top' }
             }
           },
-          colors: ['#2ecc71'],
-          fill: {
-            type: 'gradient',
-            gradient: {
-              shadeIntensity: 1,
-              opacityFrom: 0.3,
-              opacityTo: 0.05,
-              stops: [0, 100]
-            }
-          },
-          stroke: { curve: 'smooth', width: 2 },
           dataLabels: { enabled: false },
           grid: {
             borderColor: '#f3f4f6',
-            strokeDashArray: 3
+            strokeDashArray: 3,
+            xaxis: { lines: { show: false } },
+            yaxis: { lines: { show: true } }
           },
           tooltip: {
-            y: { formatter: function(v) { return v.toFixed(1) + '%'; } }
+            shared: true,
+            intersect: false,
+            custom: function(opts) {
+              var idx = opts.dataPointIndex;
+              if (idx < 0 || !data.trend || !data.trend[idx]) return '';
+              var d = data.trend[idx];
+              var modelC = d.model_consistent_count || 0;
+              var humanC = d.human_correct_count || 0;
+              var correct = d.correct_count || 0;
+              var total = d.total_reviewed || 0;
+              var acc = d.accuracy_rate != null ? d.accuracy_rate.toFixed(2) + '%' : 'N/A';
+              return '<div class="apexcharts-tooltip-title" style="font-weight:600;padding:6px 10px;background:#f8f9fa;border-bottom:1px solid #eee;">' +
+                d.date + '</div>' +
+                '<div style="padding:8px 10px;font-size:12px;line-height:1.8;">' +
+                '<div style="margin-bottom:4px;"><span style="display:inline-block;width:10px;height:10px;background:#3498db;border-radius:2px;margin-right:6px;vertical-align:middle;"></span>机审一致正确：<strong>' + modelC.toLocaleString() + ' 条</strong></div>' +
+                '<div style="margin-bottom:4px;"><span style="display:inline-block;width:10px;height:10px;background:#2ecc71;border-radius:2px;margin-right:6px;vertical-align:middle;"></span>人审纠正正确：<strong>' + humanC.toLocaleString() + ' 条</strong></div>' +
+                '<div style="margin-bottom:4px;color:#6b7280;">总正确数：' + correct.toLocaleString() + ' 条 / ' + total.toLocaleString() + ' 条</div>' +
+                '<div style="margin-top:6px;padding-top:6px;border-top:1px solid #eee;color:#8b5cf6;font-weight:600;">整体准确率：' + acc + '</div>' +
+                '</div>';
+            }
+          },
+          legend: {
+            show: true,
+            position: 'top',
+            horizontalAlign: 'right',
+            fontSize: '12px',
+            labels: { colors: '#374151' },
+            markers: { width: 12, height: 12, radius: 3 },
+            itemMargin: { horizontal: 8 }
+          },
+          stroke: {
+            curve: 'smooth',
+            width: [0, 0, 2]
           },
           markers: {
-            size: 4,
-            colors: ['#2ecc71'],
+            size: [0, 0, 4],
+            colors: ['#3498db', '#2ecc71', '#8b5cf6'],
             strokeColors: '#fff',
             strokeWidth: 2
           }
         };
         if (accuracyChart) accuracyChart.destroy();
-        accuracyChart = new ApexCharts(document.querySelector('#accuracyChart'), options);
-        accuracyChart.render();
+        try {
+          accuracyChart = new ApexCharts(document.querySelector('#accuracyChart'), options);
+          accuracyChart.render();
+        } catch(err) {
+          console.error('[准确率图] 渲染异常:', err);
+          var el = document.getElementById('accuracyChart');
+          if (el) el.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:280px;color:var(--text-muted);">图表渲染异常，请刷新重试</div>';
+        }
       }
 
       function initReasonChart(reasonData, totalViolations) {
@@ -1614,15 +1704,17 @@
         document.getElementById('accuracyFallback').style.display = 'block';
         var tbody = document.getElementById('accuracyFallbackBody');
         var html = '';
-        data.series.forEach(function(v, i) {
-          var prev = i > 0 ? data.series[i - 1] : v;
-          var change = ((v - prev) / prev * 100).toFixed(2);
+        (data.accuracySeries || []).forEach(function(v, i) {
+          var prev = i > 0 ? data.accuracySeries[i - 1] : v;
+          var change = prev > 0 ? ((v - prev) / prev * 100).toFixed(2) : '0.00';
           var cls = change >= 0 ? 'text-success' : 'text-danger';
           var arrow = change >= 0 ? '▲' : '▼';
+          var d = data.trend ? data.trend[i] : {};
           html += '<tr>' +
             '<td>' + data.categories[i] + '</td>' +
-            '<td class="font-semibold">' + v.toFixed(1) + '%</td>' +
+            '<td class="font-semibold">' + v.toFixed(2) + '%</td>' +
             '<td class="' + cls + '">' + arrow + ' ' + Math.abs(change) + '%</td>' +
+            '<td style="font-size:11px;color:#6b7280;">' + ((d.model_consistent_count || 0) + (d.human_correct_count || 0)) + '/' + (d.total_reviewed || 0) + '</td>' +
             '</tr>';
         });
         tbody.innerHTML = html;

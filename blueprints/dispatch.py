@@ -748,10 +748,43 @@ def api_my_tasks():
     if instance_filter:
         base.append(RawData.instance_code == instance_filter)
 
-    if status_filter == 'pending':
-        base.append(db.or_(RawData.check_result == '', RawData.check_result.is_(None)))
-    elif status_filter == 'done':
-        base.append(db.or_(RawData.check_result != '', RawData.check_result.isnot(None)))
+    # check_result（correct/error/ignore）：精细标注状态过滤，与 status 互斥
+    check_result = request.args.get('check_result', '').strip()
+    if check_result:
+        # 有 check_result 时跳过原有的 pending/done 逻辑
+        if check_result == 'correct':
+            base.append(RawData.check_result == '正确')
+        elif check_result == 'error':
+            base.append(RawData.check_result == '错误')
+        elif check_result == 'ignore':
+            base.append(RawData.check_result == '忽略')
+    else:
+        # 原有 pending/done 逻辑（兼容旧调用方）
+        if status_filter == 'pending':
+            base.append(db.or_(RawData.check_result == '', RawData.check_result.is_(None)))
+        elif status_filter == 'done':
+            base.append(db.or_(RawData.check_result != '', RawData.check_result.isnot(None)))
+
+    # ai_result：AI审核结果（合规/违规）
+    ai_result = request.args.get('ai_result', '').strip()
+    if ai_result == '合规':
+        base.append(RawData.ai_result.in_(['合规', '1', 'PASS']))
+    elif ai_result == '违规':
+        base.append(RawData.ai_result.in_(['违规', '0', 'REJECT']))
+
+    # annotator：标注人精确匹配
+    annotator = request.args.get('annotator', '').strip()
+    if annotator:
+        base.append(RawData.annotator == annotator)
+
+    # keyword：商品名称或ID模糊搜索
+    keyword = request.args.get('keyword', '').strip()
+    if keyword:
+        from sqlalchemy import or_
+        base.append(or_(
+            RawData.product_name.contains(keyword),
+            RawData.product_id.contains(keyword)
+        ))
 
     query = RawData.query.filter(*base).order_by(RawData.id.desc())
     total = query.count()
@@ -856,6 +889,15 @@ def api_my_task_groups():
             from sqlalchemy import or_
             base.append(or_(*[RawData.instance_code == inst for inst in matched_instances]))
 
+    # check_result：精细标注状态过滤（correct/error/ignore → 中文值）
+    check_result = request.args.get('check_result', '').strip()
+    if check_result == 'correct':
+        base.append(RawData.check_result == '正确')
+    elif check_result == 'error':
+        base.append(RawData.check_result == '错误')
+    elif check_result == 'ignore':
+        base.append(RawData.check_result == '忽略')
+
     # 加载 instance→rule 映射（用于显示规则名）
     from services.fetch_service import get_instance_rule_mapping
     instance_rule_map = get_instance_rule_mapping()
@@ -896,9 +938,12 @@ def api_my_task_groups():
         g = groups[key]
         g['total_count'] += 1
 
-        # 判断 AI 结果分类：用 ai_reject_reason 字段（latin1编码问题无法直接比较 ai_result）
-        # 有驳回原因 = 违规；无驳回原因 = 合规
-        ai_is_violation = bool(r.ai_reject_reason and r.ai_reject_reason.strip())
+        # 判断 AI 结果分类：改用 ai_result 字段，与 api_annotation_stats（task-stats）保持一致
+        # 兼容多种表示：合规/1/PASS/pass → 合规；违规/0/REJECT/fail → 违规
+        COMPLIANT_VALUES  = {'合规', '1', 'PASS', 'pass'}
+        VIOLATION_VALUES = {'违规', '0', 'REJECT', 'fail'}
+        ai_result_val = str(r.ai_result or '').strip()
+        ai_is_violation = ai_result_val in VIOLATION_VALUES
 
         # 合规总数 / 违规总数：统计所有记录（不区分是否已标注）
         if ai_is_violation:
@@ -1068,6 +1113,119 @@ def api_submit():
 
 @dispatch_bp.route('/api/dispatch/annotator-load', methods=['GET'])
 @login_required
+def api_dispatch_annotator_load():
+    if current_user.role not in ('annotator', 'admin'):
+        return jsonify({'success': False, 'error': '权限不足'}), 403
+
+    # 管理员返回所有标注员，标注员只返回自己
+    if current_user.role == 'admin':
+        users = User.query.filter_by(role='annotator').all()
+    else:
+        users = [current_user]
+
+    result = []
+    for u in users:
+        # 今日已分配
+        today_assigned = Dispatch.query.filter_by(annotator=u.username).filter(
+            func.date(Dispatch.created_at) == date.today()
+        ).count()
+        # 今日已完成
+        today_completed = Annotation.query.filter_by(annotator_id=u.id, is_submitted=True).filter(
+            func.date(Annotation.submitted_at) == date.today()
+        ).count()
+
+        result.append({
+            'username': u.username,
+            'display_name': u.display_name or u.username,
+            'today_assigned': today_assigned,
+            'today_completed': today_completed,
+            'quota': u.annotation_quota or 100,
+            'used': today_assigned,   # used ≈ 今日已分配
+        })
+
+    return jsonify({'success': True, 'data': result})
+
+
+# ---------------------------------------------------------------------------
+# API-7: GET /api/annotation/task-stats
+# 返回标注批次级别的统计数字（全量，不走分页）
+# ---------------------------------------------------------------------------
+
+@dispatch_bp.route('/api/annotation/task-stats', methods=['GET'])
+@login_required
+def api_annotation_stats():
+    if current_user.role not in ('annotator', 'admin'):
+        return jsonify({'success': False, 'error': '权限不足'}), 403
+
+    dispatch_batch_no = request.args.get('dispatch_batch_no', '').strip()
+    instance_code = request.args.get('instance_code', '').strip()
+    annotator = request.args.get('annotator', '').strip()
+
+    # 基础过滤：同 api_my_tasks 的权限和数据可见性规则
+    if current_user.role == 'admin':
+        annotator_filter = []
+    else:
+        annotator_filter = [RawData.annotator == current_user.username]
+
+    base = [
+        RawData.modelb_reviewed == True,
+        db.and_(RawData.annotator != '', RawData.annotator.isnot(None)),
+    ] + annotator_filter
+
+    # 排除已撤回的批次
+    base.append(db.or_(RawData.revoked_batch == '', RawData.revoked_batch.is_(None)))
+
+    if dispatch_batch_no:
+        base.append(RawData.dispatch_batch_no == dispatch_batch_no)
+    if instance_code:
+        base.append(RawData.instance_code == instance_code)
+    if annotator:
+        base.append(RawData.annotator == annotator)
+
+    records = RawData.query.filter(*base).all()
+
+    # 统计计数
+    total = len(records)
+    pending = sum(1 for r in records if not r.check_result)
+    annotated = total - pending
+    correct = sum(1 for r in records if r.check_result == 'correct')
+    error = sum(1 for r in records if r.check_result == 'error')
+    ignore = sum(1 for r in records if r.check_result == 'ignore')
+
+    # 整体准确率 = 正确数 / (正确数 + 错误数)，忽略不计入
+    annotated_effective = correct + error
+    accuracy = round(correct / annotated_effective, 4) if annotated_effective > 0 else None
+
+    # 按 AI 结果分组（v1.0：改用 ai_result 字段，与前端口径统一；兼容多种表示）
+    COMPLIANT_VALUES = {'合规', '1', 'PASS', 'pass'}
+    VIOLATION_VALUES = {'违规', '0', 'REJECT', 'fail'}
+    compliant_records = [r for r in records if str(r.ai_result or '').strip() in COMPLIANT_VALUES]
+    violation_records = [r for r in records if str(r.ai_result or '').strip() in VIOLATION_VALUES]
+
+    comp_correct = sum(1 for r in compliant_records if r.check_result == 'correct')
+    comp_error   = sum(1 for r in compliant_records if r.check_result == 'error')
+    comp_effective = comp_correct + comp_error
+    compliant_accuracy = round(comp_correct / comp_effective, 4) if comp_effective > 0 else None
+
+    viol_correct = sum(1 for r in violation_records if r.check_result == 'correct')
+    viol_error   = sum(1 for r in violation_records if r.check_result == 'error')
+    viol_effective = viol_correct + viol_error
+    non_compliant_accuracy = round(viol_error / viol_effective, 4) if viol_effective > 0 else None
+
+    return jsonify({
+        'success': True,
+        'total': total,
+        'pending': pending,
+        'annotated': annotated,
+        'correct': correct,
+        'error': error,
+        'ignore': ignore,
+        'accuracy': accuracy,
+        'compliant_accuracy': compliant_accuracy,
+        'non_compliant_accuracy': non_compliant_accuracy,
+    })
+
+
 def api_annotator_load():
     today_start = datetime.combine(date.today(), datetime.min.time())
 

@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>标注任务</title>
+  <link rel="icon" href="data:,">
   <link rel="stylesheet" href="/static/common.css">
   <script src="/static/config.js"></script>
   <script src="/static/common.js"></script>
@@ -1167,7 +1168,7 @@
             <span class="annot-prod-meta-item">类目：<span class="value" id="annotCategory">-</span></span>
             <span class="annot-prod-meta-item">店铺：<span class="value" id="annotShop">-</span></span>
             <span class="annot-prod-meta-item">商品ID：<span class="value" id="annotProductId">-</span>
-              <a href="#" id="annotProductLink" target="_blank" style="margin-left:8px;font-size:12px;display:none;">查看商品 →</a>
+              <a href="#" id="annotProductLink" target="_blank" style="margin-left:8px;font-size:12px;display:none;color:var(--primary);text-decoration:none;">查看商品 →</a>
             </span>
             <span class="annot-prod-meta-item">批次：<span class="value" id="annotBatchNo">-</span></span>
             <span class="annot-prod-meta-item">标注人：<span class="value" id="annotAnnotator">-</span></span>
@@ -1280,47 +1281,35 @@
 
     <!-- ========== 视图一：任务列表（v2.0 新增） ========== -->
     <div class="task-group-view active" id="taskGroupView">
-      <!-- 任务筛选栏 -->
-      <div class="filter-bar" id="taskGroupFilterBar">
-        <div class="filter-item">
-          <label>审核规则：</label>
-          <select class="form-select" id="tgFilterRule" onchange="handleTaskGroupFilter()">
-            <option value="">全部</option>
-          </select>
+      <!-- 任务筛选栏（v1.0：规则/实例标签联动 + 批次号） -->
+      <div style="padding:12px 16px; background:#f9f9f9; border-radius:8px; margin-bottom:12px;">
+        <!-- 规则标签行 -->
+        <div class="filter-tags-row" id="ruleTagsRow">
+          <span class="filter-tag-label">规则：</span>
+          <div class="filter-tags" id="ruleTags"></div>
         </div>
-        <div class="filter-item">
-          <label>实例：</label>
-          <select class="form-select" id="tgFilterInstance" onchange="handleTaskGroupFilter()">
-            <option value="">全部</option>
-          </select>
+        <!-- 实例标签行 -->
+        <div class="filter-tags-row" id="instanceTagsRow">
+          <span class="filter-tag-label">实例：</span>
+          <div class="filter-tags" id="instanceTags"></div>
         </div>
-        <!-- 更多筛选按钮（Portal模式，下拉append到body渲染） -->
-        <div class="filter-item filter-more-wrapper">
-          <button class="btn btn-default btn-sm filter-more-btn" id="tgFilterMoreBtn" onclick="toggleTgMoreFilters(event)">
-            更多筛选 <span class="filter-more-arrow" id="tgFilterMoreArrow">▼</span>
-          </button>
-        </div>
-        <div class="filter-item">
-          <button class="btn btn-primary btn-sm" onclick="loadTaskGroups()">刷新</button>
-        </div>
-      </div>
-
-      <!-- 更多筛选下拉面板（JS动态append到body） -->
-      <div class="filter-more-dropdown" id="tgFilterMoreDropdown" style="display:none;">
-        <div class="filter-item">
-          <label>状态：</label>
-          <select class="form-select" id="tgFilterStatus" onchange="handleTaskGroupFilter()">
-            <option value="">全部</option>
-            <option value="pending">待标注</option>
-            <option value="in_progress">进行中</option>
-            <option value="completed">已完成</option>
-          </select>
-        </div>
-        <div class="filter-item">
-          <label>任务分配：</label>
-          <select class="form-select" id="tgFilterAssignee" onchange="handleTaskGroupFilter()">
-            <option value="">全部</option>
-          </select>
+        <!-- 状态 + 批次号 + 刷新 -->
+        <div style="display:flex; align-items:center; gap:16px; margin-top:10px;">
+          <div class="filter-item">
+            <select id="tgFilterStatus" onchange="onFilterChange()" style="min-width:120px;">
+              <option value="">全部状态</option>
+              <option value="pending">待标注</option>
+              <option value="correct">正确</option>
+              <option value="error">错误</option>
+              <option value="ignore">忽略</option>
+            </select>
+          </div>
+          <div class="filter-item">
+            <input type="text" id="tgFilterBatchNo" placeholder="输入批次号"
+                   onkeydown="if(event.key==='Enter')onFilterChange()"
+                   style="width:180px; padding:5px 10px; border:1px solid #ddd; border-radius:4px; font-size:13px;">
+          </div>
+          <button class="btn btn-primary btn-sm" onclick="onFilterChange()">刷新</button>
         </div>
       </div>
 
@@ -1371,38 +1360,8 @@
         <span class="detail-header-title">标注详情</span>
       </div>
 
-      <!-- 筛选栏 -->
+      <!-- 筛选栏（v1.0：去除"更多筛选"按钮，合并所有筛选项到主栏） -->
     <div class="filter-bar">
-      <div class="filter-item">
-        <label>AI审核结果：</label>
-        <select class="form-select" id="filterAiResult">
-          <option value="">全部</option>
-          <option value="合规">合规</option>
-          <option value="违规">违规</option>
-        </select>
-      </div>
-      <div class="filter-item">
-        <label>实例：</label>
-        <select class="form-select" id="filterInstance">
-          <option value="">全部</option>
-        </select>
-      </div>
-      <div class="filter-item">
-        <label>商品ID：</label>
-        <input type="text" class="form-input" id="searchProductId" placeholder="请输入商品ID">
-        <button class="btn btn-primary btn-sm" onclick="handleSearch()">查询</button>
-        <button class="btn btn-default btn-sm" onclick="clearSearch()">清除</button>
-      </div>
-      <!-- 更多筛选按钮（占位，下拉通过JS append到body渲染） -->
-      <div class="filter-item filter-more-wrapper">
-        <button class="btn btn-default btn-sm filter-more-btn" id="filterMoreBtn" onclick="toggleMoreFilters(event)">
-          更多筛选 <span class="filter-more-arrow" id="filterMoreArrow">▼</span>
-        </button>
-      </div>
-    </div>
-
-    <!-- 更多筛选下拉面板（JS动态append到body，避免iframe overflow截断） -->
-    <div class="filter-more-dropdown" id="filterMoreDropdown" style="display:none;">
       <div class="filter-item">
         <label>标注状态：</label>
         <select class="form-select" id="filterAnnotateStatus" onchange="handleFilterChange()">
@@ -1414,14 +1373,16 @@
         </select>
       </div>
       <div class="filter-item">
-        <label>标注规则：</label>
-        <select class="form-select" id="filterRule" onchange="handleFilterChange()">
+        <label>AI结果：</label>
+        <select class="form-select" id="filterAiResult" onchange="handleFilterChange()">
           <option value="">全部</option>
+          <option value="合规">合规</option>
+          <option value="违规">违规</option>
         </select>
       </div>
       <div class="filter-item">
-        <label>标注备注：</label>
-        <select class="form-select" id="filterAnnotateNote">
+        <label>实例：</label>
+        <select class="form-select" id="filterInstance" onchange="handleFilterChange()">
           <option value="">全部</option>
         </select>
       </div>
@@ -1433,9 +1394,15 @@
       </div>
       <div class="filter-item">
         <label>类目：</label>
-        <select class="form-select" id="filterCategory">
+        <select class="form-select" id="filterCategory" onchange="handleFilterChange()">
           <option value="">全部</option>
         </select>
+      </div>
+      <div class="filter-item">
+        <label>关键词：</label>
+        <input type="text" class="form-input" id="searchProductId" placeholder="商品ID/名称" onkeydown="if(event.key==='Enter')handleFilterChange()">
+        <button class="btn btn-primary btn-sm" onclick="handleFilterChange()">查询</button>
+        <button class="btn btn-default btn-sm" onclick="clearSearch()">清除</button>
       </div>
     </div>
 
@@ -1552,6 +1519,7 @@
     let annotImageList = [];        // 当前商品图片列表 [{src, label}]
     let annotImgIdx = 0;           // 预览图片索引
     let annotIsSubmitting = false;  // 防重复提交
+    let _taskStatsLoaded = false;  // task-stats API 是否已有数据（true 时 updateStats 跳过）
 
     // =====================================================================
     // 工具函数
@@ -1573,16 +1541,28 @@
       return 'tag-pending';
     }
 
-    /** 将 API modelb_result 映射为中文显示 */
+    /** 将 API modelb_result 映射为中文显示（v1.0：支持数据库实际存储的各种格式） */
     function mapModelBResult(r) {
-      if (r === 'error') return '违规';
-      if (r === 'correct') return '合规';
-      return '-';
+      if (!r || r === '-') return '-';
+      var v = String(r).trim();
+      if (v === '合规' || v === '正确' || v === '1' || v.toUpperCase() === 'PASS' || v.toUpperCase() === 'CORRECT') return '合规';
+      if (v === '违规' || v === '错误' || v === '0' || v.toUpperCase() === 'REJECT' || v === 'error') return '违规';
+      return v;
     }
 
     /** 更新统计摘要栏 */
     /** v3.0：统计3个准确率（整体/合规/违规），并渲染进度条 */
+    /** v1.0：isAiPass/isAiFail 兼容所有 ai_result 变体值，与后端口径统一 */
+    function isAiPass(val) {
+      return ['合规', 'pass', '1', 'PASS'].includes(String(val).trim());
+    }
+    function isAiFail(val) {
+      return ['违规', 'fail', '0', 'REJECT'].includes(String(val).trim());
+    }
     function updateStats() {
+      // 若 task-stats API 已返回真实数据，跳过客户端估算
+      if (_taskStatsLoaded) return;
+
       const total = filteredData.length;
       const annotated = filteredData.filter(t => t.check_result);
 
@@ -1592,9 +1572,9 @@
       const ignore  = annotated.filter(t => t.check_result === 'ignore').length;
       const overallRate = (correct + error) > 0 ? (correct / (correct + error) * 100) : 0;
 
-      // AI审核结果分组（基于 ai_result 字段）
-      const aiPassItems = filteredData.filter(t => t.ai_result === '合规' || t.ai_result === 'pass');
-      const aiFailItems = filteredData.filter(t => t.ai_result === '违规' || t.ai_result === 'fail');
+      // AI审核结果分组（v1.0：使用 isAiPass/isAiFail 兼容所有变体，与后端口径统一）
+      const aiPassItems = filteredData.filter(t => isAiPass(t.ai_result));
+      const aiFailItems = filteredData.filter(t => isAiFail(t.ai_result));
 
       // 合规数据准确率：AI判断为合规中，标注为correct的比例
       const compCorrect = aiPassItems.filter(t => t.check_result === 'correct').length;
@@ -1637,9 +1617,11 @@
       const params = Object.assign({
         page: currentPage,
         per_page: pageSize,
-        rule_name: document.getElementById('filterRule').value,
-        status: document.getElementById('filterAnnotateStatus').value,
+        check_result: document.getElementById('filterAnnotateStatus').value,
+        ai_result: document.getElementById('filterAiResult').value,
         instance: document.getElementById('filterInstance').value,
+        annotator: document.getElementById('filterAnnotator').value,
+        keyword: document.getElementById('searchProductId').value.trim(),
       }, extraParams || {});
       const qs = Object.entries(params).filter(([,v]) => v !== '' && v !== null).map(([k,v]) => k + '=' + encodeURIComponent(v)).join('&');
       safeFetch('/api/annotation/my-tasks?' + qs, { credentials: 'same-origin' })
@@ -1706,21 +1688,37 @@
     function init() {
       // v3.0：从 URL 参数识别是否来自调度中心（dispatch_batch_no）
       var urlParams = new URLSearchParams(window.location.search);
-      var urlBatchNo = urlParams.get('dispatch_batch_no');  // 修复：参数名与 dispatch_center.html 跳转时一致
+      var urlBatchNo = urlParams.get('dispatch_batch_no');
+      var urlInstance = urlParams.get('instance');     // v1.0：明细页实例预填
+      var urlCheckResult = urlParams.get('check_result'); // v1.0：明细页状态预填
 
       if (urlBatchNo) {
         // 显示"返回调度中心"按钮，并在任务列表时自动过滤该批次
         document.getElementById('backToDispatchBtn').style.display = '';
         document.getElementById('batchNoTag').style.display = '';
         document.getElementById('batchNoTag').textContent = '📦 ' + urlBatchNo;
-        // loadTaskGroups 加载时自动附上 dispatch_batch_no 过滤
+        // v1.0：同时预填批次号输入框
+        var batchInput = document.getElementById('tgFilterBatchNo');
+        if (batchInput) batchInput.value = urlBatchNo;
         loadTaskGroups(1, { dispatch_batch_no: urlBatchNo });
       } else {
         document.getElementById('backToDispatchBtn').style.display = 'none';
         document.getElementById('batchNoTag').style.display = 'none';
-        // v2.0 默认显示任务列表视图
         loadTaskGroups(1);
       }
+
+      // v1.0：明细页 URL 参数预填（instance / check_result）
+      if (urlInstance) {
+        var instSel = document.getElementById('filterInstance');
+        if (instSel) instSel.value = urlInstance;
+      }
+      if (urlCheckResult) {
+        var crSel = document.getElementById('filterAnnotateStatus');
+        if (crSel) crSel.value = urlCheckResult;
+      }
+
+      // v1.0：加载规则/实例标签元数据
+      loadFilterMeta();
       fetchLabels();
     }
 
@@ -1747,46 +1745,38 @@
     // 筛选下拉框初始化
     // =====================================================================
 
-    /** 从 apiData 提取并填充规则、实例、类目下拉 */
+    /** 从 apiData 提取并填充实例、类目下拉（v1.0：移除规则下拉，规则改由标签组筛选） */
     function extractFilterOptions() {
-      // 规则
-      const ruleSet = new Set();
       const instSet = new Set();
       const catSet  = new Set();
       apiData.forEach(t => {
-        if (t.rule_name) ruleSet.add(t.rule_name);
         if (t.instance_code) instSet.add(t.instance_code);
         if (t.category) catSet.add(t.category);
       });
-      allRules = [...ruleSet].sort();
       allInstances = [...instSet].sort();
-
-      // 填充规则下拉
-      const ruleSel = document.getElementById('filterRule');
-      const curRule = ruleSel.value;
-      ruleSel.innerHTML = '<option value="">全部</option>';
-      allRules.forEach(r => { ruleSel.innerHTML += '<option value="' + r + '">' + r + '</option>'; });
-      ruleSel.value = curRule;
 
       // 填充实例下拉（使用内置中文映射）
       const instSel = document.getElementById('filterInstance');
-      const curInst = instSel.value;
-      instSel.innerHTML = '<option value="">全部</option>';
-      allInstances.forEach(i => {
-        const name = getInstName(i);
-        instSel.innerHTML += '<option value="' + i + '">' + name + '</option>';
-      });
-      instSel.value = curInst;
+      if (instSel) {
+        const curInst = instSel.value;
+        instSel.innerHTML = '<option value="">全部</option>';
+        allInstances.forEach(i => {
+          const name = getInstName(i);
+          instSel.innerHTML += '<option value="' + i + '">' + name + '</option>';
+        });
+        instSel.value = curInst;
+      }
 
       // 填充类目下拉
       const catSel = document.getElementById('filterCategory');
-      const curCat = catSel.value;
-      catSel.innerHTML = '<option value="">全部</option>';
-      [...catSet].sort().forEach(c => { catSel.innerHTML += '<option value="' + c + '">' + c + '</option>'; });
-      catSel.value = curCat;
+      if (catSel) {
+        const curCat = catSel.value;
+        catSel.innerHTML = '<option value="">全部</option>';
+        [...catSet].sort().forEach(c => { catSel.innerHTML += '<option value="' + c + '">' + c + '</option>'; });
+        catSel.value = curCat;
+      }
 
-      // v2.0：同步任务列表筛选下拉（当 allRules 有数据后触发）
-      // 但需先保存任务组视图的下拉状态，避免被明细视图数据覆盖
+      // v2.0：同步任务列表筛选下拉
       var savedTgRule = (document.getElementById('tgFilterRule') || {}).value || '';
       var savedTgInst = (document.getElementById('tgFilterInstance') || {}).value || '';
       _syncTaskGroupDropdowns();
@@ -1986,6 +1976,8 @@
 
     /** 进入标注：加载该任务组的商品明细 */
     function enterTaskGroup(taskCode, dispatchBatchNo, ruleName, dataDate) {
+      // 重置统计标志，进入新批次时清空旧数据
+      _taskStatsLoaded = false;
       // 读取筛选条件（去除 URL encode）
       var rule = decodeURIComponent(ruleName || '');
       var date = dataDate || '';
@@ -1999,68 +1991,186 @@
         dispatch_batch_no: dispatchBatchNo,
         rule_name: rule,
       });
+      // 同时拉取批次级统计（全量数字）
+      if (dispatchBatchNo) {
+        fetchTaskStats({ dispatch_batch_no: dispatchBatchNo });
+      }
+    }
+
+    /** 调用 task-stats API，刷新顶部统计卡片 */
+    function fetchTaskStats(extraParams) {
+      var params = Object.assign({
+        dispatch_batch_no: new URLSearchParams(window.location.search).get('dispatch_batch_no') || ''
+      }, extraParams || {});
+      var qs = Object.entries(params).filter(function(v) { return v[1] !== '' && v[1] !== null; })
+        .map(function(v) { return v[0] + '=' + encodeURIComponent(v[1]); }).join('&');
+      safeFetch('/api/annotation/task-stats?' + qs, { credentials: 'same-origin' })
+        .then(function(res) {
+          if (!res || !res.success) return;
+          _taskStatsLoaded = true;
+          var s = res;
+          var fmt = function(v) {
+            if (v === null || v === undefined || v === '') return '-';
+            return v;
+          };
+          var fmtPct = function(v) {
+            if (v === null || v === undefined) return '-';
+            return (v * 100).toFixed(1) + '%';
+          };
+          document.getElementById('rawTotal').textContent      = fmt(s.total);
+          document.getElementById('rawPending').textContent   = fmt(s.pending);
+          document.getElementById('rawAnnotated').textContent = fmt(s.annotated);
+          document.getElementById('rawCorrect').textContent   = fmt(s.correct);
+          document.getElementById('rawError').textContent    = fmt(s.error);
+          document.getElementById('rawIgnore').textContent    = fmt(s.ignore);
+          document.getElementById('accOverallNum').textContent    = fmtPct(s.accuracy);
+          document.getElementById('accOverallBar').style.width    = (s.accuracy != null ? (s.accuracy * 100).toFixed(1) : 0) + '%';
+          document.getElementById('accComplianceNum').textContent = fmtPct(s.compliant_accuracy);
+          document.getElementById('accComplianceBar').style.width = (s.compliant_accuracy != null ? (s.compliant_accuracy * 100).toFixed(1) : 0) + '%';
+          document.getElementById('accViolationNum').textContent   = fmtPct(s.non_compliant_accuracy);
+          document.getElementById('accViolationBar').style.width    = (s.non_compliant_accuracy != null ? (s.non_compliant_accuracy * 100).toFixed(1) : 0) + '%';
+        })
+        .catch(function() {});
     }
 
     /** 处理任务列表视图筛选变化 */
-    function handleTaskGroupFilter() {
-      tgFilterRule = (document.getElementById('tgFilterRule') || {}).value || '';
-      tgFilterInstance = (document.getElementById('tgFilterInstance') || {}).value || '';
-      tgFilterStatus = (document.getElementById('tgFilterStatus') || {}).value || '';
-      tgFilterAssignee = (document.getElementById('tgFilterAssignee') || {}).value || '';
-      loadTaskGroups(1);
-    }
+    // =====================================================================
+    // 筛选标签联动（v1.0：规则 ↔ 实例双向联动）
+    // =====================================================================
 
-    /** 任务组更多筛选展开/收起（Portal模式） */
-    function toggleTgMoreFilters(e) {
-      if (e) e.stopPropagation();
-      const dropdown = document.getElementById('tgFilterMoreDropdown');
-      const arrow = document.getElementById('tgFilterMoreArrow');
-      const btn = document.getElementById('tgFilterMoreBtn');
-      const isInBody = dropdown && dropdown.parentElement === document.body;
-      if (!isInBody && dropdown) {
-        // 坐标修正：getBoundingClientRect 相对于 iframe 视口，
-        // position:fixed 相对于浏览器主窗口，需加上 iframe 自身的偏移量
-        const btnRect = btn.getBoundingClientRect();
-        const iframeRect = window.frameElement ? window.frameElement.getBoundingClientRect() : { left: 0, top: 0 };
-        const dropdownWidth = 480;
-        let left = iframeRect.left + btnRect.left;
-        // 避免超出右边界
-        if (left + dropdownWidth > window.innerWidth - 8) {
-          left = window.innerWidth - dropdownWidth - 8;
-        }
-        if (left < 8) left = 8;
-        dropdown.style.top = (iframeRect.top + btnRect.bottom + 6) + 'px';
-        dropdown.style.left = left + 'px';
-        dropdown.style.right = 'auto';
-        if (dropdown.style.display === 'none') {
-          dropdown.style.display = 'flex';
-          document.body.appendChild(dropdown);
-          if (arrow) arrow.textContent = '▲';
-        }
-      } else if (dropdown) {
-        dropdown.style.display = 'none';
-        if (dropdown.parentElement === document.body) {
-          document.body.removeChild(dropdown);
-        }
-        if (arrow) arrow.textContent = '▼';
-      }
-    }
+    /** 全局筛选状态 */
+    var ruleInstanceMap = {};      // {rule_name: [instance_code, ...]}
+    var instanceNameMap = {};      // {instance_code: "中文名"}
+    var selectedRule = '';
+    var selectedInstance = '';
 
-    /** 点击任务组更多筛选区域外部时收起 */
-    document.addEventListener('click', function(e) {
-      const dropdown = document.getElementById('tgFilterMoreDropdown');
-      const btn = document.getElementById('tgFilterMoreBtn');
-      if (dropdown && dropdown.parentElement === document.body) {
-        if (!dropdown.contains(e.target) && !btn.contains(e.target)) {
-          dropdown.style.display = 'none';
-          if (dropdown.parentElement === document.body) {
-            document.body.removeChild(dropdown);
+    /** 加载规则/实例元数据（从后端获取映射） */
+    function loadFilterMeta() {
+      fetch('/api/config/instance-rule-mapping', { credentials: 'same-origin' })
+        .then(function(res) { return res.json(); })
+        .then(function(data) {
+          var mapping = data.mapping || {};
+          // 构建反向映射：{rule_name: [instance_code, ...]}
+          ruleInstanceMap = {};
+          instanceNameMap = data.instance_names || {};
+          for (var inst in mapping) {
+            var rule = mapping[inst];
+            if (!ruleInstanceMap[rule]) ruleInstanceMap[rule] = [];
+            ruleInstanceMap[rule].push(inst);
+            // 兜底中文名
+            if (!instanceNameMap[inst]) {
+              var _names = { ZJWC: '浙江网超', HWCS: '浙江乐采网超', HNLCWC: '湖南乐采网超', YNLCY: '云南乐采云', GXLCY: '广西乐采云' };
+              if (_names[inst]) instanceNameMap[inst] = _names[inst];
+            }
           }
-          const arrow = document.getElementById('tgFilterMoreArrow');
-          if (arrow) arrow.textContent = '▼';
+          renderRuleTags();
+          renderInstanceTags();
+        })
+        .catch(function(err) { console.error('加载筛选元数据失败', err); });
+    }
+
+    /** 渲染规则标签行 */
+    function renderRuleTags(filterInstance) {
+      var container = document.getElementById('ruleTags');
+      if (!container) return;
+      var allRules = Object.keys(ruleInstanceMap);
+      var html = '<button class="filter-tag ' + (selectedRule === '' ? 'active' : '') + '" data-rule="">全部</button>';
+      allRules.forEach(function(rule) {
+        html += '<button class="filter-tag' + (selectedRule === rule ? ' active' : '') + '" data-rule="' + rule + '">' + rule + '</button>';
+      });
+      container.innerHTML = html;
+      // 绑定点击事件
+      container.querySelectorAll('.filter-tag').forEach(function(btn) {
+        btn.onclick = function() { selectRule(btn.dataset.rule || ''); };
+      });
+    }
+
+    /** 选择规则标签 */
+    function selectRule(rule) {
+      selectedRule = rule;
+      // 联动过滤实例
+      renderInstanceTags(rule);
+      // 若当前选中实例不在该规则对应的实例集合中，重置
+      if (selectedInstance && rule && ruleInstanceMap[rule] && !ruleInstanceMap[rule].includes(selectedInstance)) {
+        selectedInstance = '';
+        renderRuleTags('');  // 实例变了，重新渲染规则以更新"全部"高亮
+      }
+      onFilterChange();
+    }
+
+    /** 渲染实例标签行（可按规则过滤） */
+    function renderInstanceTags(filterRule) {
+      var container = document.getElementById('instanceTags');
+      if (!container) return;
+      var instances = Object.keys(instanceNameMap);
+      if (filterRule && ruleInstanceMap[filterRule]) {
+        instances = ruleInstanceMap[filterRule];
+      }
+      var html = '<button class="filter-tag ' + (selectedInstance === '' ? 'active' : '') + '" data-instance="">全部</button>';
+      instances.forEach(function(code) {
+        html += '<button class="filter-tag' + (selectedInstance === code ? ' active' : '') + '" data-instance="' + code + '">' + (instanceNameMap[code] || code) + '</button>';
+      });
+      container.innerHTML = html;
+      // 绑定点击事件
+      container.querySelectorAll('.filter-tag').forEach(function(btn) {
+        btn.onclick = function() { selectInstance(btn.dataset.instance || ''); };
+      });
+    }
+
+    /** 选择实例标签 */
+    function selectInstance(code) {
+      selectedInstance = code;
+      // 联动过滤规则
+      var relatedRules = [];
+      if (code) {
+        for (var r in ruleInstanceMap) {
+          if (ruleInstanceMap[r].includes(code)) relatedRules.push(r);
         }
       }
-    });
+      // 用 relatedRules 渲染规则标签（保持选中状态）
+      renderRuleTagsWithInstance(code, relatedRules);
+      onFilterChange();
+    }
+
+    /** 按实例过滤规则标签（不清除 selectedRule，由 selectInstance 处理联动后再调 onFilterChange） */
+    function renderRuleTagsWithInstance(instance, allowedRules) {
+      var container = document.getElementById('ruleTags');
+      if (!container) return;
+      var allRules = Object.keys(ruleInstanceMap);
+      var displayRules = instance ? allowedRules : allRules;
+      var html = '<button class="filter-tag ' + (selectedRule === '' ? 'active' : '') + '" data-rule="">全部</button>';
+      displayRules.forEach(function(rule) {
+        html += '<button class="filter-tag' + (selectedRule === rule ? ' active' : '') + '" data-rule="' + rule + '">' + rule + '</button>';
+      });
+      container.innerHTML = html;
+      container.querySelectorAll('.filter-tag').forEach(function(btn) {
+        btn.onclick = function() { selectRule(btn.dataset.rule || ''); };
+      });
+    }
+
+    /** 筛选条件变更，统一触发加载（明细页调用后端 API） */
+    function onFilterChange() {
+      var params = {
+        rule_name: selectedRule,
+        instance: selectedInstance,
+        check_result: (document.getElementById('tgFilterStatus') || {}).value || '',
+        dispatch_batch_no: (document.getElementById('tgFilterBatchNo') || {}).value.trim() || ''
+      };
+      loadTaskGroups(1, params);
+    }
+
+    /** 明细页筛选变更：调用后端 API（v1.0：替代前端 client-side 过滤） */
+    function handleFilterChange() {
+      currentPage = 1;
+      fetchTasks();
+    }
+
+    /** 清除关键词搜索 */
+    function clearSearch() {
+      var kwInput = document.getElementById('searchProductId');
+      if (kwInput) kwInput.value = '';
+      handleFilterChange();
+    }
 
     /** 填充标签下拉（弹窗内） */
     function populateLabelOptions() {
@@ -2072,12 +2182,8 @@
       }
     }
 
-    /** 填充标注备注筛选项 */
+    /** 填充标注人筛选项（v1.0：移除标注备注筛选） */
     function populateFilterOptions() {
-      const sel = document.getElementById('filterAnnotateNote');
-      sel.innerHTML = '<option value="">全部</option>';
-      labelsData.forEach(l => { sel.innerHTML += '<option value="' + l + '">' + l + '</option>'; });
-
       // 从 apiData 中提取标注人列表，填充标注人下拉
       var annotatorSet = {};
       (apiData || []).forEach(function(t) {
@@ -2114,87 +2220,6 @@
       return code || '';
     }
 
-    /** 更多筛选展开/收起（Portal模式：append到body渲染，避免iframe截断） */
-    function toggleMoreFilters(e) {
-      if (e) e.stopPropagation();
-      const dropdown = document.getElementById('filterMoreDropdown');
-      const arrow = document.getElementById('filterMoreArrow');
-      const btn = document.getElementById('filterMoreBtn');
-      const isInBody = dropdown.parentElement === document.body;
-
-      if (!isInBody) {
-        // 展开：先设置坐标，再 append 到 body，最后显示
-        // 坐标修正：getBoundingClientRect 相对于 iframe 视口，position:fixed 相对于主窗口
-        const btnRect = btn.getBoundingClientRect();
-        const iframeRect = window.frameElement ? window.frameElement.getBoundingClientRect() : { left: 0, top: 0 };
-        const dropdownWidth = 580;
-        let left = iframeRect.left + btnRect.left;
-        if (left + dropdownWidth > window.innerWidth - 8) {
-          left = window.innerWidth - dropdownWidth - 8;
-        }
-        if (left < 8) left = 8;
-        dropdown.style.top = (iframeRect.top + btnRect.bottom + 6) + 'px';
-        dropdown.style.left = left + 'px';
-        dropdown.style.right = 'auto';
-        document.body.appendChild(dropdown);
-        dropdown.style.display = 'flex';
-        arrow.textContent = '▲';
-      } else {
-        // 收起：移除出 body，恢复 display:none
-        dropdown.style.display = 'none';
-        if (dropdown.parentElement === document.body) {
-          document.body.removeChild(dropdown);
-        }
-        arrow.textContent = '▼';
-      }
-    }
-
-    /** 点击更多筛选区域外部时收起 */
-    document.addEventListener('click', function(e) {
-      const dropdown = document.getElementById('filterMoreDropdown');
-      const btn = document.getElementById('filterMoreBtn');
-      if (dropdown.parentElement === document.body) {
-        if (!dropdown.contains(e.target) && !btn.contains(e.target)) {
-          dropdown.style.display = 'none';
-          if (dropdown.parentElement === document.body) {
-            document.body.removeChild(dropdown);
-          }
-          const arrow = document.getElementById('filterMoreArrow');
-          if (arrow) arrow.textContent = '▼';
-        }
-      }
-    });
-
-    function handleFilterChange() {
-      // 叠加 client-side 过滤（在 apiData 基础上逐步过滤）
-      // rule_name / instance / status(pending/done) 由后端过滤，这里只叠加 client-side 条件
-      annotAllItems = [];  // 清空弹窗缓存，下次打开时重新加载
-      filteredData = apiData.filter(t => {
-        // 标注状态细分过滤（correct / error / ignore）
-        const statusVal = document.getElementById('filterAnnotateStatus').value;
-        if (statusVal === 'correct' && t.check_result !== 'correct') return false;
-        if (statusVal === 'error'   && t.check_result !== 'error')   return false;
-        if (statusVal === 'ignore'  && t.check_result !== 'ignore')  return false;
-        // 搜索框过滤
-        const kw = (document.getElementById('searchProductId').value || '').trim().toLowerCase();
-        if (kw && !(t.product_name || '').toLowerCase().includes(kw) && !(t.product_id || '').toLowerCase().includes(kw)) return false;
-        // AI审核结果过滤
-        const aiResult = document.getElementById('filterAiResult').value;
-        if (aiResult && t.ai_result !== aiResult) return false;
-        // 类目过滤
-        const category = document.getElementById('filterCategory').value;
-        if (category && t.category !== category) return false;
-        // 标注人过滤
-        const annotator = document.getElementById('filterAnnotator').value;
-        if (annotator && t.annotator !== annotator) return false;
-        return true;
-      });
-      totalItems = filteredData.length;
-      currentPage = 1;
-      renderTable();
-      updateStats();
-    }
-
     // =====================================================================
     // 渲染表格
     // =====================================================================
@@ -2217,6 +2242,8 @@
         const annText  = mapCheckResult(item.check_result);
         const annClass = getAnnotationClass(item.check_result);
         const aiRes    = item.ai_result || '-';
+        // v1.0：AI审核结果列样式与详情页同步（ai-pass / ai-fail / ai-pending）
+        const aiResClass = (aiRes === '合规' || aiRes === 'pass') ? 'ai-pass' : (aiRes === '违规' || aiRes === 'fail') ? 'ai-fail' : 'ai-pending';
         const modelBRes = mapModelBResult(item.modelb_result);
         const instName = getInstName(item.instance_code);
         const btnText  = item.check_result ? '查看' : '标注';
@@ -2229,8 +2256,8 @@
           '<td>' + (item.category || '-') + '</td>' +
           '<td>' + instName + '</td>' +
           '<td><span class="tag-rule">' + (item.rule_name || '-') + '</span></td>' +
-          '<td>' + aiRes + '</td>' +
-          '<td>' + modelBRes + '</td>' +
+          '<td><span class="' + aiResClass + '">' + aiRes + '</span></td>' +
+          '<td><span class="' + (modelBRes !== '-' ? aiResClass : 'ai-pending') + '">' + modelBRes + '</span></td>' +
           '<td><span class="' + annClass + '">' + annText + '</span></td>' +
           '<td><a class="btn btn-sm ' + btnClass + '" href="javascript:void(0)" onclick="openAnnotationPopup(' + realIndex + ')">' + btnText + '</a></td>' +
           '</tr>';
@@ -2309,25 +2336,6 @@
 
     function showToastErr(msg) { showToast(msg, true); }
 
-    function handleSearch() { handleFilterChange(); }
-
-    function clearSearch() {
-      annotAllItems = [];  // 清空弹窗缓存
-      document.getElementById('searchProductId').value = '';
-      document.getElementById('filterAiResult').value = '';
-      document.getElementById('filterAnnotateStatus').value = '';
-      document.getElementById('filterRule').value = '';
-      document.getElementById('filterAnnotateNote').value = '';
-      document.getElementById('filterCategory').value = '';
-      document.getElementById('filterInstance').value = '';
-      document.getElementById('filterAnnotator').value = '';
-      filteredData = [...apiData];
-      totalItems = filteredData.length;
-      currentPage = 1;
-      renderTable();
-      updateStats();
-    }
-
     function exportAnnotation() { showToast('导出功能开发中', false); }
 
     // =====================================================================
@@ -2353,15 +2361,17 @@
       });
     }
 
-    /** 加载弹窗内全量筛选列表（用于 prev/next 导航） */
+    /** 加载弹窗内全量筛选列表（用于 prev/next 导航）v1.0：同步使用新参数名 */
     function loadAnnotAllItems(callback) {
       if (annotAllItems.length > 0) { callback(); return; }
-      // 按当前筛选项拉取大量数据（最多1000条）
       var params = {
         page: 1, per_page: 1000,
-        rule_name: document.getElementById('filterRule').value,
-        status: document.getElementById('filterAnnotateStatus').value,
-        instance: document.getElementById('filterInstance').value,
+        rule_name: selectedRule,
+        check_result: (document.getElementById('filterAnnotateStatus') || {}).value || '',
+        ai_result: (document.getElementById('filterAiResult') || {}).value || '',
+        instance: (document.getElementById('filterInstance') || {}).value || '',
+        annotator: (document.getElementById('filterAnnotator') || {}).value || '',
+        keyword: (document.getElementById('searchProductId') || {}).value.trim() || '',
         dispatch_batch_no: new URLSearchParams(window.location.search).get('dispatch_batch_no') || ''
       };
       var qs = Object.entries(params).filter(function(v) { return v[1] !== '' && v[1] !== null; })
@@ -2369,16 +2379,7 @@
       safeFetch('/api/annotation/my-tasks?' + qs, { credentials: 'same-origin' })
         .then(function(res) {
           if (res && res.success) {
-            // 叠加 client-side 过滤（AI审核结果、类目、搜索框）
-            annotAllItems = (res.items || []).filter(function(t) {
-              var aiResult = document.getElementById('filterAiResult').value;
-              if (aiResult && t.ai_result !== aiResult) return false;
-              var cat = document.getElementById('filterCategory').value;
-              if (cat && t.category !== cat) return false;
-              var kw = (document.getElementById('searchProductId').value || '').trim().toLowerCase();
-              if (kw && !(t.product_name || '').toLowerCase().includes(kw) && !(t.product_id || '').toLowerCase().includes(kw)) return false;
-              return true;
-            });
+            annotAllItems = res.items || [];
           }
         })
         .catch(function() { annotAllItems = []; })
@@ -2473,15 +2474,25 @@
     function renderAnnotImageGrid() {
       var grid = document.getElementById('annotImageGrid');
       grid.innerHTML = '';
-      if (annotImageList.length === 0) {
-        grid.innerHTML = '<div class="annot-no-img">暂无图片</div>';
-        return;
-      }
+
+      var currentLabel = null;
+
       annotImageList.forEach(function(img, index) {
+        // 如果当前图片的标签与上一张不同，插入分组标题
+        if (img.label !== currentLabel) {
+          currentLabel = img.label;
+          var title = document.createElement('div');
+          title.className = 'annot-img-group-title';
+          title.textContent = currentLabel + '：';
+          grid.appendChild(title);
+        }
+
+        // 创建图片容器
         var div = document.createElement('div');
         div.className = 'annot-prod-img-item';
         div.innerHTML = '<img src="' + img.src + '" alt="' + img.label + '" ' +
-                        'onerror="this.parentElement.style.display=\'none\'" ' +
+                        'referrerpolicy="no-referrer" ' +
+                        'onerror="this.src=\'data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22120%22 height=%22120%22%3E%3Crect width=%22120%22 height=%22120%22 fill=%22%23f0f0f0%22/%3E%3Ctext x=%2250%25%22 y=%2250%25%22 dominant-baseline=%22middle%22 text-anchor=%22middle%22 fill=%22%23999%22 font-size=%2210%22%3E加载失败%3C/text%3E%3C/svg%3E\'; this.onerror=null;" ' +
                         'onclick="openAnnotImagePreview(' + index + ')">';
         grid.appendChild(div);
       });
@@ -2560,6 +2571,9 @@
             item.check_result = result;
             item.annotation = errorTag;
             showTaskToast('标注已保存');
+            // v1.0：立即重新拉取当前页数据和统计，确保列表+顶部统计卡片同步刷新
+            fetchTasks();
+            if (typeof fetchTaskStats === 'function') fetchTaskStats();
             if (onSuccess) onSuccess();
           } else {
             showToast(res.error || '提交失败', true);

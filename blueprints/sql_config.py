@@ -593,7 +593,16 @@ def api_get_instance_rule_mapping():
     for inst, rule in mapping.items():
         normalized[inst] = _re.sub(r'\.(md|txt)$', '', rule)
     
-    return jsonify({'mapping': normalized})
+    # 实例中文名称（用于前端标签展示）
+    instance_names = {
+        "ZJWC": "浙江网超",
+        "HWCS": "浙江乐采网超",
+        "HNLCWC": "湖南乐采网超",
+        "YNLCY": "云南乐采云",
+        "GXLCY": "广西乐采云"
+    }
+
+    return jsonify({'mapping': normalized, 'instance_names': instance_names})
 
 
 @sql_config_bp.route('/api/config/instance-rule-mapping', methods=['PUT'])
