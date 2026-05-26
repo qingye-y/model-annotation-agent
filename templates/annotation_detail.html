@@ -1113,6 +1113,7 @@
       const grid = document.getElementById('imageGrid');
       grid.innerHTML = '';
 
+      // 每个字段支持逗号分隔的多张图片 URL，逐个拆出渲染
       const imgSources = [
         { src: item.main_image, label: '主图' },
         { src: item.detail_image, label: '详情图' },
@@ -1124,12 +1125,22 @@
           grid.innerHTML += '<div class="image-card"><div class="image-card-label">' + img.label + '</div><div class="no-image">无图片</div></div>';
           return;
         }
-        imageList.push({ src: img.src, label: img.label });
-        grid.innerHTML +=
-          '<div class="image-card" onclick="openImagePreview(' + (imageList.length - 1) + ')">' +
-            '<div class="image-card-label">' + img.label + '</div>' +
-            '<img class="image-card-img" src="' + img.src + '" alt="' + img.label + '">' +
-          '</div>';
+        // 按逗号拆分，支持多种分隔符
+        const urls = img.src.split(',').map(u => u.trim()).filter(u => u);
+        if (urls.length === 0) {
+          grid.innerHTML += '<div class="image-card"><div class="image-card-label">' + img.label + '</div><div class="no-image">无图片</div></div>';
+          return;
+        }
+        urls.forEach((url, urlIdx) => {
+          const label = urls.length > 1 ? img.label + (urlIdx + 1) : img.label;
+          imageList.push({ src: url, label: label });
+          const imgIndex = imageList.length - 1;
+          grid.innerHTML +=
+            '<div class="image-card" onclick="openImagePreview(' + imgIndex + ')">' +
+              '<div class="image-card-label">' + label + '</div>' +
+              '<img class="image-card-img" src="' + url + '" alt="' + label + '">' +
+            '</div>';
+        });
       });
     }
 

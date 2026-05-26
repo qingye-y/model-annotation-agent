@@ -2042,8 +2042,7 @@
       _detailCurrentDays = 30;
       _detailCurrentRule = '';
 
-      document.getElementById('annotatorDetailLoading').style.display = '';
-      document.getElementById('annotatorDetailBody').innerHTML = '<div id="annotatorDetailLoading" style="text-align:center;padding:32px;color:var(--text-muted);">加载中…</div>';
+      document.getElementById('annotatorDetailBody').innerHTML = '<div style="text-align:center;padding:32px;color:var(--text-muted);">加载中…</div>';
       document.getElementById('annotatorDetailTitle').textContent = '标注详情 — ' + escHtml(annotatorName);
       document.getElementById('annotatorDetailModal').classList.add('active');
 
@@ -2216,16 +2215,70 @@
       renderOverview();
       renderRuleList();
 
+      // v3.1: 提前读取 URL 参数（filter_batch / open_annotator）
+      var urlParams = new URLSearchParams(window.location.search);
+      var filterBatchNo = urlParams.get('filter_batch');   // 批次号 → 自动筛选任务池
+      var openAnnotatorName = urlParams.get('open_annotator'); // 标注员姓名 → 自动打开详情弹窗
+
       // 并行加载：任务池+规则、标注员列表、分配历史
       // renderLoadCards() 在 fetchAnnotatorLoad() 的 .then() 里统一调用（避免 _cachedAnnotators 未初始化时渲染"暂无标注员"）
       Promise.all([
         fetchTaskPool(),
-        fetchAnnotators()
+        fetchAnnotators(),
+        // v3.1: 将 history 纳入主链，确保 filter_batch 处理时可以访问 _cachedHistory
+        fetchAssignHistory()
       ]).then(function() {
         return fetchAnnotatorLoad().then(function() {
-          // 看板跳转：检测 open_annotator URL 参数，自动打开标注员详情弹窗
-          var urlParams = new URLSearchParams(window.location.search);
-          var openAnnotatorName = urlParams.get('open_annotator');
+          // ── v3.1: filter_batch 参数处理 ─────────────────────────
+          // 批次号只存在于分配历史中，任务池是按规则聚合的，两者无直接对应关系
+          // 处理逻辑：自动展开「最近分配记录」Tab，高亮并滚动到对应批次行
+          if (filterBatchNo) {
+            // 自动展开「最近分配记录」区域
+            var histContent = document.getElementById('historyContent');
+            if (histContent) histContent.classList.add('show');
+            var histArrow = document.getElementById('historyArrow');
+            if (histArrow) histArrow.classList.add('expanded');
+
+            // 高亮匹配批次行（通过 data-batch-no 属性定位）
+            // 等待 history 行渲染完成后（historyFiltered 同步渲染）再执行滚动
+            setTimeout(function() {
+              // 先对 history 筛选（临时应用筛选，匹配 filter_batch）
+              var histSelect = document.getElementById('historyAnnotatorFilter');
+              var dateFromInput = document.getElementById('historyDateFrom');
+              var dateToInput = document.getElementById('historyDateTo');
+              // 暂存原始值
+              var origAnnotator = histSelect ? histSelect.value : '';
+              var origDateFrom = dateFromInput ? dateFromInput.value : '';
+              var origDateTo = dateToInput ? dateToInput.value : '';
+
+              // 临时清空其他筛选，只按 batch_no 过滤
+              if (histSelect) histSelect.value = '';
+              if (dateFromInput) dateFromInput.value = '';
+              if (dateToInput) dateToInput.value = '';
+              onHistoryFilterChange();  // 重新渲染 history
+
+              // 在渲染结果中定位匹配批次行并高亮
+              setTimeout(function() {
+                // encodeURIComponent 已处理 batch_no 中的特殊字符（若有），直接拼接安全
+              var targetRow = document.querySelector('.batch-main-row[data-batch-no="' + filterBatchNo + '"]');
+                if (targetRow) {
+                  targetRow.style.background = '#fff8e1';  // 浅黄色高亮
+                  targetRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                  // 2秒后自动移除高亮
+                  setTimeout(function() {
+                    targetRow.style.background = '';
+                  }, 2000);
+                }
+                // 恢复原始筛选状态
+                if (histSelect) histSelect.value = origAnnotator;
+                if (dateFromInput) dateFromInput.value = origDateFrom;
+                if (dateToInput) dateToInput.value = origDateTo;
+                onHistoryFilterChange();  // 恢复原始渲染
+              }, 50);
+            }, 50);
+          }
+
+          // ── 原有：open_annotator 参数处理 ─────────────────────────
           if (openAnnotatorName) {
             // 从 _cachedAnnotators 中找到匹配的标注员
             var matched = _cachedAnnotators.find(function(a) {
@@ -2234,10 +2287,11 @@
             if (matched) {
               openAnnotatorDetail(matched.id, matched.name || matched.username);
             }
-            // 清除 URL 参数，避免刷新时重复触发
-            var cleanUrl = window.location.pathname;
-            window.history.replaceState({}, '', cleanUrl);
           }
+
+          // 清除 URL 参数，避免刷新时重复触发
+          var cleanUrl = window.location.pathname;
+          window.history.replaceState({}, '', cleanUrl);
         });
       }).catch(function(err) {
         // 任意环节出错，隐藏所有 loading 状态
@@ -2246,12 +2300,6 @@
         el = document.getElementById('taskPoolLoading'); if (el) el.style.display = 'none';
         el = document.getElementById('annotatorLoading'); if (el) el.style.display = 'none';
         el = document.getElementById('historyLoading'); if (el) el.style.display = 'none';
-      });
-
-      // 分配历史单独并行（不阻塞主流程）
-      fetchAssignHistory().catch(function() {
-        var el = document.getElementById('historyLoading');
-        if (el) el.style.display = 'none';
       });
     }
 

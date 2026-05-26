@@ -1322,17 +1322,17 @@
             <th>审核规则</th>
             <th>任务日期</th>
             <th>总条数</th>
-            <th>待标注</th>
-            <th>已标注</th>
-            <th>正确</th>
-            <th>错误</th>
-            <th>忽略</th>
+            <th>整体准确率</th>
+            <th>合规数</th>
+            <th>合规准确率</th>
+            <th>违规数</th>
+            <th>违规准确率</th>
             <th style="min-width:110px;">进度</th>
             <th>操作</th>
           </tr>
         </thead>
         <tbody id="taskGroupBody">
-          <tr><td colspan="11" style="text-align:center;padding:32px;color:var(--text-muted);">加载中...</td></tr>
+          <tr><td colspan="11" style="text-align:center;color:#999;padding:32px 0;">暂无任务数据</td></tr>
         </tbody>
       </table>
 
@@ -1883,10 +1883,16 @@
         tbody.innerHTML = '<tr><td colspan="11" style="text-align:center;color:#999;padding:32px 0;">暂无任务数据</td></tr>';
         return;
       }
+      function accColor(pct) {
+        pct = parseFloat(pct) || 0;
+        if (pct === 0) return 'color:#999;';
+        if (pct >= 90) return 'color:#1a7f37;font-weight:600;';
+        if (pct >= 70) return 'color:#9a6700;';
+        return 'color:#cf222e;';
+      }
       var html = '';
       items.forEach(function(g) {
         var progress = g.total_count > 0 ? Math.round((g.annotated_count / g.total_count) * 100) : 0;
-        // 任务日期：取 assign_time 的日期部分
         var taskDateStr = g.assign_time ? g.assign_time.substring(0, 10) : (g.data_date ? g.data_date.substring(0, 10) : '-');
         var enterBtn = '<button class="btn btn-primary btn-sm" onclick="enterTaskGroup(\'' + (g.task_code || '') + '\', \'' + (g.dispatch_batch_no || '') + '\', \'' + encodeURIComponent(g.rule_name || '') + '\', \'' + (g.data_date || '') + '\')">进入标注</button>';
         html += '<tr>' +
@@ -1894,11 +1900,11 @@
           '<td>' + (g.rule_name || '-') + '</td>' +
           '<td>' + taskDateStr + '</td>' +
           '<td class="stat-num">' + (g.total_count || 0) + '</td>' +
-          '<td class="stat-num stat-pending">' + (g.pending_count || 0) + '</td>' +
-          '<td class="stat-num stat-done">' + (g.annotated_count || 0) + '</td>' +
-          '<td class="stat-num stat-correct">' + (g.correct_count || 0) + '</td>' +
-          '<td class="stat-num stat-error">' + (g.error_count || 0) + '</td>' +
-          '<td class="stat-num stat-ignore">' + (g.ignore_count || 0) + '</td>' +
+          '<td class="stat-num" style="' + accColor(g.overall_accuracy) + '">' + (g.overall_accuracy || 0) + '%</td>' +
+          '<td class="stat-num">' + (g.compliant_total || 0) + '</td>' +
+          '<td class="stat-num" style="' + accColor(g.compliant_accuracy) + '">' + (g.compliant_accuracy || 0) + '%</td>' +
+          '<td class="stat-num">' + (g.violation_total || 0) + '</td>' +
+          '<td class="stat-num" style="' + accColor(g.violation_accuracy) + '">' + (g.violation_accuracy || 0) + '%</td>' +
           '<td><div class="progress-cell">' +
             '<span class="progress-pct">' + progress + '%</span>' +
             '<div class="progress-bar-wrap"><div class="progress-bar-bg"><div class="progress-bar-fill' + (progress >= 100 ? ' full' : '') + '" style="width:' + progress + '%"></div></div></div>' +

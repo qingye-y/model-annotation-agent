@@ -465,6 +465,7 @@ def api_task_batches():
     instances = request.args.get('instances', '')
     rule = request.args.get('rule', '')
     review_status_filter = request.args.get('review_status', '')  # v1.2: 跳转优化
+    task_generated_filter = request.args.get('task_generated', '')  # v1.4: 任务分配状态筛选
 
     # 如果指定了规则，从映射中获取实例列表
     if rule and not instances:
@@ -520,6 +521,12 @@ def api_task_batches():
         query = query.filter(FetchLog.review_status == 'completed')
     elif review_status_filter == 'pending':
         query = query.filter(FetchLog.review_status != 'completed')
+
+    # v1.4: 任务分配状态筛选
+    if task_generated_filter == 'true':
+        query = query.filter(FetchLog.task_generated == True)
+    elif task_generated_filter == 'false':
+        query = query.filter(FetchLog.task_generated != True)
 
     batches = query.order_by(FetchLog.fetch_time.desc()).all()
     
@@ -623,6 +630,8 @@ def api_task_batch_items(batch_id):
     ai_result_filter = request.args.get('ai_result', '')
     instance_filter = request.args.get('instance', '')
     keyword = request.args.get('keyword', '')
+    # v3.1: 任务分配状态筛选（支持：assigned/unassigned/annotated）
+    task_status_filter = request.args.get('task_status', '')
 
     # 基础查询（无筛选，用于统计全量）
     base_query = RawData.query.filter_by(fetch_batch_id=batch_id)
@@ -718,6 +727,31 @@ def api_task_batch_items(batch_id):
     elif modelb_result == '违规':
         filtered_query = filtered_query.filter(RawData.modelb_result.in_(['违规', '0', 'REJECT']))
 
+    # v3.1: 任务分配状态筛选（派生于现有字段，向后兼容 task_status 字段为 NULL 的历史数据）
+    # 已标注：check_result 非空
+    # 已分配未标注：annotator 非空但 check_result 为空
+    # 未分配：annotator 为空
+    if task_status_filter == 'annotated':
+        filtered_query = filtered_query.filter(
+            db.and_(RawData.check_result != '', RawData.check_result.isnot(None))
+        )
+    elif task_status_filter == 'assigned':
+        filtered_query = filtered_query.filter(
+            db.and_(
+                db.and_(RawData.annotator != '', RawData.annotator.isnot(None)),
+                db.or_(RawData.check_result == '', RawData.check_result.is_(None))
+            )
+        )
+    elif task_status_filter == 'unassigned':
+        # 修复：annotator IS NULL 时 annotator=='' 返回 NULL（非 False），故用 OR 兜底
+        # 同时要求 check_result 也为空（未完成标注）
+        filtered_query = filtered_query.filter(
+            db.and_(
+                db.or_(RawData.annotator == '', RawData.annotator.is_(None)),
+                db.or_(RawData.check_result == '', RawData.check_result.is_(None))
+            )
+        )
+
     total = filtered_query.count()
     items_query = filtered_query.order_by(RawData.id.desc()).offset((page - 1) * per_page).limit(per_page)
     items = items_query.all()
@@ -761,7 +795,14 @@ def api_task_batch_items(batch_id):
             "modelb_result": item.modelb_result,
             "modelb_reason": item.modelb_reason,
             "modelb_consistent": item.modelb_consistent,
-            "modelb_reviewed": item.modelb_reviewed
+            "modelb_reviewed": item.modelb_reviewed,
+            # v3.1: 任务分配状态字段（派生于现有字段，向后兼容）
+            "annotator_display": item.annotator or '',
+            "dispatch_batch_no": item.dispatch_batch_no or '',
+            "task_status": item.task_status if item.task_status else (
+                'annotated' if (item.check_result and item.check_result.strip()) else
+                ('assigned' if (item.annotator and item.annotator.strip()) else 'unassigned')
+            ),
         })
 
     return jsonify({

@@ -1426,11 +1426,11 @@
                 labels: {
                   show: true,
                   name: { fontSize: '11px', color: '#6b7280' },
-                  value: { fontSize: '14px', fontWeight: 600, color: '#1f2937' },
+                  value: { fontSize: '14px', fontWeight: 600, color: '#1f2937', formatter: function(val) { return Number(val).toLocaleString(); } },
                   total: {
                     show: true,
                     label: '违规总数',
-                    formatter: function() { return total.toLocaleString(); }
+                    formatter: function() { return Number(total).toLocaleString(); }
                   }
                 }
               }
@@ -1441,7 +1441,11 @@
             fontSize: '11px',
             labels: { colors: '#6b7280' },
             markers: { width: 8, height: 8, radius: 2 },
-            itemMargin: { vertical: 3 }
+            itemMargin: { vertical: 3 },
+            formatter: function(seriesName, opts) {
+              var val = opts.w.globals.series[opts.seriesIndex];
+              return seriesName + ': ' + Number(val).toLocaleString();
+            }
           },
           dataLabels: { enabled: false },
           tooltip: {

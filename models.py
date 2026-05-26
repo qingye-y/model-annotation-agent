@@ -60,6 +60,7 @@ class RawData(db.Model):
     computed_error_reason = db.Column(db.String(200))  # 从AI拒绝原因提取的简短原因标签
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     revoked_batch = db.Column(db.String(50))  # 撤回所属批次号；非空表示该记录已撤回（v2.2）
+    task_status = db.Column(db.String(20), comment='任务状态：unassigned/assigned/annotated（v3.1）')  # v3.1
 
 class FetchLog(db.Model):
     __tablename__ = 'fetch_log'
