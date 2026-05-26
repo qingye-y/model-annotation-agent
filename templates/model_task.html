@@ -256,20 +256,12 @@
             <option value="false">未分配</option>
           </select>
         </div>
-        <!-- 日期筛选：胶囊按钮组 + 自定义日期范围（与数据看板一致） -->
-        <div class="filter-item period-filter">
-          <label style="margin-right:4px;">📋</label>
-          <div class="period-btn-group" id="periodBtnGroup">
-            <button class="period-btn" data-period="7" onclick="switchPeriod(this, 7)">近7天</button>
-            <button class="period-btn" data-period="30" onclick="switchPeriod(this, 30)">近30天</button>
-            <button class="period-btn" data-period="month" onclick="switchPeriod(this, 'month')">本月</button>
-            <button class="period-btn" data-period="custom" onclick="switchPeriod(this, 'custom')">自定义</button>
-          </div>
-          <input type="date" class="form-input" id="filterStartDate" style="margin-left:6px;width:130px;">
-          <span style="color:var(--text-muted);margin:0 4px;">至</span>
-          <input type="date" class="form-input" id="filterEndDate" style="width:130px;">
+        <!-- 日期筛选（隐藏，供JS调用）："自定义"按钮会动态设置值 -->
+        <div id="dateRangeInputs" style="display:none;">
+          <input type="date" id="filterStartDate">
+          <input type="date" id="filterEndDate">
         </div>
-        <!-- 高级筛选项：默认隐藏，点击"自定义"展开 -->
+        <!-- 高级筛选项：默认隐藏，点击"更多筛选"展开 -->
         <button class="btn-custom" id="btnCustomFilter" onclick="toggleAdvancedFilter()" title="展开/收起更多筛选条件">▼ 更多筛选</button>
         <div class="advanced-filter-panel" id="advancedFilterPanel">
           <div class="filter-item">
@@ -870,17 +862,20 @@
 
     // ========== 日期筛选胶囊按钮（与数据看板一致）==========
     function switchPeriod(btn, period) {
-      var today = new Date();
-      var todayStr = formatDate(today);
+      var now = new Date();
+      var todayStr = formatDate(now);
 
       if (period === 'custom') {
-        // 自定义：清除按钮高亮，预填日期，聚焦开始日期（不联动高级面板）
+        // 自定义：开始和结束都填当天，然后查询
         clearPeriodHighlight();
-        btn.classList.remove('period-btn');
-        btn.classList.add('period-btn', 'active');
-        document.getElementById('filterStartDate').value = '2025-01-01';
-        document.getElementById('filterEndDate').value = '';
-        document.getElementById('filterStartDate').focus();
+        if (btn) {
+          btn.classList.remove('period-btn');
+          btn.classList.add('period-btn', 'active');
+        }
+        var today = formatDate(new Date());
+        document.getElementById('filterStartDate').value = today;
+        document.getElementById('filterEndDate').value = today;
+        filterByDateRange();
         return;
       }
 
@@ -888,8 +883,8 @@
       var startDate;
       if (period === 'month') {
         // 本月：1号到今天
-        startDate = today.getFullYear() + '-' +
-          String(today.getMonth() + 1).padStart(2, '0') + '-01';
+        startDate = now.getFullYear() + '-' +
+          String(now.getMonth() + 1).padStart(2, '0') + '-01';
       } else {
         // 近N天：today - (N-1) ~ today
         var daysAgo = new Date();
