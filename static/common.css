@@ -442,6 +442,39 @@ a:hover {
   white-space: nowrap;
 }
 
+/* ---------- 更多筛选下拉（Portal模式：append到body渲染） ---------- */
+.filter-more-wrapper {
+  position: relative;
+}
+
+.filter-more-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 13px;
+}
+
+.filter-more-arrow {
+  font-size: 10px;
+  transition: transform 0.2s;
+}
+
+.filter-more-dropdown {
+  position: fixed;
+  z-index: 99999;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 14px 16px;
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 8px 32px rgba(0,0,0,0.20);
+  width: 580px;
+  max-width: 90vw;
+  white-space: nowrap;
+}
+
 /* ---------- 表单控件 ---------- */
 .form-input,
 .form-select {

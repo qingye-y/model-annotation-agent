@@ -1015,7 +1015,7 @@
           totalItems = data.total || 0;
           totalPages = data.pages || Math.ceil((data.total || 0) / pageSize);
           currentItems = (data.items || []).map(function(item) {
-            var diffType = calcDiffType(item.ai_result, item.modelb_result);
+            var diffType = calcDiffType(item.aiResult, item.modelBResult);
             return {
               id: item.id,
               productId: item.product_id || '',

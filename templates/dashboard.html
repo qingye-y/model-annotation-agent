@@ -701,6 +701,8 @@
           updateInstanceButtons(data.by_instance);
           // 更新趋势图
           updateTrendChart(data.by_date || []);
+          // 更新大模型审核准确率趋势图
+          loadAccuracyTrend();
           // 更新违规原因分布图（使用接口返回的 top_violation_reasons 和 all_reasons_detail）
           updateReasonChart(data.top_violation_reasons || [], data.non_compliant_count || 0, data.all_reasons_detail || []);
           // ====== 更新标注员效能概览 ======
@@ -709,6 +711,53 @@
         })
         .catch(function(error) {
           console.error('获取看板统计失败:', error);
+        });
+    }
+
+    // ====== 加载准确率趋势图 ======
+    function loadAccuracyTrend() {
+      var startDate = document.getElementById('filterStartDate').value;
+      var endDate = document.getElementById('filterEndDate').value;
+      var instanceFilter = document.getElementById('filterInstance')
+        ? document.getElementById('filterInstance').value : 'all';
+
+      var params = [];
+      if (startDate) params.push('start_date=' + startDate.replace(/-/g, ''));
+      if (endDate) params.push('end_date=' + endDate.replace(/-/g, ''));
+      if (instanceFilter && instanceFilter !== 'all') params.push('instances=' + instanceFilter);
+
+      var url = '/api/dashboard/accuracy-trend';
+      if (params.length > 0) url += '?' + params.join('&');
+
+      fetch(url)
+        .then(function(res) { return res.json(); })
+        .then(function(result) {
+          if (result.empty) {
+            // 无数据，显示空状态
+            var chartEl = document.getElementById('accuracyChart');
+            if (chartEl) {
+              chartEl.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:260px;color:var(--text-muted);">暂无互检数据</div>';
+            }
+            return;
+          }
+          var trend = result.trend || [];
+          var categories = trend.map(function(d) {
+            return d.date.substring(4, 6) + '/' + d.date.substring(6, 8);
+          });
+          var series = trend.map(function(d) {
+            return d.accuracy_rate != null ? d.accuracy_rate : 0;
+          });
+
+          // 动态计算 yaxis 范围：以数据为中心 ±5%，保底 [50, 100]
+          var dataMin = series.length > 0 ? Math.min.apply(null, series.filter(function(v) { return v > 0; })) : 95;
+          var dataMax = series.length > 0 ? Math.max.apply(null, series) : 97;
+          var yMin = Math.max(50, Math.floor(dataMin - 5));
+          var yMax = Math.min(100, Math.ceil(dataMax + 5));
+
+          initAccuracyChart({ series: series, categories: categories, yMin: yMin, yMax: yMax });
+        })
+        .catch(function(err) {
+          console.error('获取准确率趋势失败:', err);
         });
     }
 
@@ -857,7 +906,7 @@
 
       // 准确率：使用后端数据（如果有），否则显示"--"
       if (data.accuracy_rate != null) {
-        document.getElementById('statAccuracy').textContent = data.accuracy_rate.toFixed(2) + '%';
+        document.getElementById('statAccuracy').textContent = data.accuracy_rate.toFixed(1) + '%';
       } else {
         // 后端暂无数据，显示为 Mock
         document.getElementById('statAccuracy').textContent = '--%';
@@ -1275,6 +1324,8 @@
           showAccuracyFallback(data);
           return;
         }
+        var yMin = (data.yMin !== undefined) ? data.yMin : 50;
+        var yMax = (data.yMax !== undefined) ? data.yMax : 100;
         const options = {
           chart: {
             type: 'area',
@@ -1297,8 +1348,8 @@
             labels: {
               style: { fontSize: '11px', colors: '#6b7280' },
               formatter: function(v) { return v.toFixed(1) + '%'; },
-              min: 94,
-              max: 97
+              min: yMin,
+              max: yMax
             }
           },
           colors: ['#2ecc71'],

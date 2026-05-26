@@ -248,6 +248,52 @@ def api_dashboard_stats():
         print(f"[看板统计] 违规原因Top10分组: Top10类型={len([x for x in top_violation_reasons if x['name']!='其他'])}, "
               f"其他={other_total}次({other_pct}%), 全量={len(all_reasons_detail)}种")
 
+    # ====== 大模型审核准确率统计（基于 RawData 互检结果）======
+    # 口径：modelb_reviewed=True 且 modelb_consistent != None（已互检有结论）
+    # ignore 记录不参与分母，不影响准确率
+    try:
+        acc_query = RawData.query.filter(
+            RawData.modelb_reviewed == True,
+            RawData.modelb_consistent != None
+        )
+        # 日期筛选：gmt_created 格式为 YYYY-MM-DD HH:MM:SS，需将 YYYYMMDD 转为 YYYY-MM-DD 格式
+        if start_date and end_date:
+            # YYYYMMDD -> YYYY-MM-DD
+            start_fmt = f"{start_date[:4]}-{start_date[4:6]}-{start_date[6:8]}"
+            end_fmt   = f"{end_date[:4]}-{end_date[4:6]}-{end_date[6:8]}"
+            acc_query = acc_query.filter(
+                RawData.gmt_created >= start_fmt,
+                RawData.gmt_created <= end_fmt + ' 23:59:59'
+            )
+        if instance_list:
+            acc_query = acc_query.filter(RawData.instance_code.in_(instance_list))
+
+        acc_records = acc_query.all()
+        acc_correct = 0
+        acc_total = 0  # 有效分母（排除 ignore）
+        acc_ignored = 0
+        acc_skipped = 0
+
+        for rec in acc_records:
+            if rec.check_result == 'ignore':
+                acc_ignored += 1
+                continue
+            acc_total += 1
+            is_correct = _is_modela_correct(rec)
+            if is_correct is True:
+                acc_correct += 1
+
+        accuracy_rate = round(acc_correct / acc_total * 100, 1) if acc_total > 0 else None
+        accuracy_empty = acc_total == 0
+        print(f"[看板统计] 互检准确率：correct={acc_correct}, total={acc_total}, "
+              f"ignored={acc_ignored}, accuracy={accuracy_rate}%")
+    except Exception as e:
+        print(f"[ERROR] 准确率计算失败: {e}")
+        accuracy_rate = None
+        acc_correct = 0
+        acc_total = 0
+        accuracy_empty = True
+
     # 打印诊断日志
     print(f"[看板统计] 筛选条件：日期={start_date}~{end_date}, 实例={instance_list}")
     print(f"[看板统计] DailyStats 汇总：审核总数={total_count}, 合规={compliant_count}, 违规={non_compliant_count}, 记录数={record_count}")
@@ -307,7 +353,10 @@ def api_dashboard_stats():
         'violation_rate': violation_rate,
         'inconsistent_count': inconsistent_count,
         'inconsistent_rate': inconsistent_rate,
-        'accuracy_rate': None,
+        'accuracy_rate': accuracy_rate,
+        'accuracy_correct_count': acc_correct,
+        'accuracy_total_reviewed': acc_total,
+        'accuracy_empty': accuracy_empty,
         'disagree_rate': None,
         'by_instance': by_instance_map,
         'by_date': by_date,
@@ -616,6 +665,193 @@ def api_inconsistency_rate():
         "inconsistent": inconsistent,
         "batch_count": len(batch_ids),
         "batches": batch_ids[:10]  # 最多返回10个批次ID
+    })
+
+
+# ====== 大模型审核准确率指标 ======
+
+def _is_modela_correct(record):
+    """
+    判定模型A是否正确。
+
+    规则（按 PRD v1.0 §2.4）：
+    - modelb_consistent=True（一致）：默认正确，标注为 error 时修正为错误
+    - modelb_consistent=False（不一致）：默认错误，标注为 correct 时修正为正确
+    """
+    if record.modelb_consistent is True:
+        # 一致：默认正确，标注为 error 时修正为错误
+        # ignore 视为正确（不影响准确率）
+        return record.check_result != 'error'
+    elif record.modelb_consistent is False:
+        # 不一致：默认错误，标注为 correct 时修正为正确
+        return record.check_result == 'correct'
+    else:
+        # null 漏审：不参与计算
+        return None
+
+
+@dashboard_bp.route('/dashboard/accuracy-stats', methods=['GET'])
+def api_accuracy_stats():
+    """准确率整体统计 - 返回当前筛选条件下的整体准确率"""
+    # 获取查询参数
+    instances_param = request.args.get('instances', '')
+    start_date = request.args.get('start_date', '')  # YYYYMMDD
+    end_date = request.args.get('end_date', '')      # YYYYMMDD
+
+    # 默认日期范围：最近7天
+    if not start_date or not end_date:
+        today = datetime.now()
+        end_date = today.strftime('%Y%m%d')
+        start_date = (today - timedelta(days=6)).strftime('%Y%m%d')
+
+    # 解析实例列表
+    instance_list = []
+    if instances_param:
+        instance_list = [inst.strip() for inst in instances_param.split(',') if inst.strip()]
+
+    print(f"[AccuracyStats] 查询参数: start_date={start_date}, end_date={end_date}, instances={instance_list}")
+
+    # 仅纳入已完成互检且有结果的记录（modelb_consistent != None）
+    query = RawData.query.filter(
+        RawData.modelb_reviewed == True,
+        RawData.modelb_consistent != None
+    )
+
+    # 日期筛选（基于 gmt_created 字段）
+    if start_date and end_date:
+        # YYYYMMDD -> YYYY-MM-DD（gmt_created 存储格式）
+        start_fmt = f"{start_date[:4]}-{start_date[4:6]}-{start_date[6:8]}"
+        end_fmt   = f"{end_date[:4]}-{end_date[4:6]}-{end_date[6:8]}"
+        query = query.filter(
+            RawData.gmt_created >= start_fmt,
+            RawData.gmt_created <= end_fmt + ' 23:59:59'
+        )
+
+    if instance_list:
+        query = query.filter(RawData.instance_code.in_(instance_list))
+
+    records = query.all()
+    print(f"[AccuracyStats] 互检有效记录数: {len(records)}")
+
+    correct_count = 0
+    total_reviewed = 0   # 有效分母（排除 ignore）
+    ignored_count = 0    # 被标注为 ignore 的记录数（不参与准确率计算）
+    skipped_count = 0     # 漏审记录数（modelb_consistent=null，已在 query 中排除）
+
+    for rec in records:
+        # ignore 记录不计入分母
+        if rec.check_result == 'ignore':
+            ignored_count += 1
+            continue
+
+        total_reviewed += 1
+        is_correct = _is_modela_correct(rec)
+        if is_correct is True:
+            correct_count += 1
+        # is_correct is False/null 不计入分子
+
+    accuracy_rate = round(correct_count / total_reviewed * 100, 1) if total_reviewed > 0 else None
+    empty = total_reviewed == 0
+
+    print(f"[AccuracyStats] 结果: correct={correct_count}, total={total_reviewed}, "
+          f"ignored={ignored_count}, accuracy={accuracy_rate}%")
+
+    return jsonify({
+        'accuracy_rate': accuracy_rate,
+        'correct_count': correct_count,
+        'total_reviewed': total_reviewed,
+        'ignored_count': ignored_count,
+        'skipped_count': skipped_count,
+        'start_date': start_date,
+        'end_date': end_date,
+        'empty': empty
+    })
+
+
+@dashboard_bp.route('/dashboard/accuracy-trend', methods=['GET'])
+def api_accuracy_trend():
+    """准确率趋势 - 返回按天分组的准确率趋势数据"""
+    # 获取查询参数
+    instances_param = request.args.get('instances', '')
+    start_date = request.args.get('start_date', '')  # YYYYMMDD
+    end_date = request.args.get('end_date', '')      # YYYYMMDD
+
+    # 默认日期范围：最近7天
+    if not start_date or not end_date:
+        today = datetime.now()
+        end_date = today.strftime('%Y%m%d')
+        start_date = (today - timedelta(days=6)).strftime('%Y%m%d')
+
+    # 解析实例列表
+    instance_list = []
+    if instances_param:
+        instance_list = [inst.strip() for inst in instances_param.split(',') if inst.strip()]
+
+    print(f"[AccuracyTrend] 查询参数: start_date={start_date}, end_date={end_date}, instances={instance_list}")
+
+    # 仅纳入已完成互检且有结果的记录
+    query = RawData.query.filter(
+        RawData.modelb_reviewed == True,
+        RawData.modelb_consistent != None,
+        RawData.gmt_created != None
+    )
+
+    if start_date and end_date:
+        # YYYYMMDD -> YYYY-MM-DD（gmt_created 存储格式）
+        start_fmt = f"{start_date[:4]}-{start_date[4:6]}-{start_date[6:8]}"
+        end_fmt   = f"{end_date[:4]}-{end_date[4:6]}-{end_date[6:8]}"
+        query = query.filter(
+            RawData.gmt_created >= start_fmt,
+            RawData.gmt_created <= end_fmt + ' 23:59:59'
+        )
+
+    if instance_list:
+        query = query.filter(RawData.instance_code.in_(instance_list))
+
+    records = query.all()
+
+    # 按天分组统计
+    date_map = {}  # {date_str: {'correct': 0, 'total': 0}}
+
+    for rec in records:
+        # 跳过 ignore
+        if rec.check_result == 'ignore':
+            continue
+
+        # 截取日期（gmt_created 前10位：YYYY-MM-DD）
+        date_str = (rec.gmt_created or '')[:10]
+        if not date_str:
+            continue
+
+        if date_str not in date_map:
+            date_map[date_str] = {'correct': 0, 'total': 0}
+
+        date_map[date_str]['total'] += 1
+        is_correct = _is_modela_correct(rec)
+        if is_correct is True:
+            date_map[date_str]['correct'] += 1
+
+    # 构建趋势数据（按日期升序）
+    trend = []
+    for date_str in sorted(date_map.keys()):
+        data = date_map[date_str]
+        accuracy_rate = round(data['correct'] / data['total'] * 100, 1) if data['total'] > 0 else None
+        trend.append({
+            'date': date_str,
+            'accuracy_rate': accuracy_rate,
+            'correct_count': data['correct'],
+            'total_reviewed': data['total']
+        })
+
+    empty = len(trend) == 0
+
+    print(f"[AccuracyTrend] 结果: {len(trend)} 天数据, empty={empty}")
+
+    return jsonify({
+        'trend': trend,
+        'start_date': start_date,
+        'end_date': end_date,
+        'empty': empty
     })
 
 

@@ -9,7 +9,7 @@
   <script src="/static/common.js"></script>
   <style>
     .annotation-page {
-      padding: 20px 24px;
+      padding: 16px 12px 20px 16px;
     }
 
     /* 页面标题 */
@@ -952,17 +952,13 @@
     .annot-prod-meta { display: flex; gap: 16px; margin-bottom: 16px; flex-wrap: wrap; }
     .annot-prod-meta-item { font-size: 13px; color: var(--text-secondary); }
     .annot-prod-meta-item .value { color: var(--text-primary); font-weight: 500; }
-    .annot-prod-tabs { display: flex; gap: 8px; margin-bottom: 12px; }
-    .annot-prod-tab { padding: 5px 14px; font-size: 12px; background: var(--border-light); border: none; border-radius: var(--radius); cursor: pointer; }
-    .annot-prod-tab.active { background: var(--primary); color: #fff; }
-    .annot-prod-grid { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding-right: 8px; }
+    .annot-prod-grid { display: flex; flex-wrap: wrap; gap: 8px; padding: 8px; overflow-y: auto; max-height: 420px; }
     .annot-prod-grid::-webkit-scrollbar { width: 5px; }
     .annot-prod-grid::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 3px; }
-    .annot-img-card { cursor: pointer; }
-    .annot-img-card-label { font-size: 11px; color: var(--text-muted); margin-bottom: 4px; }
-    .annot-img-card img { width: 100%; max-width: 380px; border-radius: var(--radius); border: 1px solid var(--border-light); transition: transform 0.2s; }
-    .annot-img-card img:hover { transform: scale(1.01); }
-    .annot-no-img { width: 100%; aspect-ratio: 4/3; display: flex; align-items: center; justify-content: center; background: var(--bg); border-radius: var(--radius); border: 1px dashed var(--border); color: var(--text-muted); font-size: 12px; }
+    .annot-prod-img-item { width: 120px; height: 120px; border: 1px solid var(--border-light); border-radius: var(--radius); overflow: hidden; cursor: pointer; flex-shrink: 0; }
+    .annot-prod-img-item img { width: 100%; height: 100%; object-fit: cover; transition: transform 0.2s; }
+    .annot-prod-img-item img:hover { transform: scale(1.04); }
+    .annot-no-img { width: 100%; display: flex; align-items: center; justify-content: center; background: var(--bg); border-radius: var(--radius); border: 1px dashed var(--border); color: var(--text-muted); font-size: 12px; min-height: 80px; }
 
     /* 右侧：审核+标注 */
     .annot-review-panel { flex: 1; display: flex; flex-direction: column; gap: 12px; overflow-y: auto; }
@@ -1170,14 +1166,11 @@
           <div class="annot-prod-meta">
             <span class="annot-prod-meta-item">类目：<span class="value" id="annotCategory">-</span></span>
             <span class="annot-prod-meta-item">店铺：<span class="value" id="annotShop">-</span></span>
-            <span class="annot-prod-meta-item">商品ID：<span class="value" id="annotProductId">-</span></span>
+            <span class="annot-prod-meta-item">商品ID：<span class="value" id="annotProductId">-</span>
+              <a href="#" id="annotProductLink" target="_blank" style="margin-left:8px;font-size:12px;display:none;">查看商品 →</a>
+            </span>
             <span class="annot-prod-meta-item">批次：<span class="value" id="annotBatchNo">-</span></span>
             <span class="annot-prod-meta-item">标注人：<span class="value" id="annotAnnotator">-</span></span>
-          </div>
-          <div class="annot-prod-tabs">
-            <button class="annot-prod-tab active" id="annotTabMain" onclick="switchAnnotTab('main')">主图</button>
-            <button class="annot-prod-tab" id="annotTabSku" onclick="switchAnnotTab('sku')">SKU图</button>
-            <button class="annot-prod-tab" id="annotTabDetail" onclick="switchAnnotTab('detail')">详情图</button>
           </div>
           <div class="annot-prod-grid" id="annotImageGrid"></div>
         </div>
@@ -1301,8 +1294,33 @@
             <option value="">全部</option>
           </select>
         </div>
+        <!-- 更多筛选按钮（Portal模式，下拉append到body渲染） -->
+        <div class="filter-item filter-more-wrapper">
+          <button class="btn btn-default btn-sm filter-more-btn" id="tgFilterMoreBtn" onclick="toggleTgMoreFilters(event)">
+            更多筛选 <span class="filter-more-arrow" id="tgFilterMoreArrow">▼</span>
+          </button>
+        </div>
         <div class="filter-item">
           <button class="btn btn-primary btn-sm" onclick="loadTaskGroups()">刷新</button>
+        </div>
+      </div>
+
+      <!-- 更多筛选下拉面板（JS动态append到body） -->
+      <div class="filter-more-dropdown" id="tgFilterMoreDropdown" style="display:none;">
+        <div class="filter-item">
+          <label>状态：</label>
+          <select class="form-select" id="tgFilterStatus" onchange="handleTaskGroupFilter()">
+            <option value="">全部</option>
+            <option value="pending">待标注</option>
+            <option value="in_progress">进行中</option>
+            <option value="completed">已完成</option>
+          </select>
+        </div>
+        <div class="filter-item">
+          <label>任务分配：</label>
+          <select class="form-select" id="tgFilterAssignee" onchange="handleTaskGroupFilter()">
+            <option value="">全部</option>
+          </select>
         </div>
       </div>
 
@@ -1364,6 +1382,28 @@
         </select>
       </div>
       <div class="filter-item">
+        <label>实例：</label>
+        <select class="form-select" id="filterInstance">
+          <option value="">全部</option>
+        </select>
+      </div>
+      <div class="filter-item">
+        <label>商品ID：</label>
+        <input type="text" class="form-input" id="searchProductId" placeholder="请输入商品ID">
+        <button class="btn btn-primary btn-sm" onclick="handleSearch()">查询</button>
+        <button class="btn btn-default btn-sm" onclick="clearSearch()">清除</button>
+      </div>
+      <!-- 更多筛选按钮（占位，下拉通过JS append到body渲染） -->
+      <div class="filter-item filter-more-wrapper">
+        <button class="btn btn-default btn-sm filter-more-btn" id="filterMoreBtn" onclick="toggleMoreFilters(event)">
+          更多筛选 <span class="filter-more-arrow" id="filterMoreArrow">▼</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- 更多筛选下拉面板（JS动态append到body，避免iframe overflow截断） -->
+    <div class="filter-more-dropdown" id="filterMoreDropdown" style="display:none;">
+      <div class="filter-item">
         <label>标注状态：</label>
         <select class="form-select" id="filterAnnotateStatus" onchange="handleFilterChange()">
           <option value="">全部</option>
@@ -1386,12 +1426,6 @@
         </select>
       </div>
       <div class="filter-item">
-        <label>实例：</label>
-        <select class="form-select" id="filterInstance">
-          <option value="">全部</option>
-        </select>
-      </div>
-      <div class="filter-item">
         <label>标注人：</label>
         <select class="form-select" id="filterAnnotator">
           <option value="">全部</option>
@@ -1402,12 +1436,6 @@
         <select class="form-select" id="filterCategory">
           <option value="">全部</option>
         </select>
-      </div>
-      <div class="filter-item">
-        <label>商品ID：</label>
-        <input type="text" class="form-input" id="searchProductId" placeholder="请输入商品ID">
-        <button class="btn btn-primary btn-sm" onclick="handleSearch()">查询</button>
-        <button class="btn btn-default btn-sm" onclick="clearSearch()">清除</button>
       </div>
     </div>
 
@@ -1740,12 +1768,12 @@
       allRules.forEach(r => { ruleSel.innerHTML += '<option value="' + r + '">' + r + '</option>'; });
       ruleSel.value = curRule;
 
-      // 填充实例下拉
+      // 填充实例下拉（使用内置中文映射）
       const instSel = document.getElementById('filterInstance');
       const curInst = instSel.value;
       instSel.innerHTML = '<option value="">全部</option>';
       allInstances.forEach(i => {
-        const name = window.APP_CONFIG ? window.APP_CONFIG.getInstanceName(i) : i;
+        const name = getInstName(i);
         instSel.innerHTML += '<option value="' + i + '">' + name + '</option>';
       });
       instSel.value = curInst;
@@ -1774,10 +1802,10 @@
       // 规则下拉
       ruleSel.innerHTML = '<option value="">全部</option>';
       (allRules || []).forEach(function(r) { ruleSel.innerHTML += '<option value="' + r + '">' + r + '</option>'; });
-      // 实例下拉
+      // 实例下拉（使用内置中文映射）
       instSel.innerHTML = '<option value="">全部</option>';
       (allInstances || []).forEach(function(i) {
-        var name = window.APP_CONFIG ? window.APP_CONFIG.getInstanceName(i) : i;
+        var name = getInstName(i);
         instSel.innerHTML += '<option value="' + i + '">' + name + '</option>';
       });
     }
@@ -1792,7 +1820,8 @@
     let tgAll = [];       // 本次加载的全量任务组数据
     let tgFilterRule = '';
     let tgFilterInstance = '';
-    let tgFilterDate = '';
+    let tgFilterStatus = '';   // pending / in_progress / completed
+    let tgFilterAssignee = ''; // 分配人名称（admin_name）
 
     /** 切换到任务列表视图 */
     function switchToTaskGroupView() {
@@ -1824,18 +1853,38 @@
           if (!res || !res.success) { showToast('加载任务列表失败', true); return; }
           tgAll = res.items || [];
           tgTotal = res.total || 0;
-          renderTaskGroupTable(tgAll);
-          renderTaskGroupStats(tgAll);
+
+          // ---- 客户端叠加过滤：状态 + 分配人 ----
+          var filtered = tgAll;
+          // 状态过滤（pending / in_progress / completed）
+          if (tgFilterStatus) {
+            filtered = filtered.filter(function(g) {
+              if (tgFilterStatus === 'pending') return (g.pending_count || 0) > 0;
+              if (tgFilterStatus === 'completed') return (g.pending_count || 0) === 0;
+              if (tgFilterStatus === 'in_progress') return (g.pending_count || 0) > 0 && (g.annotated_count || 0) > 0;
+              return true;
+            });
+          }
+          // 分配人过滤
+          if (tgFilterAssignee) {
+            filtered = filtered.filter(function(g) { return g.admin_name === tgFilterAssignee; });
+          }
+
+          renderTaskGroupTable(filtered);
+          renderTaskGroupStats(filtered);
           renderTaskGroupPagination();
-          // v2.0：从当前页数据中提取唯一的规则名和实例编码，填充任务组筛选下拉
+          // v2.0：从当前页数据中提取唯一的规则名、实例编码、分配人，填充任务组筛选下拉
           var ruleSet = {};
           var instSet = {};
+          var assigneeSet = {};
           (tgAll || []).forEach(function(g) {
             if (g.rule_name) ruleSet[g.rule_name] = true;
             if (g.instance_code) instSet[g.instance_code] = true;
+            if (g.admin_name) assigneeSet[g.admin_name] = true;
           });
           var ruleSel = document.getElementById('tgFilterRule');
           var instSel = document.getElementById('tgFilterInstance');
+          var assigneeSel = document.getElementById('tgFilterAssignee');
           if (ruleSel) {
             var curRule = ruleSel.value;
             ruleSel.innerHTML = '<option value="">全部</option>';
@@ -1848,10 +1897,18 @@
             var curInst = instSel.value;
             instSel.innerHTML = '<option value="">全部</option>';
             Object.keys(instSet).sort().forEach(function(i) {
-              var name = window.APP_CONFIG ? window.APP_CONFIG.getInstanceName(i) : i;
+              var name = getInstName(i);
               instSel.innerHTML += '<option value="' + i + '">' + name + '</option>';
             });
             instSel.value = curInst;
+          }
+          if (assigneeSel) {
+            var curAssignee = assigneeSel.value;
+            assigneeSel.innerHTML = '<option value="">全部</option>';
+            Object.keys(assigneeSet).sort().forEach(function(a) {
+              assigneeSel.innerHTML += '<option value="' + a + '">' + a + '</option>';
+            });
+            assigneeSel.value = curAssignee;
           }
           // 默认显示任务列表视图
           switchToTaskGroupView();
@@ -1948,8 +2005,62 @@
     function handleTaskGroupFilter() {
       tgFilterRule = (document.getElementById('tgFilterRule') || {}).value || '';
       tgFilterInstance = (document.getElementById('tgFilterInstance') || {}).value || '';
+      tgFilterStatus = (document.getElementById('tgFilterStatus') || {}).value || '';
+      tgFilterAssignee = (document.getElementById('tgFilterAssignee') || {}).value || '';
       loadTaskGroups(1);
     }
+
+    /** 任务组更多筛选展开/收起（Portal模式） */
+    function toggleTgMoreFilters(e) {
+      if (e) e.stopPropagation();
+      const dropdown = document.getElementById('tgFilterMoreDropdown');
+      const arrow = document.getElementById('tgFilterMoreArrow');
+      const btn = document.getElementById('tgFilterMoreBtn');
+      const isInBody = dropdown && dropdown.parentElement === document.body;
+      if (!isInBody && dropdown) {
+        // 坐标修正：getBoundingClientRect 相对于 iframe 视口，
+        // position:fixed 相对于浏览器主窗口，需加上 iframe 自身的偏移量
+        const btnRect = btn.getBoundingClientRect();
+        const iframeRect = window.frameElement ? window.frameElement.getBoundingClientRect() : { left: 0, top: 0 };
+        const dropdownWidth = 480;
+        let left = iframeRect.left + btnRect.left;
+        // 避免超出右边界
+        if (left + dropdownWidth > window.innerWidth - 8) {
+          left = window.innerWidth - dropdownWidth - 8;
+        }
+        if (left < 8) left = 8;
+        dropdown.style.top = (iframeRect.top + btnRect.bottom + 6) + 'px';
+        dropdown.style.left = left + 'px';
+        dropdown.style.right = 'auto';
+        if (dropdown.style.display === 'none') {
+          dropdown.style.display = 'flex';
+          document.body.appendChild(dropdown);
+          if (arrow) arrow.textContent = '▲';
+        }
+      } else if (dropdown) {
+        dropdown.style.display = 'none';
+        if (dropdown.parentElement === document.body) {
+          document.body.removeChild(dropdown);
+        }
+        if (arrow) arrow.textContent = '▼';
+      }
+    }
+
+    /** 点击任务组更多筛选区域外部时收起 */
+    document.addEventListener('click', function(e) {
+      const dropdown = document.getElementById('tgFilterMoreDropdown');
+      const btn = document.getElementById('tgFilterMoreBtn');
+      if (dropdown && dropdown.parentElement === document.body) {
+        if (!dropdown.contains(e.target) && !btn.contains(e.target)) {
+          dropdown.style.display = 'none';
+          if (dropdown.parentElement === document.body) {
+            document.body.removeChild(dropdown);
+          }
+          const arrow = document.getElementById('tgFilterMoreArrow');
+          if (arrow) arrow.textContent = '▼';
+        }
+      }
+    });
 
     /** 填充标签下拉（弹窗内） */
     function populateLabelOptions() {
@@ -1986,6 +2097,73 @@
     // =====================================================================
     // 筛选
     // =====================================================================
+
+    /** 实例中文名称映射（兜底方案，避免依赖 APP_CONFIG 时机） */
+    var INSTANCE_NAMES_MAP = {
+      'ZJWC': '浙江网超',
+      'HWCS': '浙江乐采网超',
+      'HNLCWC': '湖南乐采网超',
+      'YNLCY': '云南乐采云',
+      'GXLCY': '广西乐采云'
+    };
+
+    /** 获取实例中文名称 */
+    function getInstName(code) {
+      if (INSTANCE_NAMES_MAP && INSTANCE_NAMES_MAP[code]) return INSTANCE_NAMES_MAP[code];
+      if (window.APP_CONFIG && window.APP_CONFIG.getInstanceName) return window.APP_CONFIG.getInstanceName(code);
+      return code || '';
+    }
+
+    /** 更多筛选展开/收起（Portal模式：append到body渲染，避免iframe截断） */
+    function toggleMoreFilters(e) {
+      if (e) e.stopPropagation();
+      const dropdown = document.getElementById('filterMoreDropdown');
+      const arrow = document.getElementById('filterMoreArrow');
+      const btn = document.getElementById('filterMoreBtn');
+      const isInBody = dropdown.parentElement === document.body;
+
+      if (!isInBody) {
+        // 展开：先设置坐标，再 append 到 body，最后显示
+        // 坐标修正：getBoundingClientRect 相对于 iframe 视口，position:fixed 相对于主窗口
+        const btnRect = btn.getBoundingClientRect();
+        const iframeRect = window.frameElement ? window.frameElement.getBoundingClientRect() : { left: 0, top: 0 };
+        const dropdownWidth = 580;
+        let left = iframeRect.left + btnRect.left;
+        if (left + dropdownWidth > window.innerWidth - 8) {
+          left = window.innerWidth - dropdownWidth - 8;
+        }
+        if (left < 8) left = 8;
+        dropdown.style.top = (iframeRect.top + btnRect.bottom + 6) + 'px';
+        dropdown.style.left = left + 'px';
+        dropdown.style.right = 'auto';
+        document.body.appendChild(dropdown);
+        dropdown.style.display = 'flex';
+        arrow.textContent = '▲';
+      } else {
+        // 收起：移除出 body，恢复 display:none
+        dropdown.style.display = 'none';
+        if (dropdown.parentElement === document.body) {
+          document.body.removeChild(dropdown);
+        }
+        arrow.textContent = '▼';
+      }
+    }
+
+    /** 点击更多筛选区域外部时收起 */
+    document.addEventListener('click', function(e) {
+      const dropdown = document.getElementById('filterMoreDropdown');
+      const btn = document.getElementById('filterMoreBtn');
+      if (dropdown.parentElement === document.body) {
+        if (!dropdown.contains(e.target) && !btn.contains(e.target)) {
+          dropdown.style.display = 'none';
+          if (dropdown.parentElement === document.body) {
+            document.body.removeChild(dropdown);
+          }
+          const arrow = document.getElementById('filterMoreArrow');
+          if (arrow) arrow.textContent = '▼';
+        }
+      }
+    });
 
     function handleFilterChange() {
       // 叠加 client-side 过滤（在 apiData 基础上逐步过滤）
@@ -2040,7 +2218,7 @@
         const annClass = getAnnotationClass(item.check_result);
         const aiRes    = item.ai_result || '-';
         const modelBRes = mapModelBResult(item.modelb_result);
-        const instName = window.APP_CONFIG ? window.APP_CONFIG.getInstanceName(item.instance_code) : (item.instance_code || '-');
+        const instName = getInstName(item.instance_code);
         const btnText  = item.check_result ? '查看' : '标注';
         const btnClass = item.check_result ? 'btn-default' : 'btn-primary';
 
@@ -2228,11 +2406,20 @@
       document.getElementById('annotProdTitle').textContent = item.product_name || '-';
       document.getElementById('annotCategory').textContent = item.category || '-';
       document.getElementById('annotShop').textContent = item.instance_code
-        ? (window.APP_CONFIG ? window.APP_CONFIG.getInstanceName(item.instance_code) : item.instance_code) : '-';
+        ? getInstName(item.instance_code) : '-';
       document.getElementById('annotProductId').textContent = item.product_id || '-';
       document.getElementById('annotBatchNo').textContent = item.dispatch_batch_no
         || new URLSearchParams(window.location.search).get('dispatch_batch_no') || '-';
       document.getElementById('annotAnnotator').textContent = item.annotator || '-';
+
+      // 商品链接
+      var linkEl = document.getElementById('annotProductLink');
+      if (item.product_link) {
+        linkEl.href = item.product_link;
+        linkEl.style.display = 'inline';
+      } else {
+        linkEl.style.display = 'none';
+      }
 
       // 模型A
       var aiRes = item.ai_result || '-';
@@ -2259,45 +2446,45 @@
 
     function loadAnnotImages(item) {
       annotImageList = [];
-      document.getElementById('annotImageGrid').innerHTML = '';
-      switchAnnotTab('main');
+      var grid = document.getElementById('annotImageGrid');
+      grid.innerHTML = '';
 
-      var imgs = [
-        { key: 'main_image', tab: 'main', label: '主图' },
-        { key: 'sku_image', tab: 'sku', label: 'SKU图' },
-        { key: 'detail_image', tab: 'detail', label: '详情图' }
+      // 合并所有图片来源：主图、SKU图、详情图
+      var sources = [
+        { key: 'main_image',   label: '主图' },
+        { key: 'sku_image',    label: 'SKU图' },
+        { key: 'detail_image', label: '详情图' }
       ];
-      imgs.forEach(function(img) {
-        if (item[img.key]) {
-          annotImageList.push({ src: item[img.key], label: img.label, tab: img.tab });
+
+      sources.forEach(function(src) {
+        if (item[src.key]) {
+          // 逗号分隔拆分成多个 URL，并过滤空值
+          var urls = item[src.key].split(',').map(function(u) { return u.trim(); }).filter(Boolean);
+          urls.forEach(function(url) {
+            annotImageList.push({ src: url, label: src.label });
+          });
         }
       });
 
-      // 默认显示主图
-      switchAnnotTab('main');
+      // 渲染所有图片到网格（不再区分 Tab）
+      renderAnnotImageGrid();
     }
 
-    function switchAnnotTab(tab) {
-      // 更新 tab 样式
-      ['main','sku','detail'].forEach(function(t) {
-        document.getElementById('annotTab' + t.charAt(0).toUpperCase() + t.slice(1)).classList.toggle('active', t === tab);
-      });
-      // 筛选当前 tab 图片
-      var filtered = annotImageList.filter(function(img) { return img.tab === tab; });
+    function renderAnnotImageGrid() {
       var grid = document.getElementById('annotImageGrid');
-      if (filtered.length === 0) {
-        grid.innerHTML = '<div class="annot-no-img">该分类暂无图片</div>';
+      grid.innerHTML = '';
+      if (annotImageList.length === 0) {
+        grid.innerHTML = '<div class="annot-no-img">暂无图片</div>';
         return;
       }
-      var html = '';
-      filtered.forEach(function(img, i) {
-        var realIdx = annotImageList.indexOf(img);
-        html += '<div class="annot-img-card" onclick="openAnnotImagePreview(' + realIdx + ')">' +
-          '<div class="annot-img-card-label">' + img.label + '</div>' +
-          '<img src="' + img.src + '" alt="' + img.label + '">' +
-        '</div>';
+      annotImageList.forEach(function(img, index) {
+        var div = document.createElement('div');
+        div.className = 'annot-prod-img-item';
+        div.innerHTML = '<img src="' + img.src + '" alt="' + img.label + '" ' +
+                        'onerror="this.parentElement.style.display=\'none\'" ' +
+                        'onclick="openAnnotImagePreview(' + index + ')">';
+        grid.appendChild(div);
       });
-      grid.innerHTML = html;
     }
 
     // =====================================================================

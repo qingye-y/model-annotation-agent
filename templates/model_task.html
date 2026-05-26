@@ -8,7 +8,7 @@
   <script src="/static/config.js"></script>
   <style>
     body { background: var(--bg); min-height: 100vh; }
-    .page-container { padding: 20px 24px; max-width: 1400px; }
+    .page-container { padding: 20px 24px; max-width: 100%; }
     .page-header { margin-bottom: 20px; }
     .page-title { font-size: 20px; font-weight: 600; color: var(--text-primary); }
     .page-subtitle { font-size: 14px; color: var(--text-secondary); margin-top: 4px; }
@@ -44,15 +44,16 @@
     .status-dot.running { animation: pulse 2s infinite; }
     @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
 
-    .card { background: var(--white); border-radius: var(--radius-lg); box-shadow: var(--shadow); overflow: visible; }
-    .table-wrapper { overflow-x: auto; }
-    /* 批次表格：block 布局使 thead sticky + tbody 滚动成为可能 */
-    .batch-table { width: 100%; border-collapse: collapse; font-size: 13px; display: block; overflow: visible; max-height: none; }
-    .batch-table thead { display: table; width: 100%; table-layout: fixed; position: sticky; top: 0; z-index: 1; }
-    .batch-table thead th { background: #fafbfc; color: var(--text-secondary); font-weight: 500; text-align: left; padding: 12px 14px; border-bottom: 1px solid var(--border); white-space: nowrap; }
-    .batch-table tbody { display: block; width: 100%; }
-    .batch-table tbody tr { display: table; width: 100%; table-layout: fixed; }
+    .card { background: var(--white); border-radius: var(--radius-lg); box-shadow: var(--shadow); overflow: visible; width: 100%; }
+    .table-wrapper { overflow-x: auto; width: 100%; }
+    /* 批次表格：标准 table 布局，列宽随容器自适应 */
+    .batch-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .batch-table thead { display: table-header-group; }
+    .batch-table thead th { background: #fafbfc; color: var(--text-secondary); font-weight: 500; text-align: left; padding: 12px 14px; border-bottom: 1px solid var(--border); white-space: nowrap; position: sticky; top: 0; z-index: 1; }
+    .batch-table tbody { display: table-row-group; }
+    .batch-table tbody tr { display: table-row; }
     .batch-table tbody td { padding: 10px 12px; border-bottom: 1px solid var(--border-light); vertical-align: middle; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .batch-table tbody td.cell-actions { overflow: visible; }
     .batch-table tbody tr:hover { background: #f8f9ff; }
     /* 表格文本省略 */
     .batch-table .cell-truncate { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 0; }
@@ -94,31 +95,6 @@
     .pagination-item.active { background: var(--primary); color: #fff; border-color: var(--primary); }
     .pagination-info { font-size: 13px; color: var(--text-secondary); }
 
-    .detail-panel { max-height: 0; overflow: hidden; transition: max-height 0.4s ease; }
-    .detail-panel.expanded { max-height: 3000px; }
-    .detail-content { padding: 20px; background: #fafbfc; border-top: 1px solid var(--border); }
-    .detail-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
-    .detail-title { font-size: 18px; font-weight: 600; color: var(--text-primary); }
-    .btn-close-detail { background: none; border: none; font-size: 18px; color: var(--text-muted); cursor: pointer; padding: 4px; }
-    .btn-close-detail:hover { color: var(--text-primary); }
-
-    .diff-stats { display: grid; grid-template-columns: repeat(6, 1fr); gap: 12px; margin-bottom: 16px; }
-    .diff-stat { background: var(--white); padding: 14px; border-radius: var(--radius); border: 1px solid var(--border); text-align: center; }
-    .diff-stat-value { font-size: 22px; font-weight: 700; color: var(--text-primary); }
-    .diff-stat-label { font-size: 12px; color: var(--text-secondary); margin-top: 4px; }
-    .diff-stat.highlight .diff-stat-value { color: var(--danger); }
-
-    .detail-filter { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; padding: 12px 16px; background: var(--white); border-radius: var(--radius); border: 1px solid var(--border); margin-bottom: 12px; }
-    .detail-filter .filter-btn { padding: 5px 12px; font-size: 12px; background: var(--white); border: 1px solid var(--border); border-radius: var(--radius); cursor: pointer; }
-    .detail-filter .filter-btn.active { background: var(--primary); color: #fff; border-color: var(--primary); }
-
-    .diff-table { width: 100%; min-width: 1200px; border-collapse: collapse; font-size: 12px; }
-    .diff-table thead th { background: var(--white); color: var(--text-secondary); font-weight: 500; text-align: left; padding: 10px 12px; border: 1px solid var(--border); }
-    .diff-table tbody td { padding: 10px 12px; border: 1px solid var(--border); background: var(--white); }
-    .diff-table .task-badge { display: inline-flex; padding: 2px 8px; font-size: 11px; border-radius: 10px; }
-    .diff-table .task-badge.yes { background: var(--success-light); color: var(--success); }
-    .diff-table .task-badge.no { background: #f3f4f6; color: var(--text-muted); }
-    .diff-table .diff-type-col { font-weight: 500; }
 
     .action-buttons { display: flex; gap: 12px; margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border-light); }
     .btn-generate { padding: 10px 20px; font-size: 14px; background: var(--primary); color: #fff; border: none; border-radius: var(--radius); cursor: pointer; display: flex; align-items: center; gap: 6px; }
@@ -167,7 +143,6 @@
 
     @media (max-width: 768px) {
       .action-bar { flex-direction: column; }
-      .diff-stats { grid-template-columns: repeat(2, 1fr); }
       .extract-grid { grid-template-columns: 1fr; }
     }
 
@@ -238,24 +213,6 @@
     <div class="action-bar">
       <div class="action-left">
         <div class="instance-filter" id="instanceFilter"></div>
-        <div class="filter-item">
-          <label>状态</label>
-          <select class="form-select" id="filterStatus">
-            <option value="all">全部</option>
-            <option value="completed">已完成</option>
-            <option value="pending">待处理</option>
-            <option value="processing">进行中</option>
-            <option value="failed">失败</option>
-          </select>
-        </div>
-        <div class="filter-item">
-          <label>任务分配</label>
-          <select class="form-select" id="filterTaskGenerated">
-            <option value="all">全部</option>
-            <option value="true">已分配</option>
-            <option value="false">未分配</option>
-          </select>
-        </div>
         <!-- 周期按钮组 + 日期选择 -->
         <label style="margin-right:4px;">📅 日期</label>
         <div class="period-btn-group" id="periodBtnGroup" style="display:inline-flex;align-items:center;gap:2px;margin-right:4px;">
@@ -268,9 +225,27 @@
           <span style="color:var(--text-muted);margin:0 4px;">至</span>
           <input type="date" class="form-input" id="filterEndDate" style="width:130px;">
         </span>
-        <!-- 高级筛选项：默认隐藏，点击"更多筛选"展开 -->
+        <!-- 高级筛选项（v1.5：移入状态+任务分配，点击"更多筛选"展开） -->
         <button class="btn-custom" id="btnCustomFilter" onclick="toggleAdvancedFilter()" title="展开/收起更多筛选条件">▼ 更多筛选</button>
         <div class="advanced-filter-panel" id="advancedFilterPanel">
+          <div class="filter-item">
+            <label>AI审核结果</label>
+            <select class="form-select" id="filterStatus">
+              <option value="all">全部</option>
+              <option value="completed">已完成</option>
+              <option value="pending">待处理</option>
+              <option value="processing">进行中</option>
+              <option value="failed">失败</option>
+            </select>
+          </div>
+          <div class="filter-item">
+            <label>任务分配</label>
+            <select class="form-select" id="filterTaskGenerated">
+              <option value="all">全部</option>
+              <option value="true">已分配</option>
+              <option value="false">未分配</option>
+            </select>
+          </div>
           <div class="filter-item">
             <label>数据来源</label>
             <select class="form-select" id="filterSource">
@@ -321,7 +296,6 @@
       </div>
     </div>
 
-    <div class="detail-panel" id="detailPanel"><div class="detail-content" id="detailContent"></div></div>
   </div>
 
   <!-- 生成标注任务弹窗 v1.4 -->
@@ -616,18 +590,9 @@
     let availableInstances = [];  // 从系统配置动态获取
     let availableRules = [];  // 可用规则列表
     let instanceRuleMapping = {};  // 实例规则映射
-    let detailInstanceFilter = 'all';  // 明细筛选：实例
-    let detailTypeFilter = 'all';  // 明细筛选：差异类型
     let newBatchId = null;  // URL参数中的新批次ID
     let reviewPollingTimer = null;  // 互检轮询定时器
     let reviewPollingBatchId = null;  // 当前轮询的批次ID
-
-    // 明细分页变量
-    let detailPage = 1;
-    let detailPerPage = 10;
-    let detailTotal = 0;
-    let detailPages = 0;
-    let currentBatchSummary = null;  // 统计信息（来自后端summary字段）
 
     // ========== 表格高度随实际渲染行数联动 ==========
     // 思路：CSS max-height: 70vh 已限制最大高度；此处仅在表格过宽时触发 wrapper 水平滚动
@@ -1114,7 +1079,7 @@
         const source = batch.source || 'fetch';
         const sourceTag = source === 'upload' ? '<span class="status-tag" style="background: #d4edda; color: #28a745;">文件上传</span>' : '<span class="status-tag" style="background: #cce5ff; color: #004085;">线上获取</span>';
         const execDate = batch.execDate || batch.fetch_time || '';
-        return `<tr data-batch-id="${batch.id}" onclick="showDetail('${batch.id}')" style="cursor:pointer;"><td>${batch.id}</td><td>${sourceTag}</td><td>${execDate}</td><td>${batch.dataCount.toLocaleString()}</td><td>${batch.diffCount.toLocaleString()}</td><td><span class="${diffRateClass}">${batch.diffRate.toFixed(1)}%</span></td><td>${batch.instanceCount}</td><td>${statusTag}</td></tr>`;
+        return `<tr data-batch-id="${batch.id}"><td>${batch.id}</td><td>${sourceTag}</td><td>${execDate}</td><td>${batch.dataCount.toLocaleString()}</td><td>${batch.diffCount.toLocaleString()}</td><td><span class="${diffRateClass}">${batch.diffRate.toFixed(1)}%</span></td><td>${batch.instanceCount}</td><td>${statusTag}</td></tr>`;
       }).join('');
       syncTableHeight();
     }
@@ -1170,11 +1135,11 @@
           if (filterReviewStatus === 'running' && batchReviewStatus !== '互检中') return false;
           if (filterReviewStatus === 'completed' && batchReviewStatus !== '已互检' && batchReviewStatus !== '互检失败') return false;
         }
-        // v1.4: 任务分配状态筛选
+        // v1.4: 任务分配状态筛选（已分配 = 互检完成 + 任务已生成）
         var filterTaskGenerated = document.getElementById('filterTaskGenerated').value;
         if (filterTaskGenerated !== 'all') {
           var isGenerated = batch.task_generated === true || batch.task_generated === 'true';
-          if (filterTaskGenerated === 'true' && !isGenerated) return false;
+          if (filterTaskGenerated === 'true' && (!isGenerated || batchReviewStatus !== '已互检')) return false;
           if (filterTaskGenerated === 'false' && isGenerated) return false;
         }
         // 规则筛选：兼容 mapping 值有无 .md 后缀的两种情况
@@ -1206,362 +1171,6 @@
       loadBatches();
     }
 
-    function showDetail(batchId) {
-      const batch = allBatches.find(b => b.id === batchId);
-      if (!batch) return;
-      expandedBatchId = batchId;
-      
-      // 重置分页参数
-      detailPage = 1;
-      detailPerPage = 10;
-      
-      // 显示加载中
-      const panel = document.getElementById('detailPanel');
-      const content = document.getElementById('detailContent');
-      panel.classList.add('expanded');
-      content.innerHTML = '<div style="padding:40px;text-align:center;color:var(--text-muted);">加载中...</div>';
-      
-      // 从 API 加载真实数据（带分页参数）
-      fetch('/api/task-batches/' + batchId + '/items?page=' + detailPage + '&per_page=' + detailPerPage)
-        .then(function(res) { return res.json(); })
-        .then(function(data) {
-          // 保存分页信息
-          detailTotal = data.total || 0;
-          detailPages = data.pages || Math.ceil((data.total || 0) / detailPerPage);
-          
-          var items = data.items || [];
-          currentBatchDiffs = items.map(function(item) {
-            var diffType = 'A合规B合规';
-            var modelA = item.ai_result || '合规';
-            var modelB = item.modelb_result;
-            if (modelB) {
-              if (modelA === '合规' && modelB === '违规') diffType = 'A合规B违规';
-              else if (modelA === '违规' && modelB === '合规') diffType = 'A违规B合规';
-              else if (modelA === '合规' && modelB === '合规') diffType = 'A合规B合规';
-              else if (modelA === '违规' && modelB === '违规') diffType = 'A违规B违规';
-            } else if (!item.modelb_reviewed) {
-              diffType = '';
-            }
-            return {
-              id: item.id, productId: item.product_id, productName: item.product_name,
-              category: item.category, createdDate: item.created_date || '-', modelA: modelA, modelB: modelB || '-',
-              modelBReason: item.modelb_reason || '', modelBDetail: item.modelb_detail || '', diffType: diffType,
-              modelBConsistent: item.modelb_consistent,
-              instance: item.instance_code, instanceId: item.instance_code,
-              aiRejectReason: item.ai_reject_reason || '', aiExplain: item.ai_explain || '', shopName: item.shop_name || '-'
-            };
-          });
-          currentBatchInstances = [];
-          var instSet = new Set();
-          items.forEach(function(item) { if (item.instance_code) instSet.add(item.instance_code); });
-          currentBatchInstances = Array.from(instSet);
-          
-          // 保存 summary 信息用于统计卡片
-          currentBatchSummary = data.summary || null;
-          
-          renderDetailRealData(batchId, progressCallback);
-        })
-        .catch(function() {
-          currentBatchDiffs = [];
-          currentBatchInstances = [];
-          currentBatchSummary = null;
-          renderDetailRealData(batchId, function() {});
-        });
-    }
-    
-    function progressCallback(progress) {
-      // 回调用于渲染进度
-    }
-    
-    function renderDetailRealData(batchId, progressCallback) {
-      // 优先使用后端返回的全量 summary，否则使用分页数据计算（兼容）
-      var stats = { 'A合规B违规': 0, 'A违规B合规': 0, 'A合规B合规': 0, 'A违规B违规': 0, '未互检': 0, task: 0 };
-      if (currentBatchSummary && currentBatchSummary.modelb) {
-        stats = currentBatchSummary.modelb;
-      } else {
-        currentBatchDiffs.forEach(function(d) { stats[d.diffType] = (stats[d.diffType] || 0) + 1; if (d.taskGenerated) stats.task++; });
-      }
-      getModelBProgress(batchId, function(progress) {
-        var modelName = progress.model_name || 'Mock';
-        var promptInfo = progress.prompt_info || '通用默认';
-        var progressInfo = '';
-        if (progress.status === 'running' || progress.reviewed < progress.total) {
-          progressInfo = '<div style="color:var(--primary);font-size:13px;margin-top:8px;">互检进度: ' + progress.reviewed + '/' + progress.total + '</div>';
-        }
-        
-        // 构建分页器 HTML - 按规则显示
-        var paginationHtml = '';
-        if (detailTotal >= 0) {
-          paginationHtml = '<div class="detail-pagination" style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-top:1px solid var(--border-light);background:#fafbfc;font-size:13px;">' +
-            '<div style="display:flex;align-items:center;gap:8px;color:var(--text-secondary);">' +
-              '<span>每页</span>' +
-              '<select class="form-select" style="padding:4px 8px;font-size:13px;border:1px solid var(--border);border-radius:4px;" onchange="changeDetailPageSize(this.value)">' +
-                '<option value="10" ' + (detailPerPage === 10 ? 'selected' : '') + '>10</option>' +
-                '<option value="20" ' + (detailPerPage === 20 ? 'selected' : '') + '>20</option>' +
-                '<option value="50" ' + (detailPerPage === 50 ? 'selected' : '') + '>50</option>' +
-                '<option value="100" ' + (detailPerPage === 100 ? 'selected' : '') + '>100</option>' +
-              '</select>' +
-              '<span>条</span>' +
-            '</div>' +
-            '<div style="display:flex;align-items:center;gap:4px;">' +
-              // 上一页按钮
-              '<button class="pagination-item" ' + (detailPage <= 1 ? 'disabled style="opacity:0.5;pointer-events:none;"' : 'onclick="gotoDetailPage(' + (detailPage - 1) + ')"') + ' style="min-width:32px;height:32px;display:flex;align-items:center;justify-content:center;border:1px solid var(--border);border-radius:4px;cursor:pointer;background:#fff;">‹</button>';
-          
-          // 页码显示逻辑
-          var pageHtml = '';
-          if (detailPages <= 5) {
-            // 总页数<=5，显示全部
-            for (var p = 1; p <= detailPages; p++) {
-              pageHtml += '<button class="pagination-item ' + (p === detailPage ? 'active' : '') + '" onclick="gotoDetailPage(' + p + ')" style="min-width:32px;height:32px;display:flex;align-items:center;justify-content:center;border:1px solid var(--border);border-radius:4px;cursor:pointer;background:' + (p === detailPage ? 'var(--primary);color:#fff;' : '#fff;') + '">' + p + '</button>';
-            }
-          } else {
-            // 总页数>5，显示：首页、当前页前后、尾页，用...连接
-            var pagesToShow = [];
-            
-            // 始终显示第1页
-            pagesToShow.push(1);
-            
-            // 当前页前面的页码
-            if (detailPage > 2) {
-              if (detailPage > 3) {
-                pagesToShow.push('...');
-              }
-              pagesToShow.push(detailPage - 1);
-            }
-            
-            // 当前页
-            if (detailPage !== 1 && detailPage !== detailPages) {
-              pagesToShow.push(detailPage);
-            }
-            
-            // 当前页后面的页码
-            if (detailPage < detailPages - 1) {
-              pagesToShow.push(detailPage + 1);
-              if (detailPage < detailPages - 2) {
-                pagesToShow.push('...');
-              }
-            }
-            
-            // 始终显示最后一页
-            if (detailPages > 1) {
-              pagesToShow.push(detailPages);
-            }
-            
-            // 渲染页码按钮
-            for (var i = 0; i < pagesToShow.length; i++) {
-              var p = pagesToShow[i];
-              if (p === '...') {
-                pageHtml += '<span style="padding:0 4px;color:var(--text-muted);">...</span>';
-              } else {
-                pageHtml += '<button class="pagination-item ' + (p === detailPage ? 'active' : '') + '" onclick="gotoDetailPage(' + p + ')" style="min-width:32px;height:32px;display:flex;align-items:center;justify-content:center;border:1px solid var(--border);border-radius:4px;cursor:pointer;background:' + (p === detailPage ? 'var(--primary);color:#fff;' : '#fff;') + '">' + p + '</button>';
-              }
-            }
-          }
-          
-          paginationHtml += pageHtml;
-          
-          paginationHtml += '<button class="pagination-item" ' + (detailPage >= detailPages ? 'disabled style="opacity:0.5;pointer-events:none;"' : 'onclick="gotoDetailPage(' + (detailPage + 1) + ')"') + ' style="min-width:32px;height:32px;display:flex;align-items:center;justify-content:center;border:1px solid var(--border);border-radius:4px;cursor:pointer;background:#fff;">›</button>' +
-            '</div>' +
-            '<div style="color:var(--text-secondary);">' +
-              '共 ' + detailTotal + ' 条，第 ' + detailPage + '/' + detailPages + ' 页' +
-            '</div>' +
-          '</div>';
-        }
-        document.getElementById('detailContent').innerHTML = '<div class="detail-header"><span class="detail-title">批次 ' + batchId + ' 差异明细</span><button class="btn-close-detail" onclick="closeDetail()">X</button></div>' + '<div class="diff-meta" style="display:flex;gap:20px;margin-bottom:16px;padding:12px;background:#f9fafb;border-radius:8px;font-size:13px;"><div><strong>检查模型：</strong>' + modelName + '</div><div><strong>使用提示词：</strong>' + promptInfo + '</div></div>' + progressInfo + '<div class="diff-stats"><div class="diff-stat"><div class="diff-stat-value">' + (stats['A合规B违规'] + stats['A违规B合规']) + '</div><div class="diff-stat-label">不一致总数</div></div><div class="diff-stat highlight"><div class="diff-stat-value">' + stats['A合规B违规'] + '</div><div class="diff-stat-label">A合规B违规</div></div><div class="diff-stat highlight"><div class="diff-stat-value">' + stats['A违规B合规'] + '</div><div class="diff-stat-label">A违规B合规</div></div><div class="diff-stat"><div class="diff-stat-value">' + stats['A合规B合规'] + '</div><div class="diff-stat-label">A合规B合规</div></div><div class="diff-stat"><div class="diff-stat-value">' + stats['A违规B违规'] + '</div><div class="diff-stat-label">A违规B违规</div></div><div class="diff-stat"><div class="diff-stat-value">' + stats['未互检'] + '</div><div class="diff-stat-label">未互检</div></div></div><div class="detail-filter"><span style="font-size:13px;color:var(--text-secondary)">实例筛选：</span><button class="filter-btn active" data-detail-instance="all" onclick="filterDetailInstance(\'all\')">全部</button>' + currentBatchInstances.map(function(instId) { return '<button class="filter-btn" data-detail-instance="' + instId + '" onclick="filterDetailInstance(\'' + instId + '\')">' + instId + '</button>'; }).join('') + '<span style="font-size:13px;color:var(--text-secondary);margin-left:16px">差异类型：</span><button class="filter-btn active" data-detail-type="all" onclick="filterDetailType(\'all\')">全部</button><button class="filter-btn" data-detail-type="A合规B违规" onclick="filterDetailType(\'A合规B违规\')">A合规B违规</button><button class="filter-btn" data-detail-type="A违规B合规" onclick="filterDetailType(\'A违规B合规\')">A违规B合规</button><button class="filter-btn" data-detail-type="A合规B合规" onclick="filterDetailType(\'A合规B合规\')">A合规B合规</button><button class="filter-btn" data-detail-type="A违规B违规" onclick="filterDetailType(\'A违规B违规\')">A违规B违规</button></div><table class="diff-table"><thead><tr><th style="min-width:120px;max-width:120px;">商品ID</th><th style="min-width:160px;max-width:160px;">商品名称</th><th>类目</th><th>AI审核结果</th><th>AI拒绝原因</th><th>模型B审核结果</th><th>模型B拒绝原因</th><th>差异类型</th><th>实例编码</th><th>所属规则</th><th>操作</th></tr></thead><tbody id="diffTableBody"></tbody></table>' + paginationHtml + '<div class="action-buttons"><button class="btn-generate" onclick="openGenerateModal(\'' + batchId + '\')">生成标注任务</button><button class="btn-export" onclick="exportDetail(\'' + batchId + '\')">导出明细</button></div>';
-        document.getElementById('detailPanel').classList.add('expanded');
-        updateDetailFilters();
-        if (progress.status === 'running') startProgressPolling(batchId);
-      });
-    }
-    
-    var progressPollingTimer = null;
-    function startProgressPolling(batchId) {
-      if (progressPollingTimer) clearInterval(progressPollingTimer);
-      progressPollingTimer = setInterval(function() {
-        getModelBProgress(batchId, function(progress) {
-          if (progress.status !== 'running') {
-            // 互检已停止（completed / aborted）：停止轮询，刷新面板 + 主表 badge
-            clearInterval(progressPollingTimer);
-            progressPollingTimer = null;
-            if (expandedBatchId === batchId) showDetail(batchId);
-            // 刷新主表批次列表，使 badge 状态同步（防止 detail 面板关闭时 badge 不更新）
-            loadBatches();
-          } else {
-            var el = document.querySelector('.diff-meta');
-            if (el && el.innerHTML.indexOf('互检进度') >= 0) {
-              el.innerHTML = el.innerHTML.replace(/互检进度: \d+\/\d+/, '互检进度: ' + progress.reviewed + '/' + progress.total);
-            }
-          }
-        });
-      }, 3000);
-    }
-    
-    function exportDetail(batchId) {
-      var csv = '商品ID,商品名称,类目,模型A结果,模型B结果,差异类型,实例\n';
-      currentBatchDiffs.forEach(function(d) { csv += d.productId + ',' + d.productName + ',' + d.category + ',' + d.modelA + ',' + d.modelB + ',' + d.diffType + ',' + d.instance + '\n'; });
-      var blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-      var link = document.createElement('a');
-      link.href = URL.createObjectURL(blob);
-      link.download = batchId + '_明细.csv';
-      link.click();
-    }
-
-    function closeDetail() { document.getElementById('detailPanel').classList.remove('expanded'); expandedBatchId = null; if (progressPollingTimer) clearInterval(progressPollingTimer); }
-
-    // 明细分页函数
-    function changeDetailPageSize(size) {
-      detailPerPage = parseInt(size);
-      detailPage = 1;
-      loadDetailPage();
-    }
-    
-    function gotoDetailPage(page) {
-      if (page < 1 || page > detailPages) return;
-      detailPage = page;
-      loadDetailPage();
-    }
-    
-    function loadDetailPage() {
-      if (!expandedBatchId) return;
-      fetch('/api/task-batches/' + expandedBatchId + '/items?page=' + detailPage + '&per_page=' + detailPerPage)
-        .then(function(res) { return res.json(); })
-        .then(function(data) {
-          detailTotal = data.total || 0;
-          detailPages = data.pages || Math.ceil((data.total || 0) / detailPerPage);
-          
-          var items = data.items || [];
-          currentBatchDiffs = items.map(function(item) {
-            var diffType = 'A合规B合规';
-            var modelA = item.ai_result || '合规';
-            var modelB = item.modelb_result;
-            if (modelB) {
-              if (modelA === '合规' && modelB === '违规') diffType = 'A合规B违规';
-              else if (modelA === '违规' && modelB === '合规') diffType = 'A违规B合规';
-              else if (modelA === '合规' && modelB === '合规') diffType = 'A合规B合规';
-              else if (modelA === '违规' && modelB === '违规') diffType = 'A违规B违规';
-            } else if (!item.modelb_reviewed) {
-              diffType = '';
-            }
-            return {
-              id: item.id, productId: item.product_id, productName: item.product_name,
-              category: item.category, createdDate: item.created_date || '-', modelA: modelA, modelB: modelB || '-',
-              modelBReason: item.modelb_reason || '', modelBDetail: item.modelb_detail || '', diffType: diffType,
-              modelBConsistent: item.modelb_consistent,
-              instance: item.instance_code, instanceId: item.instance_code,
-              aiRejectReason: item.ai_reject_reason || '', aiExplain: item.ai_explain || '', shopName: item.shop_name || '-'
-            };
-          });
-          
-          // 重新渲染表格和分页器
-          renderDetailRealData(expandedBatchId, function() {});
-        });
-    }
-
-    function filterDetailInstance(instanceId) { detailInstanceFilter = instanceId; updateDetailFilters(); }
-    function filterDetailType(type) { detailTypeFilter = type; updateDetailFilters(); }
-
-    function updateDetailFilters() {
-      document.querySelectorAll('.detail-filter .filter-btn').forEach(function(btn) { btn.classList.remove('active'); if (btn.dataset.detailInstance === detailInstanceFilter || btn.dataset.detailType === detailTypeFilter) btn.classList.add('active'); });
-      var filtered = currentBatchDiffs;
-      if (detailInstanceFilter !== 'all') filtered = filtered.filter(function(d) { return d.instanceId === detailInstanceFilter || d.instance === detailInstanceFilter; });
-      if (detailTypeFilter !== 'all') filtered = filtered.filter(function(d) { return d.diffType === detailTypeFilter; });
-      document.getElementById('diffTableBody').innerHTML = filtered.map(function(diff) {
-        var ruleName = instanceRuleMapping[diff.instance] || '';
-        var rowClass = (diff.diffType === 'A合规B违规' || diff.diffType === 'A违规B合规') ? 'style="background:#fee;background:var(--danger-light);"' : '';
-        var modelBResult = diff.modelB && diff.modelB !== '-' ? diff.modelB : '<span style="color:var(--text-muted);">-</span>';
-        var modelBClass = diff.modelB && diff.modelB !== diff.modelA ? 'style="color:var(--danger);font-weight:600;"' : 'style="color:var(--success);"';
-        
-        // 精炼模型B拒绝原因：优先使用简短reason字段
-        var modelBReasonFull = diff.modelBDetail || diff.modelBReason || '';
-        var modelBReasonShort = diff.modelBReason || '-';
-        if (modelBReasonShort !== '-' && modelBReasonShort.length > 20) {
-          modelBReasonShort = modelBReasonShort.substring(0, 20) + '...';
-        }
-        
-        // AI拒绝原因精简
-        var aiRejectReasonFull = diff.aiRejectReason || '-';
-        var aiRejectReasonShort = aiRejectReasonFull === '-' ? '-' : (aiRejectReasonFull.length > 15 ? aiRejectReasonFull.substring(0, 15) + '...' : aiRejectReasonFull);
-        
-        // 商品名称截断
-        var productNameFull = diff.productName || '-';
-        var productNameShort = productNameFull === '-' ? '-' : (productNameFull.length > 15 ? productNameFull.substring(0, 15) + '...' : productNameFull);
-        
-        // 详情弹窗内容
-        var detailContent = '<div style="padding:16px;max-width:600px;font-size:13px;line-height:1.8;max-height:70vh;overflow-y:auto;">' +
-          '<div style="margin-bottom:12px;"><strong>商品ID：</strong>' + diff.productId + '</div>' +
-          '<div style="margin-bottom:12px;"><strong>商品名称：</strong>' + (diff.productName || '-') + '</div>' +
-          '<div style="margin-bottom:12px;"><strong>商品链接：</strong>' + (diff.productUrl || diff.mainImage || '-') + '</div>' +
-          '<div style="margin-bottom:12px;"><strong>类目：</strong>' + (diff.category || '-') + '</div>' +
-          '<div style="margin-bottom:12px;"><strong>AI审核结果：</strong>' + diff.modelA + '</div>' +
-          '<div style="margin-bottom:12px;"><strong>AI拒绝原因：</strong>' + (diff.aiRejectReason || '-') + '</div>' +
-          '<div style="margin-bottom:12px;"><strong>AI拒绝解释：</strong>' + (diff.aiExplain || '-') + '</div>' +
-          '<div style="margin-bottom:12px;"><strong>模型B审核结果：</strong>' + diff.modelB + '</div>' +
-          '<div style="margin-bottom:12px;"><strong>模型B拒绝原因（简）：</strong>' + (diff.modelBReason || '-') + '</div>' +
-          '<div style="margin-bottom:12px;padding:12px;background:#f5f5f5;border-radius:8px;"><strong>模型B详细解释：</strong><br>' + (diff.modelBDetail || '无') + '</div>' +
-          '<div style="margin-bottom:12px;"><strong>差异类型：</strong>' + diff.diffType + '</div>' +
-          '<div style="margin-bottom:12px;"><strong>实例编码：</strong>' + diff.instance + '</div>' +
-          '<div style="margin-bottom:12px;"><strong>所属规则：</strong>' + (ruleName || '-') + '</div>' +
-          '<div style="margin-bottom:12px;"><strong>店铺名称：</strong>' + (diff.shopName || '-') + '</div>' +
-          '<div style="margin-bottom:12px;"><strong>创建日期：</strong>' + (diff.createdDate || '-') + '</div>' +
-        '</div>';
-        
-        // 简化表格：商品ID、商品名称、类目、AI审核结果、AI拒绝原因（简）、模型B审核结果、模型B拒绝原因（简）、差异类型、实例编码、所属规则、详情
-        return '<tr ' + rowClass + '>' +
-          '<td style="min-width:120px;max-width:120px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="' + diff.productId + '">' + diff.productId + '</td>' +
-          '<td style="min-width:160px;max-width:160px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="' + productNameFull + '">' + productNameShort + '</td>' +
-          '<td>' + (diff.category || '-') + '</td>' +
-          '<td>' + diff.modelA + '</td>' +
-          '<td title="' + aiRejectReasonFull + '">' + aiRejectReasonShort + '</td>' +
-          '<td><span ' + modelBClass + '>' + modelBResult + '</span></td>' +
-          '<td title="' + modelBReasonFull + '">' + modelBReasonShort + '</td>' +
-          '<td class="diff-type-col">' + diff.diffType + '</td>' +
-          '<td>' + diff.instance + '</td>' +
-          '<td>' + (ruleName ? ruleName : '<span class="text-muted">-</span>') + '</td>' +
-          '<td><button class="btn btn-sm" onclick="showDetailModal(\'' + diff.productId + '\', \'' + diff.instance + '\')">详情</button></td>' +
-        '</tr>';
-      }).join('');
-    }
-    
-    // ====== 详情弹窗 ======
-    window.showDetailModal = function(productId, instance) {
-      var diff = currentBatchDiffs.find(function(d) { return d.productId === productId && d.instance === instance; });
-      if (!diff) return;
-      
-      var ruleName = instanceRuleMapping[diff.instance] || '';
-      var content = '<div style="padding:16px;max-width:500px;font-size:13px;line-height:1.8;">' +
-        '<div style="margin-bottom:12px;"><strong>商品ID：</strong>' + diff.productId + '</div>' +
-        '<div style="margin-bottom:12px;"><strong>商品名称：</strong>' + (diff.productName || '-') + '</div>' +
-        '<div style="margin-bottom:12px;"><strong>类目：</strong>' + (diff.category || '-') + '</div>' +
-        '<div style="margin-bottom:12px;"><strong>AI审核结果：</strong>' + diff.modelA + '</div>' +
-        '<div style="margin-bottom:12px;"><strong>AI拒绝原因：</strong>' + (diff.aiRejectReason || '-') + '</div>' +
-        '<div style="margin-bottom:12px;"><strong>AI拒绝解释：</strong>' + (diff.aiExplain || '-') + '</div>' +
-        '<div style="margin-bottom:12px;"><strong>模型B审核结果：</strong>' + diff.modelB + '</div>' +
-        '<div style="margin-bottom:12px;"><strong>模型B拒绝原因：</strong>' + (diff.modelBReason || '-') + '</div>' +
-        '<div style="margin-bottom:12px;"><strong>差异类型：</strong>' + diff.diffType + '</div>' +
-        '<div style="margin-bottom:12px;"><strong>实例编码：</strong>' + diff.instance + '</div>' +
-        '<div style="margin-bottom:12px;"><strong>所属规则：</strong>' + (ruleName || '-') + '</div>' +
-        '<div style="margin-bottom:12px;"><strong>店铺名称：</strong>' + (diff.shopName || '-') + '</div>' +
-        '<div style="margin-bottom:12px;"><strong>创建日期：</strong>' + (diff.createdDate || '-') + '</div>' +
-      '</div>';
-      
-      var modal = document.createElement('div');
-      modal.id = 'detailModal';
-      modal.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:9999;display:flex;align-items:center;justify-content:center;';
-      modal.innerHTML = '<div style="background:#fff;border-radius:8px;max-width:600px;width:90%;max-height:80vh;overflow:auto;box-shadow:0 4px 20px rgba(0,0,0,0.2);">' +
-        '<div style="padding:16px 20px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;">' +
-          '<span style="font-weight:600;font-size:15px;">商品详情</span>' +
-          '<button onclick="closeDetailModal()" style="border:none;background:none;font-size:20px;cursor:pointer;">×</button>' +
-        '</div>' +
-        content +
-      '</div>';
-      document.body.appendChild(modal);
-    };
-    
-    window.closeDetailModal = function() {
-      var modal = document.getElementById('detailModal');
-      if (modal) modal.remove();
-    };
-    
     function closeAllMoreMenus() {
       document.querySelectorAll('.more-menu').forEach(function(menu) {
         menu.style.display = 'none';
@@ -2204,21 +1813,21 @@
             fetchTimeDisplay = fetchTimeParts[0].replace(/-/g, '') + '<br>' + fetchTimeParts[1];
           }
 
-          return '<tr data-batch-id="' + batch.id + '" onclick="showDetail(\'' + batch.id + '\')" style="cursor:pointer;">' +
-            '<td style="width:110px;white-space:normal;word-break:break-all;font-size:12px;line-height:1.3;"><a href="/batch-detail/' + batch.id + '" style="color:var(--primary);text-decoration:none;">' + batchIdDisplay + '</a></td>' +
-            '<td style="width:90px;text-align:center;">' + sourceTag + '</td>' +
-            '<td style="width:75px;text-align:center;white-space:nowrap;">' + envDisplay + '</td>' +
-            '<td style="width:80px;text-align:center;white-space:normal;font-size:12px;line-height:1.3;">' + instancesHtml + '</td>' +
-            '<td style="width:55px;text-align:center;white-space:nowrap;">' + (batch.samplePercent || 0) + '%</td>' +
-            '<td style="width:80px;text-align:center;white-space:nowrap;">' + (batch.originalTotal || 0).toLocaleString() + '</td>' +
-            '<td style="width:65px;text-align:center;white-space:nowrap;">' + (batch.originalCompliant || 0).toLocaleString() + '</td>' +
-            '<td style="width:65px;text-align:center;white-space:nowrap;">' + (batch.originalNonCompliant || 0).toLocaleString() + '</td>' +
-            '<td style="width:65px;text-align:center;white-space:nowrap;">' + (batch.dataCount || 0).toLocaleString() + '</td>' +
-            '<td style="width:90px;font-size:11px;white-space:normal;text-align:center;line-height:1.2;" title="' + (batch.dataDateRange || '') + '">' + dataDateDisplay + '</td>' +
-            '<td style="width:95px;font-size:11px;white-space:normal;text-align:center;line-height:1.2;">' + fetchTimeDisplay + '</td>' +
-            '<td style="width:90px;text-align:center;">' + statusTag + '</td>' +
-            '<td style="width:70px;text-align:center;white-space:nowrap;">' + reviewProgress + '</td>' +
-          '<td style="width:90px;white-space:nowrap;text-align:center;vertical-align:middle;">' +
+          return '<tr data-batch-id="' + batch.id + '">' +
+            '<td style="min-width:110px;white-space:normal;word-break:break-all;font-size:12px;line-height:1.3;"><a href="/batch-detail/' + batch.id + '" style="color:var(--primary);text-decoration:none;">' + batchIdDisplay + '</a></td>' +
+            '<td style="min-width:90px;text-align:center;">' + sourceTag + '</td>' +
+            '<td style="min-width:75px;text-align:center;white-space:nowrap;">' + envDisplay + '</td>' +
+            '<td style="min-width:80px;text-align:center;white-space:normal;font-size:12px;line-height:1.3;">' + instancesHtml + '</td>' +
+            '<td style="min-width:55px;text-align:center;white-space:nowrap;">' + (batch.samplePercent || 0) + '%</td>' +
+            '<td style="min-width:80px;text-align:center;white-space:nowrap;">' + (batch.originalTotal || 0).toLocaleString() + '</td>' +
+            '<td style="min-width:65px;text-align:center;white-space:nowrap;">' + (batch.originalCompliant || 0).toLocaleString() + '</td>' +
+            '<td style="min-width:65px;text-align:center;white-space:nowrap;">' + (batch.originalNonCompliant || 0).toLocaleString() + '</td>' +
+            '<td style="min-width:65px;text-align:center;white-space:nowrap;">' + (batch.dataCount || 0).toLocaleString() + '</td>' +
+            '<td style="min-width:90px;font-size:11px;white-space:normal;text-align:center;line-height:1.2;" title="' + (batch.dataDateRange || '') + '">' + dataDateDisplay + '</td>' +
+            '<td style="min-width:95px;font-size:11px;white-space:normal;text-align:center;line-height:1.2;">' + fetchTimeDisplay + '</td>' +
+            '<td style="min-width:90px;text-align:center;">' + statusTag + '</td>' +
+            '<td style="min-width:70px;text-align:center;white-space:nowrap;">' + reviewProgress + '</td>' +
+          '<td class="cell-actions" style="min-width:90px;white-space:nowrap;text-align:center;vertical-align:middle;overflow:visible;">' +
               '<button class="btn-action default more-btn" onclick="event.stopPropagation();toggleMoreMenu(\'' + batch.id + '\')" style="display:inline-flex;align-items:center;gap:2px;font-size:12px;padding:4px 10px;position:relative;">更多 <span style="font-size:10px;">▼</span>' +
                 '<div id="moreMenu_' + batch.id + '" class="more-menu" style="display:none;position:absolute;right:0;top:calc(100% + 2px);background:#fff;border:1px solid var(--border);border-radius:6px;box-shadow:0 4px 12px rgba(0,0,0,0.15);z-index:1000;min-width:140px;overflow:visible;white-space:nowrap;">' +
               (function() {

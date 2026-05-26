@@ -522,9 +522,9 @@ def api_task_batches():
     elif review_status_filter == 'pending':
         query = query.filter(FetchLog.review_status != 'completed')
 
-    # v1.4: 任务分配状态筛选
+    # v1.4: 任务分配状态筛选（已分配 = 互检完成 + 任务已生成）
     if task_generated_filter == 'true':
-        query = query.filter(FetchLog.task_generated == True)
+        query = query.filter(FetchLog.review_status == 'completed', FetchLog.task_generated == True)
     elif task_generated_filter == 'false':
         query = query.filter(FetchLog.task_generated != True)
 

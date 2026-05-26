@@ -72,7 +72,7 @@ def bj_today_utc():
 @dispatch_bp.route('/api/dispatch/task-pool', methods=['GET'])
 @login_required
 def api_task_pool():
-    from sqlalchemy import or_
+    from sqlalchemy import or_, and_
     # 加载实例→提示词规则映射
     from services.fetch_service import get_instance_rule_mapping
     instance_rule_map = get_instance_rule_mapping()
@@ -116,10 +116,11 @@ def api_task_pool():
         g['batch_ids'].add(r.fetch_batch_id or '')
 
     # 计算已分配量（给标注员但未标注完成的，排除已撤回批次）
-    # annotator != '' 需要同时处理 NULL：SQL 中 NULL != '' 结果为 NULL（不是 TRUE），需用 or_()
+    # 注意：空字符串 '' 在 SQL 中 != '' 为 FALSE，需同时用 and_() 配合 IS NOT NULL，
+    # 确保 annotator='' 的记录不被匹配（尤其在 Python 3.14 + SQLite 下）
     assigned_rows = RawData.query.filter(
         RawData.modelb_reviewed == True,
-        or_(RawData.annotator != '', RawData.annotator.isnot(None)),
+        and_(RawData.annotator != '', RawData.annotator.isnot(None)),
         or_(RawData.check_result == '', RawData.check_result.is_(None)),
         or_(RawData.revoked_batch == '', RawData.revoked_batch.is_(None)),
     ).all()
@@ -127,8 +128,8 @@ def api_task_pool():
     # 已完成的任务（分配给标注员且已标注，排除已撤回批次）
     completed_rows = RawData.query.filter(
         RawData.modelb_reviewed == True,
-        or_(RawData.annotator != '', RawData.annotator.isnot(None)),
-        or_(RawData.check_result != '', RawData.check_result.isnot(None)),
+        and_(RawData.annotator != '', RawData.annotator.isnot(None)),
+        and_(RawData.check_result != '', RawData.check_result.isnot(None)),
         or_(RawData.revoked_batch == '', RawData.revoked_batch.is_(None)),
     ).all()
 
@@ -389,9 +390,14 @@ def api_history():
         ).all() if bn else []
 
         # 分类统计（revoked_batch 在撤回后才写入，撤回前为 None 或 ''）
-        completed_count_calc = sum(1 for r in all_records if r.check_result != '')
-        revoked_pending = sum(1 for r in all_records if r.revoked_batch == bn and r.check_result == '')
-        non_revoked_pending = sum(1 for r in all_records if not r.revoked_batch and r.check_result == '')
+        # FIX: check_result 为 NULL 表示未标注（pending），'' 也算 pending；只有非空非 NULL 才算 completed
+        def is_pending(r):
+            return r.check_result is None or r.check_result == ''
+        def is_completed(r):
+            return r.check_result is not None and r.check_result != ''
+        completed_count_calc = sum(1 for r in all_records if is_completed(r))
+        revoked_pending = sum(1 for r in all_records if r.revoked_batch == bn and is_pending(r))
+        non_revoked_pending = sum(1 for r in all_records if not r.revoked_batch and is_pending(r))
         pending_count = revoked_pending + non_revoked_pending  # 所有待标注（含已撤回的）
         revoked_count = revoked_pending  # 撤回的待标注记录数
 
@@ -411,8 +417,8 @@ def api_history():
         log_annotator_name = log.annotator.username if log.annotator else ''
         # 仅属于该标注员的 RawData 记录（用于计算该人的完成数和分配数）
         per_annot_records = [r for r in all_records if r.annotator == log_annotator_name] if log_annotator_name else []
-        per_annot_completed = sum(1 for r in per_annot_records if r.check_result != '')
-        per_annot_pending = sum(1 for r in per_annot_records if r.check_result == '')
+        per_annot_completed = sum(1 for r in per_annot_records if is_completed(r))  # FIX: 正确处理 NULL
+        per_annot_pending = sum(1 for r in per_annot_records if is_pending(r))
         per_annot_count = len(per_annot_records)  # 该标注员在此批次的总分配数
 
         items.append({
@@ -421,20 +427,18 @@ def api_history():
             'admin_name': log.admin.name or log.admin.username if log.admin else '',
             'created_at': fmt_bj(log.created_at),
             'assign_method': log.assign_method or '',
-            'total_count': log.count or 0,
-            'completed_count': completed_count_calc,  # 批次维度（所有人合计），前端用于概览
-            'pending_count': pending_count,
-            'revoked_count': revoked_count,
-            'status': status,
-            'display_total': display_total,
-            'isDone': pending_count == 0 and revoked_count == 0,
-            'isPartiallyRevoked': revoked_count > 0,
+            'total_count': per_annot_count,        # 本标注员分配数
+            'completed_count': per_annot_completed, # 本标注员完成数
+            'pending_count': per_annot_pending,     # 本标注员待标注数
+            'revoked_count': 0,
+            'status': 'done' if per_annot_pending == 0 else 'active',
+            'display_total': per_annot_count,
+            'isDone': per_annot_pending == 0,
+            'isPartiallyRevoked': False,
             'annotators': [{
                 'log_id': log_id,
                 'annotator_name': log_annotator_name,
-                # FIX Issue #1: count 用该标注员的实际分配数，而非批次总数
                 'count': per_annot_count,
-                # FIX Issue #3: completed_count 仅属于该标注员，而非批次所有人合计
                 'completed_count': per_annot_completed,
                 'pending_count': per_annot_pending,
                 'isDone': per_annot_pending == 0,
@@ -691,7 +695,7 @@ def api_my_tasks():
 
     base = [
         RawData.modelb_reviewed == True,
-        db.or_(RawData.annotator != '', RawData.annotator.isnot(None)),
+        db.and_(RawData.annotator != '', RawData.annotator.isnot(None)),  # FIX: 用 and_ 避免 annotator='' 泄露
     ] + annotator_filter
 
     # FIX Issue #2（revoked_batch 过滤修正）：
@@ -724,8 +728,12 @@ def api_my_tasks():
 
     if dispatch_batch_no:
         base.append(RawData.dispatch_batch_no == dispatch_batch_no)  # v2.1：按批次号精确过滤
+    elif task_code_filter and task_code_filter.startswith('DISP-'):
+        # task_code 的值实际是 dispatch_batch_no（由 task-group 虚拟键产生）
+        base.append(RawData.dispatch_batch_no == task_code_filter)
 
-    if task_code_filter:
+    if task_code_filter and not (dispatch_batch_no and task_code_filter == dispatch_batch_no):
+        # task_code 和 dispatch_batch_no 相同时只用一个过滤条件
         base.append(RawData.task_code == task_code_filter)  # v2.0：按任务编码精确过滤
 
     if rule_filter:
@@ -778,7 +786,7 @@ def api_my_tasks():
             'sku_image': r.sku_image or '',
             'annotation': r.annotation or '',
             'annotator': r.annotator or '',
-            # ⚠️ 不返回 source_type，防止标注员预判
+            'product_link': r.product_link or '',
         })
 
     return jsonify({
@@ -816,7 +824,7 @@ def api_my_task_groups():
 
     base = [
         RawData.modelb_reviewed == True,
-        db.or_(RawData.annotator != '', RawData.annotator.isnot(None)),
+        db.and_(RawData.annotator != '', RawData.annotator.isnot(None)),  # FIX: 用 and_ 避免 annotator='' 泄露
     ] + annotator_filter
 
     # FIX Issue #2（revoked_batch 过滤修正）：与 api_my_tasks 保持一致
@@ -855,13 +863,12 @@ def api_my_task_groups():
     # 查询所有匹配的记录（用于前端分组；最多查 5000 条）
     records = RawData.query.filter(*base).order_by(RawData.id.desc()).limit(5000).all()
 
-    # 按 task_code 分组（无 task_code 则用 created_date+instance_code 拼装虚拟 key）
+    # 按 task_code 分组（无 task_code 则按 dispatch_batch_no 分组，不再生成虚拟 ANN-VIRTUAL）
     groups = {}
     for r in records:
         key = r.task_code
         if not key:
-            # 无 task_code 时，用虚拟编码：ANN-VIRTUAL-{date}-{instance}
-            key = f'ANN-VIRTUAL-{str(r.created_date or "")[:8]}-{r.instance_code or ""}'
+            key = r.dispatch_batch_no or f'DISP-UNASSIGNED-{r.id}'
         if key not in groups:
             groups[key] = {
                 'task_code': r.task_code or key,
