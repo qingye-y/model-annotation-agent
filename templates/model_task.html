@@ -44,8 +44,8 @@
     .status-dot.running { animation: pulse 2s infinite; }
     @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
 
-    .card { background: var(--white); border-radius: var(--radius-lg); box-shadow: var(--shadow); overflow: visible; width: 100%; }
-    .table-wrapper { overflow-x: auto; width: 100%; }
+    .card { background: var(--white); border-radius: var(--radius-lg); box-shadow: var(--shadow); overflow: hidden; width: 100%; }
+    .table-wrapper { overflow-x: auto; width: 100%; max-width: 100%; }
     /* 批次表格：标准 table 布局，列宽随容器自适应 */
     .batch-table { width: 100%; border-collapse: collapse; font-size: 13px; }
     .batch-table thead { display: table-header-group; }
@@ -74,8 +74,8 @@
     @keyframes highlight-flash { 0%, 100% { background: rgba(59, 130, 246, 0.2); } 50% { background: rgba(59, 130, 246, 0.4); } }
     .status-tag.processing::after { content: ''; display: inline-block; width: 8px; height: 8px; border: 2px solid transparent; border-top-color: var(--warning); border-radius: 50%; margin-left: 4px; animation: spin 0.8s linear infinite; }
 
-    .cell-actions { display: flex; gap: 4px; flex-wrap: wrap; align-items: center; }
-    .cell-actions > * { flex-shrink: 0; }
+    .cell-actions { white-space: nowrap; }
+    .cell-actions .btn-action { vertical-align: middle; }
     .status-tag { display: inline-flex; padding: 3px 10px; font-size: 12px; font-weight: 500; border-radius: 12px; white-space: nowrap; }
     .btn-action { padding: 4px 10px; font-size: 12px; border-radius: var(--radius); cursor: pointer; transition: all 0.2s; white-space: nowrap; }
     .btn-action.primary { background: var(--primary); color: #fff; border: none; }
@@ -85,7 +85,7 @@
 
     .batch-highlight { animation: highlight-flash 0.5s ease-in-out 3; }
 
-    .pagination { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px; border-top: 1px solid var(--border-light); flex-wrap: wrap; gap: 12px; }
+    .pagination { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px; border-top: 1px solid var(--border-light); flex-wrap: wrap; gap: 12px; position: sticky; left: 0; bottom: 0; background: var(--white); z-index: 2; }
     .pagination-left { display: flex; align-items: center; gap: 10px; }
     .pagination-left label { font-size: 13px; color: var(--text-secondary); }
     .pagination-left .form-select { padding: 4px 24px 4px 8px; font-size: 13px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--white); appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%236b7280' d='M6 8L1 3h10z'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 8px center; }
@@ -285,7 +285,7 @@
     <div class="card">
       <div class="table-wrapper" id="tableWrapper">
         <table class="batch-table" id="batchTable">
-          <thead><tr><th style="width:110px;">批次号</th><th style="width:90px;text-align:center;">来源</th><th style="width:75px;text-align:center;">环境</th><th style="width:80px;text-align:center;">实例</th><th style="width:55px;text-align:center;">抽样</th><th style="width:80px;text-align:center;">审核总数</th><th style="width:65px;text-align:center;">合规</th><th style="width:65px;text-align:center;">违规</th><th style="width:65px;text-align:center;">抽样数</th><th style="width:90px;text-align:center;">数据日期</th><th style="width:95px;text-align:center;">拉取时间</th><th style="width:90px;text-align:center;">状态</th><th style="width:70px;text-align:center;">互检进度</th><th style="width:90px;text-align:center;">操作</th></tr></thead>
+          <thead><tr><th style="width:108px;">批次号</th><th style="width:88px;text-align:center;">来源</th><th style="width:73px;text-align:center;">环境</th><th style="width:78px;text-align:center;">实例</th><th style="width:54px;text-align:center;">抽样</th><th style="width:78px;text-align:center;">审核总数</th><th style="width:64px;text-align:center;">合规</th><th style="width:64px;text-align:center;">违规</th><th style="width:64px;text-align:center;">抽样数</th><th style="width:88px;text-align:center;">数据日期</th><th style="width:93px;text-align:center;">拉取时间</th><th style="width:88px;text-align:center;">状态</th><th style="width:68px;text-align:center;">互检进度</th><th style="width:88px;text-align:center;">操作</th></tr></thead>
           <tbody id="batchTableBody"></tbody>
         </table>
       </div>
@@ -594,19 +594,32 @@
     let reviewPollingTimer = null;  // 互检轮询定时器
     let reviewPollingBatchId = null;  // 当前轮询的批次ID
 
-    // ========== 表格高度随实际渲染行数联动 ==========
-    // 思路：CSS max-height: 70vh 已限制最大高度；此处仅在表格过宽时触发 wrapper 水平滚动
+    // ========== 表格宽度自适应 ==========
+    // 折叠/展开侧边栏时由 index.html postMessage 触发，或窗口尺寸变化时调用
     function syncTableHeight() {
       requestAnimationFrame(function() {
         var wrapper = document.getElementById('tableWrapper');
         if (!wrapper) return;
-        // 保持 wrapper 宽度与 table 一致，确保 overflow-x: auto 生效
-        var table = document.getElementById('batchTable');
-        if (table) {
-          wrapper.style.width = table.scrollWidth + 'px';
-        }
+        // ✅ 改为 100% 自适应，不再强制设为 scrollWidth（会导致固定像素宽度不响应布局变化）
+        wrapper.style.width = '100%';
       });
     }
+
+    // ✅ 监听 index.html 侧边栏折叠/展开通知（跨 iframe 通信）
+    window.addEventListener('message', function(event) {
+      if (event.data && event.data.type === 'sidebarToggle') {
+        // 等 CSS transition 300ms 完成后再重算宽度
+        setTimeout(function() {
+          var wrapper = document.getElementById('tableWrapper');
+          if (wrapper) wrapper.style.width = '100%';
+        }, 350);
+      }
+    });
+
+    // ✅ 监听浏览器窗口 resize（兜底：手动缩放窗口时也自适应）
+    window.addEventListener('resize', function() {
+      syncTableHeight();
+    });
 
     // ========== 初始化：加载实例列表和默认日期 ==========
     function init() {

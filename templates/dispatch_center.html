@@ -7,6 +7,10 @@
   <link rel="stylesheet" href="/static/common.css">
   <script src="/static/config.js"></script>
   <script src="/static/common.js"></script>
+  <script>
+    // 注入当前登录用户的角色，供前端 JS 判断是否为管理员
+    var current_user_role = '{{ current_user_role if current_user_role else "unknown" }}';
+  </script>
   <style>
     body { background: var(--bg); min-height: 100vh; }
     .page-container { padding: 20px 24px; max-width: 1400px; }
@@ -310,7 +314,8 @@
                 <th>批次号</th>
                 <th>规则</th>
                 <th>状态</th>
-                <th>数量</th>
+                <th>分配总数</th>
+                <th>剩余待标</th>
                 <th>分配时间</th>
                 <th>操作</th>
               </tr>
@@ -318,7 +323,7 @@
             <tbody id="historyBody"></tbody>
             <tfoot id="historyFoot" style="display:none;">
               <tr>
-                <td colspan="7" style="padding:8px 12px;background:#fafbfc;border-top:1px solid var(--border);text-align:center;">
+                <td colspan="8" style="padding:8px 12px;background:#fafbfc;border-top:1px solid var(--border);text-align:center;">
                   <span id="historyCountNote" style="font-size:13px;color:var(--text-secondary);"></span>
                 </td>
               </tr>
@@ -701,10 +706,11 @@
           return;
         }
         var allUsers = data.data || [];
-        console.log('[fetchAnnotators] 总用户数:', allUsers.length, 'role=annotator数:', allUsers.filter(function(u){return u.role==='annotator'}).length);
+        console.log('[fetchAnnotators] 总用户数:', allUsers.length, 'role=annotator数:', allUsers.filter(function(u){return u.role==='annotator'}).length, 'role=admin数:', allUsers.filter(function(u){return u.role==='admin'}).length);
         var bindings = getRuleBindings();
         _cachedAnnotators = allUsers
-          .filter(function(u) { return u.role === 'annotator'; })
+          // v2.0+: admin 也可作为标注任务执行者，显示在人员列表中
+          .filter(function(u) { return u.role === 'annotator' || u.role === 'admin'; })
           .map(function(u) {
             // 从 bindings 中查找该标注员的绑定规则（支持新旧两种存储格式）
             var boundRuleIds = [];
@@ -757,7 +763,8 @@
         _cachedAnnotators.forEach(function(a) {
           var ld = loadMap[a.id] || {};
           a.used = ld.today_assigned || 0;
-          a.quota = ld.daily_quota || a.quota || 200;
+          // 优先用 API 返回的 quota，其次用本地缓存，再次用默认值 200
+          a.quota = ld.quota || a.quota || 200;
           console.log('[fetchAnnotatorLoad] 标注员', a.username, '→ used:', a.used, 'quota:', a.quota);
         });
         renderAnnotatorTable(currentRuleId);
@@ -949,7 +956,7 @@
       if (!body) return;
 
       if (filteredHistory.length === 0) {
-        body.innerHTML = '<tr><td colspan="7" class="empty-state">无匹配记录</td></tr>';
+        body.innerHTML = '<tr><td colspan="8" class="empty-state">无匹配记录</td></tr>';
         if (foot) foot.style.display = 'none';
         return;
       }
@@ -1048,6 +1055,7 @@
           '<td><span class="rule-tag">' + escHtml(h.rule_name || h.rule || '') + '</span></td>' +
           '<td>' + statusText + '</td>' +
           '<td>' + total + '</td>' +
+          '<td>' + (h.pending_count || 0) + '</td>' +
           '<td style="white-space:nowrap;">' + escHtml(h.time || '') + '</td>' +
           '<td style="white-space:nowrap;">' + actionCell + '</td>' +
           '</tr>'
@@ -1252,6 +1260,7 @@
           '<td><span class="rule-tag">' + escHtml(h.rule_name || h.rule || '') + '</span></td>' +
           '<td>' + statusText + '</td>' +
           '<td>' + total + '</td>' +
+          '<td>' + (h.pending_count || 0) + '</td>' +
           '<td style="white-space:nowrap;">' + escHtml(h.time || '') + '</td>' +
           '<td style="white-space:nowrap;">' + actionCell + '</td>' +
           '</tr>'
@@ -1285,6 +1294,7 @@
             '<td></td>' +
             '<td>' + aStatus + '</td>' +
             '<td>' + aTotal + '</td>' +
+            '<td>' + (aPending || 0) + '</td>' +
             '<td></td>' +
             '<td>' + aRevokeBtn + '</td>' +
             '</tr>'
@@ -1293,7 +1303,7 @@
       });
 
       var bodyHtml = html.join('');
-      document.getElementById('historyBody').innerHTML = bodyHtml || '<tr><td colspan="7" class="empty-state">暂无分配记录</td></tr>';
+      document.getElementById('historyBody').innerHTML = bodyHtml || '<tr><td colspan="8" class="empty-state">暂无分配记录</td></tr>';
 
       if (foot) {
         foot.style.display = batchList.length > 0 ? '' : 'none';
@@ -1798,7 +1808,7 @@
         '登录密码 <span style="color:var(--danger)">*</span>';
       document.getElementById('annotatorPasswordInput').style.display = '';
       document.getElementById('annotatorQuotaInput').value = '200';
-      loadRuleCheckboxes([]);
+      loadRuleCheckboxes([], typeof current_user_role !== 'undefined' && current_user_role === 'admin');
       document.getElementById('annotatorModal').classList.add('active');
     };
 
@@ -1819,11 +1829,15 @@
       document.getElementById('annotatorModal').classList.add('active');
     };
 
-    function loadRuleCheckboxes(selectedIds) {
+    function loadRuleCheckboxes(selectedIds, forceAll) {
       var rules = getRules();
+      // 管理员新增标注员时默认预选全部规则
+      var effectiveSelected = (forceAll || (typeof current_user_role !== 'undefined' && current_user_role === 'admin'))
+        ? rules.map(function(r) { return r.id; })
+        : selectedIds;
       document.getElementById('annotatorRuleCheckboxes').innerHTML = rules.map(function(r) {
         return '<label class="checkbox-item">' +
-          '<input type="checkbox" name="annotatorRule" value="' + escAttr(r.id) + '" ' + (selectedIds.indexOf(r.id) !== -1 ? 'checked' : '') + '> ' + escHtml(r.name) +
+          '<input type="checkbox" name="annotatorRule" value="' + escAttr(r.id) + '" ' + (effectiveSelected.indexOf(r.id) !== -1 ? 'checked' : '') + '> ' + escHtml(r.name) +
           '</label>';
       }).join('');
     }
@@ -1900,6 +1914,10 @@
                 saveRuleBindings(bindings);
               }
               renderAnnotatorTable(currentRuleId);
+            }).then(function() {
+              // 必须等 load 数据拉取完毕后再渲染，确保新人员的 used/quota 已更新
+              return fetchAnnotatorLoad();
+            }).then(function() {
               renderLoadCards();
               renderRuleList();
             });

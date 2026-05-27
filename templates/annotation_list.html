@@ -70,8 +70,8 @@
       margin-left: 8px;
     }
 
-    /* 准确率进度条（v3.0） */
-    .accuracy-section {
+    /* 统计区（v4.0：标注员区 + 管理员区，按 role 条件显示） */
+    .stats-section {
       background: var(--white);
       border-radius: var(--radius-lg);
       box-shadow: var(--shadow);
@@ -79,56 +79,129 @@
       margin-bottom: 16px;
       margin-top: 4px;
     }
-    .accuracy-bars {
+    .stats-role-area {
       display: flex;
       gap: 40px;
       flex-wrap: wrap;
-      margin-bottom: 8px;
+      margin-bottom: 0;
     }
-    .accuracy-item {
+    /* 标注员区：今日进度 + 我的准确率 */
+    .stats-annotator-area { display: none; }
+    .stats-annotator-area.active { display: flex; }
+    /* 管理员区：全局准确率进度条 + 全局数字 */
+    .stats-admin-area { display: none; }
+    .stats-admin-area.active { display: flex; flex-direction: column; gap: 12px; }
+    /* 管理员准确率进度条行 */
+    .stats-admin-bars {
+      display: flex;
+      gap: 40px;
+      flex-wrap: wrap;
+    }
+    .stats-admin-bar-item {
       display: flex;
       flex-direction: column;
       gap: 8px;
       min-width: 200px;
     }
-    .accuracy-label {
+    .stats-admin-bar-label {
       font-size: 13px;
       color: var(--text-secondary);
       display: flex;
       justify-content: space-between;
+      align-items: center;
     }
-    .accuracy-label .acc-name { font-weight: 500; }
-    .accuracy-label .acc-num { color: var(--text-primary); font-weight: 700; font-size: 14px; }
-    .accuracy-track {
+    .stats-admin-bar-label .bar-name { font-weight: 500; }
+    .stats-admin-bar-label .bar-pct { font-weight: 700; font-size: 14px; color: var(--text-primary); }
+    .stats-admin-bar-track {
       height: 14px;
       background: #f1f3f4;
       border-radius: 7px;
       overflow: hidden;
       min-width: 160px;
     }
-    .accuracy-fill {
+    .stats-admin-bar-fill {
       height: 100%;
       border-radius: 7px;
       transition: width 0.4s ease;
     }
-    .accuracy-fill.overall { background: var(--primary); }
-    .accuracy-fill.compliance { background: var(--success); }
-    .accuracy-fill.violation { background: var(--danger); }
-    .accuracy-raw {
+    .stats-admin-bar-fill.overall { background: var(--primary); }
+    .stats-admin-bar-fill.compliance { background: var(--success); }
+    .stats-admin-bar-fill.violation { background: var(--danger); }
+    /* 数字行（双区共用） */
+    .stats-raw-row {
       font-size: 12px;
       color: var(--text-secondary);
       border-top: 1px solid var(--border-light);
-      padding-top: 8px;
+      padding-top: 10px;
       display: flex;
       gap: 16px;
       flex-wrap: wrap;
     }
-    .accuracy-raw-item { display: flex; gap: 4px; align-items: center; }
-    .accuracy-raw-item .label { color: var(--text-secondary); }
-    .accuracy-raw-item .val { font-weight: 600; color: var(--text-primary); }
-    .accuracy-raw-item .val.success { color: var(--success); }
-    .accuracy-raw-item .val.danger { color: var(--danger); }
-    .accuracy-raw-item .val.warning { color: var(--warning); }
+    .stats-raw-item { display: flex; gap: 4px; align-items: center; }
+    .stats-raw-item .lbl { color: var(--text-secondary); }
+    .stats-raw-item .val { font-weight: 600; color: var(--text-primary); }
+    .stats-raw-item .val.success { color: var(--success); }
+    .stats-raw-item .val.danger { color: var(--danger); }
+    .stats-raw-item .val.warning { color: var(--warning); }
+    /* 标注员 KPI 卡片组 */
+    .stats-kpi-group {
+      display: flex;
+      gap: 24px;
+      flex-wrap: wrap;
+    }
+    .stats-kpi-card {
+      min-width: 90px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .stats-kpi-label {
+      font-size: 12px;
+      color: var(--text-secondary);
+      white-space: nowrap;
+    }
+    .stats-kpi-value {
+      font-size: 22px;
+      font-weight: 700;
+      color: var(--text-primary);
+      line-height: 1.2;
+    }
+    .stats-kpi-value.done { color: var(--success); }
+    .stats-kpi-value.warn { color: var(--warning); }
+    .stats-kpi-value.danger { color: var(--danger); }
+    .stats-kpi-sub {
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+    /* 标注员准确率 */
+    .stats-accuracy-block {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      min-width: 200px;
+    }
+    .stats-accuracy-label {
+      font-size: 13px;
+      color: var(--text-secondary);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .stats-accuracy-label .acc-name { font-weight: 500; }
+    .stats-accuracy-label .acc-pct { font-weight: 700; font-size: 14px; color: var(--text-primary); }
+    .stats-accuracy-track {
+      height: 14px;
+      background: #f1f3f4;
+      border-radius: 7px;
+      overflow: hidden;
+      min-width: 160px;
+    }
+    .stats-accuracy-fill {
+      height: 100%;
+      border-radius: 7px;
+      transition: width 0.4s ease;
+      background: var(--primary);
+    }
 
     /* 批量操作按钮 */
     .batch-actions {
@@ -953,7 +1026,64 @@
     .annot-prod-meta { display: flex; gap: 16px; margin-bottom: 16px; flex-wrap: wrap; }
     .annot-prod-meta-item { font-size: 13px; color: var(--text-secondary); }
     .annot-prod-meta-item .value { color: var(--text-primary); font-weight: 500; }
-    .annot-prod-grid { display: flex; flex-wrap: wrap; gap: 8px; padding: 8px; overflow-y: auto; max-height: 420px; }
+    /* 图片分组 Tab */
+    .annot-img-tab-bar {
+      display: flex;
+      gap: 6px;
+      margin-bottom: 10px;
+      flex-wrap: wrap;
+    }
+    .annot-img-tab {
+      padding: 5px 14px;
+      font-size: 12px;
+      background: var(--border-light);
+      border: none;
+      border-radius: var(--radius);
+      cursor: pointer;
+      transition: all 0.2s;
+      color: var(--text-secondary);
+      font-weight: 500;
+    }
+    .annot-img-tab:hover {
+      background: #dbeafe;
+      color: var(--primary);
+    }
+    .annot-img-tab.active {
+      background: var(--primary);
+      color: #fff;
+    }
+
+    .annot-img-section { margin-bottom: 10px; }
+    .annot-img-section-title {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-secondary);
+      margin-bottom: 6px;
+      padding-bottom: 4px;
+      border-bottom: 1px solid var(--border-light);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .annot-img-section-title::before {
+      content: '';
+      display: inline-block;
+      width: 3px;
+      height: 12px;
+      background: var(--primary);
+      border-radius: 2px;
+    }
+    .annot-img-section-count {
+      font-size: 11px;
+      font-weight: 400;
+      color: var(--text-muted);
+      background: var(--bg);
+      padding: 1px 6px;
+      border-radius: 8px;
+    }
+    .annot-img-section.hidden { display: none; }
+
+    .annot-prod-grid { display: flex; flex-direction: column; gap: 4px; padding: 8px; overflow-y: auto; max-height: 420px; }
     .annot-prod-grid::-webkit-scrollbar { width: 5px; }
     .annot-prod-grid::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 3px; }
     .annot-prod-img-item { width: 120px; height: 120px; border: 1px solid var(--border-light); border-radius: var(--radius); overflow: hidden; cursor: pointer; flex-shrink: 0; }
@@ -1141,6 +1271,24 @@
     .pg-btn:hover:not(:disabled) { background: var(--primary); border-color: var(--primary); color: #fff; }
     .pg-btn:disabled { opacity: 0.4; cursor: not-allowed; }
     .pg-info { font-size: 13px; color: var(--text-secondary); padding: 0 12px; }
+    /* 批次卡片"你的份额"徽章 */
+    .my-share-badge {
+      display: inline-block;
+      margin-left: 6px;
+      padding: 1px 6px;
+      font-size: 11px;
+      color: #0969da;
+      background: #ddf4ff;
+      border: 1px solid #54aeff;
+      border-radius: 10px;
+      vertical-align: middle;
+      font-weight: 500;
+    }
+    .my-share-badge.none {
+      color: #6e7781;
+      background: #f3f4f6;
+      border-color: #d0d7de;
+    }
 
   </style>
 </head>
@@ -1173,6 +1321,7 @@
             <span class="annot-prod-meta-item">批次：<span class="value" id="annotBatchNo">-</span></span>
             <span class="annot-prod-meta-item">标注人：<span class="value" id="annotAnnotator">-</span></span>
           </div>
+          <div class="annot-img-tab-bar" id="annotImgTabBar"></div>
           <div class="annot-prod-grid" id="annotImageGrid"></div>
         </div>
 
@@ -1406,45 +1555,95 @@
       </div>
     </div>
 
-    <!-- 准确率进度条（v3.0：独立区块） -->
-    <div class="accuracy-section" id="detailStats">
-      <div class="accuracy-bars">
-        <div class="accuracy-item">
-          <div class="accuracy-label">
-            <span class="acc-name">整体准确率</span>
-            <span class="acc-num" id="accOverallNum">-</span>
+    <!-- 统计区（v4.0：标注员区 + 管理员区，按 role 条件显示） -->
+    <div class="stats-section" id="detailStats">
+
+      <!-- ========== 标注员区 ========== -->
+      <div class="stats-annotator-area" id="statsAnnotatorArea">
+        <div class="stats-kpi-group">
+          <!-- 今日已标 -->
+          <div class="stats-kpi-card">
+            <span class="stats-kpi-label">今日已标</span>
+            <span class="stats-kpi-value done" id="kpiTodayCompleted">-</span>
+            <span class="stats-kpi-sub" id="kpiTodayAssigned">已分配 <span id="kpiAssignedNum">-</span> 条</span>
           </div>
-          <div class="accuracy-track">
-            <div class="accuracy-fill overall" id="accOverallBar" style="width:0%"></div>
+          <!-- 今日剩余 -->
+          <div class="stats-kpi-card">
+            <span class="stats-kpi-label">今日剩余</span>
+            <span class="stats-kpi-value warn" id="kpiTodayRemaining">-</span>
+            <span class="stats-kpi-sub" id="kpiQuota">日限额 <span id="kpiQuotaNum">-</span> 条</span>
+          </div>
+          <!-- 今日忽略（数字） -->
+          <div class="stats-kpi-card">
+            <span class="stats-kpi-label">今日正确</span>
+            <span class="stats-kpi-value" id="kpiTodayCorrect">-</span>
+            <span class="stats-kpi-sub" id="kpiTodayAccuracy">准确率 <span id="kpiAccuracyNum">-</span></span>
           </div>
         </div>
-        <div class="accuracy-item">
-          <div class="accuracy-label">
-            <span class="acc-name">合规数据准确率</span>
-            <span class="acc-num" id="accComplianceNum">-</span>
+        <!-- 我的准确率（进度条，标注员也有一个整体准确率看自己今天的表现） -->
+        <div class="stats-accuracy-block" id="statsAnnotatorAccBlock" style="margin-top:4px;">
+          <div class="stats-accuracy-label">
+            <span class="acc-name">我的今日准确率</span>
+            <span class="acc-pct" id="annotAccPct">-</span>
           </div>
-          <div class="accuracy-track">
-            <div class="accuracy-fill compliance" id="accComplianceBar" style="width:0%"></div>
+          <div class="stats-accuracy-track">
+            <div class="stats-accuracy-fill" id="annotAccBar" style="width:0%"></div>
           </div>
         </div>
-        <div class="accuracy-item">
-          <div class="accuracy-label">
-            <span class="acc-name">违规数据准确率</span>
-            <span class="acc-num" id="accViolationNum">-</span>
-          </div>
-          <div class="accuracy-track">
-            <div class="accuracy-fill violation" id="accViolationBar" style="width:0%"></div>
-          </div>
+        <!-- 辅助数字行 -->
+        <div class="stats-raw-row" id="statsAnnotatorRaw">
+          <span class="stats-raw-item"><span class="lbl">总数</span><span class="val" id="rawTotalAnnot">-</span></span>
+          <span class="stats-raw-item"><span class="lbl">待标注</span><span class="val warning" id="rawPendingAnnot">-</span></span>
+          <span class="stats-raw-item"><span class="lbl">已标</span><span class="val" id="rawAnnotatedAnnot">-</span></span>
+          <span class="stats-raw-item"><span class="lbl">正确</span><span class="val success" id="rawCorrectAnnot">-</span></span>
+          <span class="stats-raw-item"><span class="lbl">错误</span><span class="val danger" id="rawErrorAnnot">-</span></span>
+          <span class="stats-raw-item"><span class="lbl">忽略</span><span class="val" id="rawIgnoreAnnot">-</span></span>
         </div>
       </div>
-      <div class="accuracy-raw" id="accuracyRaw">
-        <span class="accuracy-raw-item"><span class="label">总数</span><span class="val" id="rawTotal">-</span></span>
-        <span class="accuracy-raw-item"><span class="label">待标注</span><span class="val warning" id="rawPending">-</span></span>
-        <span class="accuracy-raw-item"><span class="label">已标</span><span class="val" id="rawAnnotated">-</span></span>
-        <span class="accuracy-raw-item"><span class="label">正确</span><span class="val success" id="rawCorrect">-</span></span>
-        <span class="accuracy-raw-item"><span class="label">错误</span><span class="val danger" id="rawError">-</span></span>
-        <span class="accuracy-raw-item"><span class="label">忽略</span><span class="val" id="rawIgnore">-</span></span>
+
+      <!-- ========== 管理员区 ========== -->
+      <div class="stats-admin-area" id="statsAdminArea">
+        <!-- 准确率进度条 -->
+        <div class="stats-admin-bars">
+          <div class="stats-admin-bar-item">
+            <div class="stats-admin-bar-label">
+              <span class="bar-name">整体准确率</span>
+              <span class="bar-pct" id="adminAccOverallNum">-</span>
+            </div>
+            <div class="stats-admin-bar-track">
+              <div class="stats-admin-bar-fill overall" id="adminAccOverallBar" style="width:0%"></div>
+            </div>
+          </div>
+          <div class="stats-admin-bar-item">
+            <div class="stats-admin-bar-label">
+              <span class="bar-name">合规数据准确率</span>
+              <span class="bar-pct" id="adminAccComplianceNum">-</span>
+            </div>
+            <div class="stats-admin-bar-track">
+              <div class="stats-admin-bar-fill compliance" id="adminAccComplianceBar" style="width:0%"></div>
+            </div>
+          </div>
+          <div class="stats-admin-bar-item">
+            <div class="stats-admin-bar-label">
+              <span class="bar-name">违规数据准确率</span>
+              <span class="bar-pct" id="adminAccViolationNum">-</span>
+            </div>
+            <div class="stats-admin-bar-track">
+              <div class="stats-admin-bar-fill violation" id="adminAccViolationBar" style="width:0%"></div>
+            </div>
+          </div>
+        </div>
+        <!-- 辅助数字行 -->
+        <div class="stats-raw-row" id="statsAdminRaw">
+          <span class="stats-raw-item"><span class="lbl">总数</span><span class="val" id="rawTotalAdmin">-</span></span>
+          <span class="stats-raw-item"><span class="lbl">待标注</span><span class="val warning" id="rawPendingAdmin">-</span></span>
+          <span class="stats-raw-item"><span class="lbl">已标</span><span class="val" id="rawAnnotatedAdmin">-</span></span>
+          <span class="stats-raw-item"><span class="lbl">正确</span><span class="val success" id="rawCorrectAdmin">-</span></span>
+          <span class="stats-raw-item"><span class="lbl">错误</span><span class="val danger" id="rawErrorAdmin">-</span></span>
+          <span class="stats-raw-item"><span class="lbl">忽略</span><span class="val" id="rawIgnoreAdmin">-</span></span>
+        </div>
       </div>
+
     </div>
 
     <!-- 批量操作按钮 -->
@@ -1491,6 +1690,20 @@
 
 
   <script>
+    // 当前用户角色（后端注入）
+    const CURRENT_ROLE = {{ user_role | tojson }};
+
+    // v4.0：根据角色显示对应统计区（初始化）
+    (function initStatsArea() {
+      if (CURRENT_ROLE === 'annotator') {
+        var el = document.getElementById('statsAnnotatorArea');
+        if (el) el.classList.add('active');
+      } else if (CURRENT_ROLE === 'admin') {
+        var el = document.getElementById('statsAdminArea');
+        if (el) el.classList.add('active');
+      }
+    })();
+
     // =====================================================================
     // 全局数据变量（来自 API）
     // =====================================================================
@@ -1504,6 +1717,7 @@
     let currentPage = 1;
     let pageSize = 20;
     let totalItems = 0;
+    let _lastExtraParams = {};  // 翻页时保留过滤条件
     let currentIndex = 0;           // filteredData 中的索引
     let imageList = [];
     let currentImageIndex = 0;
@@ -1559,51 +1773,92 @@
     function isAiFail(val) {
       return ['违规', 'fail', '0', 'REJECT'].includes(String(val).trim());
     }
+    // v4.0：写入统计区 DOM（兼容标注员/管理员两套 ID）
+    function _writeStats(target, s, isAnnotator) {
+      var fmt = function(v) {
+        if (v === null || v === undefined || v === '') return '-';
+        return v;
+      };
+      if (isAnnotator) {
+        // 标注员区：KPI 卡片 + 我的今日准确率进度条 + raw 辅助行
+        document.getElementById('kpiTodayCompleted').textContent = fmt(s.today_completed);
+        document.getElementById('kpiTodayRemaining').textContent = fmt(s.today_remaining);
+        document.getElementById('kpiAssignedNum').textContent = fmt(s.today_assigned);
+        document.getElementById('kpiTodayCorrect').textContent = fmt(s.correct || '-');
+        document.getElementById('kpiAccuracyNum').textContent = s.today_accuracy != null ? s.today_accuracy + '%' : '-';
+        var myAccPct  = s.accuracy != null ? (s.accuracy * 100).toFixed(1) + '%' : '-';
+        var myAccWidth = s.accuracy != null ? (s.accuracy * 100).toFixed(1) : '0';
+        document.getElementById('annotAccPct').textContent = myAccPct;
+        document.getElementById('annotAccBar').style.width = myAccWidth + '%';
+        document.getElementById('rawTotalAnnot').textContent    = fmt(s.total);
+        document.getElementById('rawPendingAnnot').textContent = fmt(s.pending);
+        document.getElementById('rawAnnotatedAnnot').textContent = fmt(s.annotated);
+        document.getElementById('rawCorrectAnnot').textContent = fmt(s.correct);
+        document.getElementById('rawErrorAnnot').textContent   = fmt(s.error);
+        document.getElementById('rawIgnoreAnnot').textContent   = fmt(s.ignore);
+      } else {
+        // 管理员区：整体/合规/违规准确率进度条 + raw 辅助行
+        var ovPct = s.accuracy != null ? (s.accuracy * 100).toFixed(1) + '%' : '-';
+        var ovW   = s.accuracy != null ? (s.accuracy * 100).toFixed(1) : '0';
+        var cpPct = s.compliant_accuracy != null ? (s.compliant_accuracy * 100).toFixed(1) + '%' : '-';
+        var cpW   = s.compliant_accuracy != null ? (s.compliant_accuracy * 100).toFixed(1) : '0';
+        var vpPct = s.non_compliant_accuracy != null ? (s.non_compliant_accuracy * 100).toFixed(1) + '%' : '-';
+        var vpW   = s.non_compliant_accuracy != null ? (s.non_compliant_accuracy * 100).toFixed(1) : '0';
+        document.getElementById('adminAccOverallNum').textContent    = ovPct;
+        document.getElementById('adminAccOverallBar').style.width    = ovW + '%';
+        document.getElementById('adminAccComplianceNum').textContent = cpPct;
+        document.getElementById('adminAccComplianceBar').style.width = cpW + '%';
+        document.getElementById('adminAccViolationNum').textContent  = vpPct;
+        document.getElementById('adminAccViolationBar').style.width  = vpW + '%';
+        document.getElementById('rawTotalAdmin').textContent    = fmt(s.total);
+        document.getElementById('rawPendingAdmin').textContent = fmt(s.pending);
+        document.getElementById('rawAnnotatedAdmin').textContent = fmt(s.annotated);
+        document.getElementById('rawCorrectAdmin').textContent = fmt(s.correct);
+        document.getElementById('rawErrorAdmin').textContent   = fmt(s.error);
+        document.getElementById('rawIgnoreAdmin').textContent   = fmt(s.ignore);
+      }
+    }
+
     function updateStats() {
       // 若 task-stats API 已返回真实数据，跳过客户端估算
       if (_taskStatsLoaded) return;
 
-      const total = filteredData.length;
-      const annotated = filteredData.filter(t => t.check_result);
+      var isAnnotator = CURRENT_ROLE === 'annotator';
+      var total = filteredData.length;
+      var annotated = filteredData.filter(function(t) { return t.check_result; });
+      var correct = annotated.filter(function(t) { return t.check_result === 'correct'; }).length;
+      var error   = annotated.filter(function(t) { return t.check_result === 'error'; }).length;
+      var ignore  = annotated.filter(function(t) { return t.check_result === 'ignore'; }).length;
+      var pending = filteredData.filter(function(t) { return !t.check_result; }).length;
+      var overallRate = (correct + error) > 0 ? (correct / (correct + error)) : null;
 
-      // 整体准确率：正确/(正确+错误)，忽略不计入
-      const correct = annotated.filter(t => t.check_result === 'correct').length;
-      const error   = annotated.filter(t => t.check_result === 'error').length;
-      const ignore  = annotated.filter(t => t.check_result === 'ignore').length;
-      const overallRate = (correct + error) > 0 ? (correct / (correct + error) * 100) : 0;
+      // AI分组
+      var aiPassItems = filteredData.filter(function(t) { return isAiPass(t.ai_result); });
+      var aiFailItems = filteredData.filter(function(t) { return isAiFail(t.ai_result); });
+      var compCorrect = aiPassItems.filter(function(t) { return t.check_result === 'correct'; }).length;
+      var compError   = aiPassItems.filter(function(t) { return t.check_result === 'error'; }).length;
+      var compRate    = (compCorrect + compError) > 0 ? (compCorrect / (compCorrect + compError)) : null;
+      var violCorrect = aiFailItems.filter(function(t) { return t.check_result === 'correct'; }).length;
+      var violError   = aiFailItems.filter(function(t) { return t.check_result === 'error'; }).length;
+      var violRate    = (violCorrect + violError) > 0 ? (violError / (violCorrect + violError)) : null;
 
-      // AI审核结果分组（v1.0：使用 isAiPass/isAiFail 兼容所有变体，与后端口径统一）
-      const aiPassItems = filteredData.filter(t => isAiPass(t.ai_result));
-      const aiFailItems = filteredData.filter(t => isAiFail(t.ai_result));
-
-      // 合规数据准确率：AI判断为合规中，标注为correct的比例
-      const compCorrect = aiPassItems.filter(t => t.check_result === 'correct').length;
-      const compError   = aiPassItems.filter(t => t.check_result === 'error').length;
-      const compRate    = (compCorrect + compError) > 0 ? (compCorrect / (compCorrect + compError) * 100) : 0;
-
-      // 违规数据准确率：AI判断为违规中，标注为error的比例
-      const violCorrect = aiFailItems.filter(t => t.check_result === 'correct').length;
-      const violError   = aiFailItems.filter(t => t.check_result === 'error').length;
-      const violRate    = (violCorrect + violError) > 0 ? (violError / (violCorrect + violError) * 100) : 0;
-
-      // 渲染进度条
-      document.getElementById('accOverallNum').textContent = total > 0 ? overallRate.toFixed(1) + '%' : '-';
-      document.getElementById('accOverallBar').style.width = overallRate.toFixed(1) + '%';
-
-      document.getElementById('accComplianceNum').textContent = aiPassItems.length > 0 ? compRate.toFixed(1) + '%' : '-';
-      document.getElementById('accComplianceBar').style.width = compRate.toFixed(1) + '%';
-
-      document.getElementById('accViolationNum').textContent = aiFailItems.length > 0 ? violRate.toFixed(1) + '%' : '-';
-      document.getElementById('accViolationBar').style.width = violRate.toFixed(1) + '%';
-
-      // 原始计数（辅助信息）
-      const pending = filteredData.filter(t => !t.check_result).length;
-      document.getElementById('rawTotal').textContent = total;
-      document.getElementById('rawPending').textContent = pending;
-      document.getElementById('rawAnnotated').textContent = annotated.length;
-      document.getElementById('rawCorrect').textContent = correct;
-      document.getElementById('rawError').textContent = error;
-      document.getElementById('rawIgnore').textContent = ignore;
+      // 构造与后端一致的字段结构（估算值，用于 API 返回前的瞬间）
+      var fakeStats = {
+        total: total,
+        pending: pending,
+        annotated: annotated.length,
+        correct: correct,
+        error: error,
+        ignore: ignore,
+        accuracy: overallRate,
+        compliant_accuracy: compRate,
+        non_compliant_accuracy: violRate,
+        today_assigned: 0,
+        today_remaining: 0,
+        today_completed: 0,
+        today_accuracy: null,
+      };
+      _writeStats(null, fakeStats, isAnnotator);
     }
 
     // =====================================================================
@@ -1614,6 +1869,10 @@
     function fetchTasks(extraParams) {
       if (isLoading) return;
       isLoading = true;
+      _lastExtraParams = extraParams || {};
+      // FIX: extraParams 中的 dispatch_batch_no 必须优先于 URL 参数，
+      // 避免 enterTaskGroup 因 URL 未及时更新导致批次过滤失效。
+      const urlBatchNo = new URLSearchParams(window.location.search).get('dispatch_batch_no') || '';
       const params = Object.assign({
         page: currentPage,
         per_page: pageSize,
@@ -1622,6 +1881,7 @@
         instance: document.getElementById('filterInstance').value,
         annotator: document.getElementById('filterAnnotator').value,
         keyword: document.getElementById('searchProductId').value.trim(),
+        dispatch_batch_no: (extraParams && extraParams.dispatch_batch_no) ? extraParams.dispatch_batch_no : urlBatchNo,
       }, extraParams || {});
       const qs = Object.entries(params).filter(([,v]) => v !== '' && v !== null).map(([k,v]) => k + '=' + encodeURIComponent(v)).join('&');
       safeFetch('/api/annotation/my-tasks?' + qs, { credentials: 'same-origin' })
@@ -1913,13 +2173,15 @@
       var totalItems = items.reduce(function(s, g) { return s + (g.total_count || 0); }, 0);
       var totalPending = items.reduce(function(s, g) { return s + (g.pending_count || 0); }, 0);
       var totalDone = items.reduce(function(s, g) { return s + (g.annotated_count || 0); }, 0);
+      var totalMyPending = items.reduce(function(s, g) { return s + (g.my_pending_count || 0); }, 0);
       var el = document.getElementById('tgStatsSummary');
       if (!el) return;
       el.innerHTML =
         '<div class="stat-item"><span class="stat-label">任务分组</span><span class="stat-value">' + totalGroups + '</span></div>' +
         '<div class="stat-item"><span class="stat-label">总条数</span><span class="stat-value">' + totalItems + '</span></div>' +
         '<div class="stat-item"><span class="stat-label">待标注</span><span class="stat-value stat-pending">' + totalPending + '</span></div>' +
-        '<div class="stat-item"><span class="stat-label">已标注</span><span class="stat-value stat-done">' + totalDone + '</span></div>';
+        '<div class="stat-item"><span class="stat-label">已标注</span><span class="stat-value stat-done">' + totalDone + '</span></div>' +
+        '<div class="stat-item"><span class="stat-label">你的份额</span><span class="stat-value" style="color:#0969da">' + totalMyPending + ' 条</span></div>';
     }
 
     /** 渲染任务列表表格 */
@@ -1941,12 +2203,16 @@
       items.forEach(function(g) {
         var progress = g.total_count > 0 ? Math.round((g.annotated_count / g.total_count) * 100) : 0;
         var taskDateStr = g.assign_time ? g.assign_time.substring(0, 10) : (g.data_date ? g.data_date.substring(0, 10) : '-');
+        var myShare = g.my_pending_count || 0;
+        var myShareBadge = myShare > 0
+          ? '<span class="my-share-badge">你的 ' + myShare + ' 条</span>'
+          : '<span class="my-share-badge none">无</span>';
         var enterBtn = '<button class="btn btn-primary btn-sm" onclick="enterTaskGroup(\'' + (g.task_code || '') + '\', \'' + (g.dispatch_batch_no || '') + '\', \'' + encodeURIComponent(g.rule_name || '') + '\', \'' + (g.data_date || '') + '\')">进入标注</button>';
         html += '<tr>' +
           '<td><span class="task-code">' + (g.dispatch_batch_no || g.task_code || '-') + '</span></td>' +
           '<td>' + (g.rule_name || '-') + '</td>' +
           '<td>' + taskDateStr + '</td>' +
-          '<td class="stat-num">' + (g.total_count || 0) + '</td>' +
+          '<td class="stat-num">' + (g.total_count || 0) + myShareBadge + '</td>' +
           '<td class="stat-num" style="' + accColor(g.overall_accuracy) + '">' + (g.overall_accuracy || 0) + '%</td>' +
           '<td class="stat-num">' + (g.compliant_total || 0) + '</td>' +
           '<td class="stat-num" style="' + accColor(g.compliant_accuracy) + '">' + (g.compliant_accuracy || 0) + '%</td>' +
@@ -1976,6 +2242,10 @@
 
     /** 进入标注：加载该任务组的商品明细 */
     function enterTaskGroup(taskCode, dispatchBatchNo, ruleName, dataDate) {
+      // 重置分页状态，避免前一页的页码残留导致第二页空白
+      currentPage = 1;
+      // 重置弹窗缓存，进入新批次时 prev/next 导航不会用旧批次数据
+      annotAllItems = [];
       // 重置统计标志，进入新批次时清空旧数据
       _taskStatsLoaded = false;
       // 读取筛选条件（去除 URL encode）
@@ -1985,9 +2255,8 @@
       switchToDetailView();
       // 滚动到明细区
       document.getElementById('detailSection').scrollIntoView({ behavior: 'smooth' });
-      // 触发 fetchTasks，按 taskCode 或 dispatchBatchNo 过滤
+      // 触发 fetchTasks，按 dispatch_batch_no 过滤（task_code 值等同于 dispatch_batch_no，不重复传）
       fetchTasks({
-        task_code: taskCode,
         dispatch_batch_no: dispatchBatchNo,
         rule_name: rule,
       });
@@ -1997,7 +2266,7 @@
       }
     }
 
-    /** 调用 task-stats API，刷新顶部统计卡片 */
+    /** 调用 task-stats API，刷新顶部统计卡片（v4.0：按 role 写对应 DOM） */
     function fetchTaskStats(extraParams) {
       var params = Object.assign({
         dispatch_batch_no: new URLSearchParams(window.location.search).get('dispatch_batch_no') || ''
@@ -2008,27 +2277,8 @@
         .then(function(res) {
           if (!res || !res.success) return;
           _taskStatsLoaded = true;
-          var s = res;
-          var fmt = function(v) {
-            if (v === null || v === undefined || v === '') return '-';
-            return v;
-          };
-          var fmtPct = function(v) {
-            if (v === null || v === undefined) return '-';
-            return (v * 100).toFixed(1) + '%';
-          };
-          document.getElementById('rawTotal').textContent      = fmt(s.total);
-          document.getElementById('rawPending').textContent   = fmt(s.pending);
-          document.getElementById('rawAnnotated').textContent = fmt(s.annotated);
-          document.getElementById('rawCorrect').textContent   = fmt(s.correct);
-          document.getElementById('rawError').textContent    = fmt(s.error);
-          document.getElementById('rawIgnore').textContent    = fmt(s.ignore);
-          document.getElementById('accOverallNum').textContent    = fmtPct(s.accuracy);
-          document.getElementById('accOverallBar').style.width    = (s.accuracy != null ? (s.accuracy * 100).toFixed(1) : 0) + '%';
-          document.getElementById('accComplianceNum').textContent = fmtPct(s.compliant_accuracy);
-          document.getElementById('accComplianceBar').style.width = (s.compliant_accuracy != null ? (s.compliant_accuracy * 100).toFixed(1) : 0) + '%';
-          document.getElementById('accViolationNum').textContent   = fmtPct(s.non_compliant_accuracy);
-          document.getElementById('accViolationBar').style.width    = (s.non_compliant_accuracy != null ? (s.non_compliant_accuracy * 100).toFixed(1) : 0) + '%';
+          var isAnnotator = CURRENT_ROLE === 'annotator';
+          _writeStats(null, res, isAnnotator);
         })
         .catch(function() {});
     }
@@ -2159,10 +2409,18 @@
       loadTaskGroups(1, params);
     }
 
-    /** 明细页筛选变更：调用后端 API（v1.0：替代前端 client-side 过滤） */
+    /** 明细页筛选变更：调用后端 API，保留批次上下文以防分页失效；同步刷新统计 */
     function handleFilterChange() {
       currentPage = 1;
-      fetchTasks();
+      fetchTasks(_lastExtraParams);
+      // 筛选变化时重新拉取统计（带当前筛选条件），保持数字与列表同步
+      var extraParams = _lastExtraParams || {};
+      fetchTaskStats({
+        dispatch_batch_no: extraParams.dispatch_batch_no || '',
+        check_result: document.getElementById('filterAnnotateStatus').value,
+        instance_code: document.getElementById('filterInstance').value,
+        keyword: document.getElementById('searchProductId').value.trim(),
+      });
     }
 
     /** 清除关键词搜索 */
@@ -2225,9 +2483,8 @@
     // =====================================================================
 
     function renderTable() {
-      const start = (currentPage - 1) * pageSize;
-      const end = start + pageSize;
-      const pageData = filteredData.slice(start, end);
+      // filteredData 已是当前页数据（服务端分页），直接全量渲染
+      const pageData = filteredData;
       const tbody = document.getElementById('tableBody');
 
       if (pageData.length === 0) {
@@ -2238,7 +2495,7 @@
 
       let html = '';
       pageData.forEach((item, idx) => {
-        const realIndex = start + idx;
+        const realIndex = idx
         const annText  = mapCheckResult(item.check_result);
         const annClass = getAnnotationClass(item.check_result);
         const aiRes    = item.ai_result || '-';
@@ -2277,7 +2534,14 @@
       if (totalPages <= 7) {
         for (let i = 1; i <= totalPages; i++) pages.push(i);
       } else {
-        pages = [1, 2, 3, '...', totalPages - 2, totalPages - 1, totalPages];
+        // 动态分页：始终显示首页、当前页附近、末页
+        pages.push(1);
+        if (currentPage > 3) pages.push('...');
+        for (let i = Math.max(2, currentPage - 1); i <= Math.min(totalPages - 1, currentPage + 1); i++) {
+          pages.push(i);
+        }
+        if (currentPage < totalPages - 2) pages.push('...');
+        pages.push(totalPages);
       }
 
       let html = '';
@@ -2297,13 +2561,13 @@
       const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
       if (page < 1 || page > totalPages) return;
       currentPage = page;
-      renderTable();
+      fetchTasks(_lastExtraParams);  // 保留 task_code/dispatch_batch_no 等过滤条件
     }
 
     function changePageSize() {
       pageSize = parseInt(document.getElementById('pageSizeSelect').value);
       currentPage = 1;
-      renderTable();
+      fetchTasks(_lastExtraParams);  // 重新拉数据，否则 items/分页数量对不上
     }
 
     // =====================================================================
@@ -2406,8 +2670,7 @@
       document.getElementById('annotPopupTitle').textContent = '标注任务 - ' + (item.product_id || '-');
       document.getElementById('annotProdTitle').textContent = item.product_name || '-';
       document.getElementById('annotCategory').textContent = item.category || '-';
-      document.getElementById('annotShop').textContent = item.instance_code
-        ? getInstName(item.instance_code) : '-';
+      document.getElementById('annotShop').textContent = item.shop_name || '-';
       document.getElementById('annotProductId').textContent = item.product_id || '-';
       document.getElementById('annotBatchNo').textContent = item.dispatch_batch_no
         || new URLSearchParams(window.location.search).get('dispatch_batch_no') || '-';
@@ -2445,10 +2708,17 @@
       loadAnnotImages(item);
     }
 
+    // 全局变量：当前图片 Tab 激活状态（null 表示全部显示）
+    var annotActiveImgTab = null;
+
+    // 按 label 分组的图片索引表：{ label -> [globalIndex, ...] }
+    var annotImgSectionMap = {};
+
     function loadAnnotImages(item) {
-      annotImageList = [];
-      var grid = document.getElementById('annotImageGrid');
-      grid.innerHTML = '';
+      // 重置全局变量
+      annotImageList.length = 0;
+      annotActiveImgTab = null;
+      annotImgSectionMap = {};
 
       // 合并所有图片来源：主图、SKU图、详情图
       var sources = [
@@ -2459,7 +2729,6 @@
 
       sources.forEach(function(src) {
         if (item[src.key]) {
-          // 逗号分隔拆分成多个 URL，并过滤空值
           var urls = item[src.key].split(',').map(function(u) { return u.trim(); }).filter(Boolean);
           urls.forEach(function(url) {
             annotImageList.push({ src: url, label: src.label });
@@ -2467,34 +2736,107 @@
         }
       });
 
-      // 渲染所有图片到网格（不再区分 Tab）
+      // 构建 label -> 索引列表的映射
+      annotImageList.forEach(function(img, idx) {
+        if (!annotImgSectionMap[img.label]) annotImgSectionMap[img.label] = [];
+        annotImgSectionMap[img.label].push(idx);
+      });
+
+      // 渲染 Tab 栏 + 图片网格
       renderAnnotImageGrid();
     }
 
     function renderAnnotImageGrid() {
+      var tabBar = document.getElementById('annotImgTabBar');
       var grid = document.getElementById('annotImageGrid');
+      tabBar.innerHTML = '';
       grid.innerHTML = '';
 
-      var currentLabel = null;
+      var allLabels = Object.keys(annotImgSectionMap);
+      if (allLabels.length === 0) {
+        grid.innerHTML = '<div class="annot-no-img">暂无图片</div>';
+        return;
+      }
 
-      annotImageList.forEach(function(img, index) {
-        // 如果当前图片的标签与上一张不同，插入分组标题
-        if (img.label !== currentLabel) {
-          currentLabel = img.label;
-          var title = document.createElement('div');
-          title.className = 'annot-img-group-title';
-          title.textContent = currentLabel + '：';
-          grid.appendChild(title);
+      // ---------- Tab 按钮 ----------
+      // "全部" Tab
+      var allTab = document.createElement('button');
+      allTab.className = 'annot-img-tab' + (annotActiveImgTab === null ? ' active' : '');
+      allTab.textContent = '全部 (' + annotImageList.length + ')';
+      allTab.onclick = function() { switchAnnotImgTab(null); };
+      tabBar.appendChild(allTab);
+
+      // 各分组 Tab
+      allLabels.forEach(function(label) {
+        var tab = document.createElement('button');
+        tab.className = 'annot-img-tab' + (annotActiveImgTab === label ? ' active' : '');
+        tab.textContent = label + ' (' + annotImgSectionMap[label].length + ')';
+        tab.onclick = (function(l) { return function() { switchAnnotImgTab(l); }; })(label);
+        tabBar.appendChild(tab);
+      });
+
+      // ---------- 按分组渲染图片 ----------
+      allLabels.forEach(function(label) {
+        var sectionDiv = document.createElement('div');
+        sectionDiv.className = 'annot-img-section';
+        sectionDiv.id = 'annot-img-section-' + label;
+        if (annotActiveImgTab !== null && annotActiveImgTab !== label) {
+          sectionDiv.classList.add('hidden');
         }
 
-        // 创建图片容器
-        var div = document.createElement('div');
-        div.className = 'annot-prod-img-item';
-        div.innerHTML = '<img src="' + img.src + '" alt="' + img.label + '" ' +
-                        'referrerpolicy="no-referrer" ' +
-                        'onerror="this.src=\'data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22120%22 height=%22120%22%3E%3Crect width=%22120%22 height=%22120%22 fill=%22%23f0f0f0%22/%3E%3Ctext x=%2250%25%22 y=%2250%25%22 dominant-baseline=%22middle%22 text-anchor=%22middle%22 fill=%22%23999%22 font-size=%2210%22%3E加载失败%3C/text%3E%3C/svg%3E\'; this.onerror=null;" ' +
-                        'onclick="openAnnotImagePreview(' + index + ')">';
-        grid.appendChild(div);
+        // 分组标题行
+        var titleRow = document.createElement('div');
+        titleRow.className = 'annot-img-section-title';
+        titleRow.textContent = label;
+        var countSpan = document.createElement('span');
+        countSpan.className = 'annot-img-section-count';
+        countSpan.textContent = annotImgSectionMap[label].length + ' 张';
+        titleRow.appendChild(countSpan);
+        sectionDiv.appendChild(titleRow);
+
+        // 图片容器行（flex wrap）
+        var imgRow = document.createElement('div');
+        imgRow.style.display = 'flex';
+        imgRow.style.flexWrap = 'wrap';
+        imgRow.style.gap = '8px';
+
+        annotImgSectionMap[label].forEach(function(globalIdx) {
+          var img = annotImageList[globalIdx];
+          var div = document.createElement('div');
+          div.className = 'annot-prod-img-item';
+          div.innerHTML = '<img src="' + img.src + '" alt="' + img.label + '" ' +
+                          'referrerpolicy="no-referrer" ' +
+                          'onerror="this.src=\'data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22120%22 height=%22120%22%3E%3Crect width=%22120%22 height=%22120%22 fill=%22%23f0f0f0%22/%3E%3Ctext x=%2250%25%22 y=%2250%25%22 dominant-baseline=%22middle%22 text-anchor=%22middle%22 fill=%22%23999%22 font-size=%2210%22%3E加载失败%3C/text%3E%3C/svg%3E\'; this.onerror=null;" ' +
+                          'onclick="openAnnotImagePreview(' + globalIdx + ')">';
+          imgRow.appendChild(div);
+        });
+
+        sectionDiv.appendChild(imgRow);
+        grid.appendChild(sectionDiv);
+      });
+    }
+
+    // Tab 切换函数
+    function switchAnnotImgTab(label) {
+      annotActiveImgTab = label;
+      var allTabs = document.querySelectorAll('.annot-img-tab');
+      allTabs.forEach(function(tab) {
+        if (label === null) {
+          tab.classList.toggle('active', tab.textContent.startsWith('全部'));
+        } else {
+          tab.classList.toggle('active', tab.textContent.startsWith(label));
+        }
+      });
+      // 显示/隐藏各分组
+      Object.keys(annotImgSectionMap).forEach(function(l) {
+        var sec = document.getElementById('annot-img-section-' + l);
+        if (sec) {
+          if (label === null || label === l) {
+            sec.classList.remove('hidden');
+          } else {
+            sec.classList.add('hidden');
+          }
+        }
       });
     }
 
@@ -2572,8 +2914,8 @@
             item.annotation = errorTag;
             showTaskToast('标注已保存');
             // v1.0：立即重新拉取当前页数据和统计，确保列表+顶部统计卡片同步刷新
-            fetchTasks();
-            if (typeof fetchTaskStats === 'function') fetchTaskStats();
+            fetchTasks(_lastExtraParams);  // 保留批次上下文，防止提交后分页失效
+            if (typeof fetchTaskStats === 'function') fetchTaskStats(_lastExtraParams);
             if (onSuccess) onSuccess();
           } else {
             showToast(res.error || '提交失败', true);

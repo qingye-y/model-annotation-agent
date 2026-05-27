@@ -9,7 +9,7 @@ try:
     import pandas as pd
 except ImportError:
     pd = None
-from models import db, RawData, FetchLog, DailyStats
+from models import db, RawData, FetchLog, DailyStats, QcRecord, DispatchLog
 
 # 服务层导入
 from services.fetch_service import (
@@ -595,7 +595,8 @@ def api_task_batch_summary(batch_id):
         'pending': '未互检',
         'running': '互检中',
         'completed': '已互检',
-        'failed': '互检失败'
+        'failed': '互检失败',
+        'aborted': '互检中止'
     }
 
     return jsonify({
@@ -848,23 +849,40 @@ def api_delete_batch(batch_id):
         return jsonify({"success": False, "message": "正在执行的任务无法删除"}), 400
 
     try:
-        # 1. 删除该批次下 RawData 对应的 Annotation
+        # 0. 收集该批次的 RawData IDs（用于清理关联表）
+        raw_ids_subq = db.session.query(RawData.id).filter(RawData.fetch_batch_id == batch_id).subquery()
+        raw_ids_list = [r[0] for r in db.session.query(RawData.id).filter(RawData.fetch_batch_id == batch_id).all()]
+
+        # 1. 删除 QcRecord（依赖 annotation_id → 先删）
         from models import Annotation
-        from sqlalchemy import select as sa_select
-        raw_ids = sa_select(RawData.id).where(RawData.fetch_batch_id == batch_id)
-        ann_count = Annotation.query.filter(Annotation.raw_data_id.in_(raw_ids)).delete(synchronize_session='fetch')
-        # 2. 删除 DailyStats
+        if raw_ids_list:
+            ann_ids = db.session.query(Annotation.id).filter(Annotation.raw_data_id.in_(raw_ids_list)).all()
+            ann_ids_list = [a[0] for a in ann_ids]
+            qc_count = QcRecord.query.filter(QcRecord.annotation_id.in_(ann_ids_list)).delete(synchronize_session='fetch') if ann_ids_list else 0
+        else:
+            qc_count = 0
+
+        # 2. 删除 Annotation
+        ann_count = Annotation.query.filter(Annotation.raw_data_id.in_(raw_ids_list)).delete(synchronize_session='fetch') if raw_ids_list else 0
+
+        # 3. 删除 DispatchLog（依赖 batch_id）
+        dl_count = DispatchLog.query.filter_by(batch_id=batch_id).delete(synchronize_session='fetch')
+
+        # 4. 删除 DailyStats
         ds_count = DailyStats.query.filter_by(batch_id=batch_id).delete(synchronize_session='fetch')
-        # 3. 删除 RawData
+
+        # 5. 删除 RawData
         rd_count = RawData.query.filter_by(fetch_batch_id=batch_id).delete(synchronize_session='fetch')
-        # 4. 删除 FetchLog
+
+        # 6. 删除 FetchLog
         db.session.delete(log)
         db.session.commit()
         return jsonify({
             "success": True,
             "message": "批次已删除",
             "deleted": {"raw_data": rd_count, "daily_stats": ds_count,
-                        "annotations": ann_count, "fetch_log": 1}
+                        "annotations": ann_count, "qc_records": qc_count,
+                        "dispatch_logs": dl_count, "fetch_log": 1}
         })
     except Exception as e:
         db.session.rollback()

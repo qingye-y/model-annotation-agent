@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 from flask import Flask, render_template
-from flask_login import LoginManager
+from flask_login import LoginManager, current_user, login_required
 from models import db, User, SqlTemplate
 from config import SECRET_KEY, SQLALCHEMY_DATABASE_URI, SQLALCHEMY_TRACK_MODIFICATIONS
 from werkzeug.security import generate_password_hash
@@ -58,12 +58,14 @@ def page_batch_detail(batch_id):
     return render_template('batch_detail.html')
 
 @app.route('/dispatch_center.html')
+@login_required
 def page_dispatch():
-    return render_template('dispatch_center.html')
+    return render_template('dispatch_center.html', current_user_role=current_user.role)
 
 @app.route('/annotation_list.html')
+@login_required
 def page_annotation():
-    return render_template('annotation_list.html')
+    return render_template('annotation_list.html', user_role=current_user.role)
 
 @app.route('/annotation_detail.html')
 def page_annotation_detail():
@@ -587,4 +589,6 @@ and r.instance_code = '${instance}' '''
 
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    import sys
+    port = int(sys.argv[1]) if len(sys.argv) > 1 else 5000
+    app.run(host='0.0.0.0', port=port, debug=False, use_reloader=False)

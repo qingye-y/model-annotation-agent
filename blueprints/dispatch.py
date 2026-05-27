@@ -17,7 +17,7 @@ API 列表：
 """
 
 import random
-from datetime import datetime, date
+from datetime import date, datetime
 from flask import Blueprint, request, jsonify
 from flask_login import login_required, current_user
 from models import db, User, RawData, Annotation, FetchLog, DispatchLog, SqlConfig, QcRecord
@@ -235,10 +235,11 @@ def api_assign():
     # 找到该规则名对应的所有实例
     matched_instances = [inst for inst, rule in instance_rule_map.items() if rule == rule_name]
 
-    # 确认标注员存在且启用（按 username 匹配，前端传的是 username 字符串）
+    # 确认标注员/管理员存在且启用（按 username 匹配，前端传的是 username 字符串）
+    # v2.0+：允许 admin 分配给自己，即 admin 也可作为标注任务执行者
     annotators = User.query.filter(
         User.username.in_(annotator_ids),
-        User.role == 'annotator',
+        User.role.in_(['annotator', 'admin']),
         User.is_active == True
     ).all()
     if len(annotators) != len(annotator_ids):
@@ -410,7 +411,7 @@ def api_history():
             display_total = completed_count_calc
         else:
             status = 'active'
-            display_total = pending_count
+            display_total = len(all_records)  # 始终显示原始分配总数（如300），不变
 
         # ---- FIX Issue #1 & #3: per-annotator 统计 ----
         # 该 DispatchLog 对应的标注员的用户名
@@ -643,11 +644,14 @@ def api_revoke_log():
     revoked_count = 0    # 退回池中的未完成任务
     kept_count = 0       # 保留的已完成任务
     for rec in all_records:
-        if rec.check_result == '':
-            # 未完成 → 撤回：标记 revoked_batch，清空 annotator
+        # FIX: check_result 可能是 None（从未标注）或空字符串，不能用 == '' 判断
+        # pending = check_result 为 None 或空字符串（从未标注）；已标注为 'correct'/'error'/'ignore'
+        if rec.check_result in (None, ''):
+            # 未完成（从未标注）→ 撤回：标记 revoked_batch，清空 annotator，退回待分配池
             rec.revoked_batch = batch_no
             rec.annotator = ''
-            rec.task_status = 'unassigned'  # v3.1: 同步任务状态
+            rec.dispatch_batch_no = None
+            rec.task_status = 'unassigned'
             revoked_count += 1
         else:
             # 已完成 → 保留分配关系，但标注 revoked_batch
@@ -706,16 +710,17 @@ def api_my_tasks():
     if has_batch_filter:
         if status_filter == 'done':
             # 仅已完成：包含该批次中所有已完成记录（含部分撤回后保留的）
-            base.append(db.or_(RawData.check_result != '', RawData.check_result.isnot(None)))
+            base.append(db.and_(RawData.check_result != '', RawData.check_result.isnot(None)))
         else:
             # pending 或全部：已完成永远可见；pending 仅显示从未被任何批次撤回的
-            base.append(db.or_(
-                db.or_(RawData.check_result != '', RawData.check_result.isnot(None)),
-                db.and_(
-                    db.or_(RawData.check_result == '', RawData.check_result.is_(None)),
-                    db.or_(RawData.revoked_batch == '', RawData.revoked_batch.is_(None)),  # pending 且从未被任何批次撤回
+            # 修复：仅对 pending 记录（check_result IS NULL）施加 revoked_batch IS NULL 过滤
+            # 错误逻辑：check_result IS NOT NULL 对 pending(NULL) 返回 TRUE，导致 revoked 记录误入
+            base.append(
+                db.or_(
+                    db.and_(RawData.check_result != '', RawData.check_result.isnot(None)),  # 已完成（correct/error/ignore）
+                    db.and_(RawData.check_result.is_(None), RawData.revoked_batch.is_(None)),  # pending 且从未被任何批次撤回
                 )
-            ))
+            )
     else:
         # 无 batch_no 过滤：排除所有已撤回批次的记录（无论 pending 或 completed）
         # revoked_batch == '' → 从未被撤回的记录（可见）
@@ -820,6 +825,7 @@ def api_my_tasks():
             'annotation': r.annotation or '',
             'annotator': r.annotator or '',
             'product_link': r.product_link or '',
+            'shop_name': r.shop_name or '',
         })
 
     return jsonify({
@@ -863,13 +869,13 @@ def api_my_task_groups():
     # FIX Issue #2（revoked_batch 过滤修正）：与 api_my_tasks 保持一致
     # 已完成记录永远可见（不可撤回）；仅 pending 记录受 revoked_batch 过滤
     if dispatch_batch_filter:
+        # 修复：OR 的第二分支应仅针对 pending 记录（check_result IS NULL 且 revoked_batch IS NULL）
+        # 错误逻辑：check_result IS NOT NULL 对 pending(NULL) 返回 TRUE，导致 revoked 记录误入 pending
+        # 正确逻辑：pending = check_result IS NULL AND revoked_batch IS NULL（从未被任何批次撤回）
         base.append(
             db.or_(
-                db.or_(RawData.check_result != '', RawData.check_result.isnot(None)),  # 已完成：永远可见
-                db.and_(
-                    db.or_(RawData.check_result == '', RawData.check_result.is_(None)),
-                    db.or_(RawData.revoked_batch == '', RawData.revoked_batch.is_(None)),  # pending 且从未被任何批次撤回
-                )
+                db.and_(RawData.check_result != '', RawData.check_result.isnot(None)),  # 已完成（correct/error/ignore）：永远可见
+                db.and_(RawData.check_result.is_(None), RawData.revoked_batch.is_(None)),  # pending 且从未被任何批次撤回
             )
         )
     else:
@@ -934,9 +940,17 @@ def api_my_task_groups():
                 'violation_ignore': 0,       # ai_result='违规' 的忽略数
                 'dispatch_batch_no': r.dispatch_batch_no or '',
                 'annotator': r.annotator or '',
+                'my_pending_count': 0,        # 当前用户在该批次的 pending 条数（进入标注时你会看到多少条）
             }
         g = groups[key]
         g['total_count'] += 1
+
+        # 统计当前用户在该批次的 pending 条数（用于批次卡片"你的份额"提示）
+        # FIX: pending = check_result 为空（None 或空字符串），与 item 列表的"待标注"定义保持一致
+        # 不再依赖 revoked_batch 判断（revoked 后该记录会被 item 列表过滤掉，但 pending_count 可能已混入）
+        if not r.check_result:
+            if current_user.role == 'admin' or r.annotator == current_user.username:
+                g['my_pending_count'] = g.get('my_pending_count', 0) + 1
 
         # 判断 AI 结果分类：改用 ai_result 字段，与 api_annotation_stats（task-stats）保持一致
         # 兼容多种表示：合规/1/PASS/pass → 合规；违规/0/REJECT/fail → 违规
@@ -1029,6 +1043,7 @@ def api_my_task_groups():
             'admin_name': admin_name,
             'assign_time': assign_time,
             'dispatch_batch_no': g['dispatch_batch_no'],
+            'my_pending_count': g.get('my_pending_count', 0),  # 当前用户在该批次的 pending 条数（进入标注时你会看到）
         })
 
     # 按 task_code 降序排序
@@ -1097,7 +1112,11 @@ def api_submit():
     # 同步 RawData
     rec.check_result = result
     rec.annotation = error_tag if result == 'error' else (result == 'correct' and '正确' or '忽略')
-    rec.annotator = current_user.username
+    # v2.0+: 保留原始分配人（叶雨的任务被 admin 标注后，annotator 仍为"叶雨"）
+    # 仅当原 annotator 为空时，才写入当前标注人（支持无主任务首次被标注的情况）
+    # Annotation 表的 annotator_id 已正确记录实际标注人（Line 1099）
+    if not rec.annotator:
+        rec.annotator = current_user.username
     rec.task_status = 'annotated'  # v3.1: 同步任务状态
 
     db.session.commit()
@@ -1117,29 +1136,32 @@ def api_dispatch_annotator_load():
     if current_user.role not in ('annotator', 'admin'):
         return jsonify({'success': False, 'error': '权限不足'}), 403
 
-    # 管理员返回所有标注员，标注员只返回自己
+    # 管理员返回所有标注员+管理员（admin 也可作为标注任务执行者）；标注员只返回自己
     if current_user.role == 'admin':
-        users = User.query.filter_by(role='annotator').all()
+        users = User.query.filter(User.role == 'annotator', User.is_active == True).all()
     else:
         users = [current_user]
 
     result = []
     for u in users:
-        # 今日已分配
-        today_assigned = Dispatch.query.filter_by(annotator=u.username).filter(
-            func.date(Dispatch.created_at) == date.today()
+        today = date.today()
+        # 今日已分配（cast 为 DATE 后比较，跨数据库兼容）
+        from sqlalchemy import cast, Date
+        today_assigned = DispatchLog.query.filter(
+            DispatchLog.annotator_id == u.id,
+            cast(DispatchLog.created_at, Date) == today
         ).count()
         # 今日已完成
         today_completed = Annotation.query.filter_by(annotator_id=u.id, is_submitted=True).filter(
-            func.date(Annotation.submitted_at) == date.today()
+            cast(Annotation.updated_at, Date) == today
         ).count()
 
         result.append({
             'username': u.username,
-            'display_name': u.display_name or u.username,
+            'display_name': u.name or u.username,
             'today_assigned': today_assigned,
             'today_completed': today_completed,
-            'quota': u.annotation_quota or 100,
+            'quota': u.daily_quota or 100,
             'used': today_assigned,   # used ≈ 今日已分配
         })
 
@@ -1210,7 +1232,37 @@ def api_annotation_stats():
     viol_correct = sum(1 for r in violation_records if r.check_result == 'correct')
     viol_error   = sum(1 for r in violation_records if r.check_result == 'error')
     viol_effective = viol_correct + viol_error
-    non_compliant_accuracy = round(viol_error / viol_effective, 4) if viol_effective > 0 else None
+    non_compliant_accuracy = round(viol_correct / viol_effective, 4) if viol_effective > 0 else None
+
+    # 今日指标（仅标注员有意义，管理员返回 null）
+    today_assigned = 0
+    today_remaining = 0
+    today_completed = 0
+    today_accuracy = None
+    if current_user.role == 'annotator':
+        from datetime import timedelta
+        bj_today = (datetime.utcnow() + timedelta(hours=8)).date()
+        bj_today_start_utc = datetime.combine(bj_today, datetime.min.time()) - timedelta(hours=8)
+        bj_today_end_utc = datetime.combine(bj_today, datetime.max.time()) - timedelta(hours=8)
+
+        today_assigned = _today_assigned(current_user.id)
+        quota = current_user.daily_quota or 200
+        today_remaining = max(0, quota - today_assigned)
+
+        # 今日已完成（含正确/错误/忽略）
+        today_ann = db.session.query(Annotation).join(
+            RawData, Annotation.raw_data_id == RawData.id
+        ).filter(
+            Annotation.annotator_id == current_user.id,
+            Annotation.is_submitted == True,
+            Annotation.created_at >= bj_today_start_utc,
+            Annotation.created_at <= bj_today_end_utc,
+        ).all()
+        today_completed = len(today_ann)
+        today_correct = sum(1 for r in today_ann if r.result == 'correct')
+        today_error = sum(1 for r in today_ann if r.result == 'error')
+        today_accuracy = round(today_correct / (today_correct + today_error) * 100, 1) \
+            if (today_correct + today_error) > 0 else None
 
     return jsonify({
         'success': True,
@@ -1223,18 +1275,23 @@ def api_annotation_stats():
         'accuracy': accuracy,
         'compliant_accuracy': compliant_accuracy,
         'non_compliant_accuracy': non_compliant_accuracy,
+        # 今日指标
+        'today_assigned': today_assigned,
+        'today_remaining': today_remaining,
+        'today_completed': today_completed,
+        'today_accuracy': today_accuracy,
     })
 
 
 def api_annotator_load():
     today_start = datetime.combine(date.today(), datetime.min.time())
 
-    # 标注员只能查自己；管理员查所有人
+    # 标注员只能查自己；管理员查所有人（标注员+管理员，admin 也可作为标注任务执行者）
     if current_user.role == 'annotator':
         annotators = [current_user]
     elif current_user.role == 'admin':
         annotators = User.query.filter(
-            User.role == 'annotator',
+            User.role.in_(['annotator', 'admin']),
             User.is_active == True
         ).all()
     else:
@@ -1534,8 +1591,12 @@ def api_generate_tasks():
     if not fetch_log:
         return jsonify({'success': False, 'error': '批次不存在'}), 404
 
-    if not is_preview and fetch_log.review_status != 'completed':
-        return jsonify({'success': False, 'error': '该批次互检尚未完成，无法生成标注任务'}), 400
+    if not is_preview and fetch_log.review_status not in ('completed', 'aborted'):
+        return jsonify({'success': False, 'error': '该批次互检尚未开始，无法生成标注任务'}), 400
+
+    # 互检中止的批次：modelb_reviewed=False 是「尚未轮到检查」而非「模型B无返回」，
+    # 不应计入漏审，排除掉以保持预览与生成行为一致
+    is_aborted = fetch_log.review_status == 'aborted'
 
     import logging
     logger = logging.getLogger('werkzeug')
@@ -1553,10 +1614,12 @@ def api_generate_tasks():
     inconsistent_count = RawData.query.filter(*inconsistent_filter).count()
 
     # 漏审数据（modelb_reviewed=False，模型B从未返回结果）
+    # 互检中止时排除：中止是因为互检被中途停止，并非模型B无返回
     missed_filter = [
         RawData.fetch_batch_id == batch_id,
-        RawData.modelb_reviewed == False,
     ]
+    if not is_aborted:
+        missed_filter.append(RawData.modelb_reviewed == False)
     if instance_code:
         missed_filter.append(RawData.instance_code == instance_code)
     missed_count = RawData.query.filter(*missed_filter).count()
@@ -1688,6 +1751,9 @@ def api_regenerate_task_pool():
     if not fetch_log:
         return jsonify({'success': False, 'error': '批次不存在'}), 404
 
+    # 互检中止时排除 modelb_reviewed=False（中止是中断，非模型B无返回）
+    is_aborted = fetch_log.review_status == 'aborted'
+
     # ========== Step 1：智能撤回 ==========
     # 查询该批次中：已分配（task_status='assigned'）但未标注（check_result 为空）的记录
     # 注意：task_status 为 NULL 的历史数据用派生逻辑计算
@@ -1740,11 +1806,12 @@ def api_regenerate_task_pool():
         inconsistent_filter.append(RawData.instance_code == instance_code)
     inconsistent_count = RawData.query.filter(*inconsistent_filter).count()
 
-    # 漏审数据
+    # 漏审数据（互检中止时排除 modelb_reviewed=False）
     missed_filter = [
         RawData.fetch_batch_id == batch_id,
-        RawData.modelb_reviewed == False,
     ]
+    if not is_aborted:
+        missed_filter.append(RawData.modelb_reviewed == False)
     if instance_code:
         missed_filter.append(RawData.instance_code == instance_code)
     missed_count = RawData.query.filter(*missed_filter).count()

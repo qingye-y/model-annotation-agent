@@ -34,7 +34,12 @@ playwright-report/
 
 # Local DB (do NOT commit)
 *.db
+*.db-journal
 instance/*.db
+instance/*.db-journal
+
+# Standalone duplicate scripts (not part of Flask blueprint)
+data_fetch.py
 
 # macOS
 .DS_Store
@@ -49,3 +54,14 @@ html导入数据/
 *.xlsx
 *.xls
 *.csv
+
+# Screenshots & images (debug artifacts, not source)
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.webp
+*.bmp
+*.ico
+step*.png
+screenshot_*.png

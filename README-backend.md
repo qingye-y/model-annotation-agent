@@ -1,33 +1,62 @@
 # 商品审核大模型质检标注工作台 - 后端 API
 
+> ⚠️ 本文件仅作为后端 API 快速索引，详细说明请阅读 `docs/使用者手册.md`
+
 ## 项目结构
 
 ```
 /project/
-├── config.py           # 所有配置项
+├── app.py              # Flask 主入口（启动文件）
+├── config.py           # 所有配置项（Cookie/密钥/实例映射）— 需修改！
 ├── models.py           # 数据库表模型（SQLAlchemy）
-├── app.py              # Flask 主入口
 ├── requirements.txt    # Python 依赖
-├── blueprints/
-│   ├── __init__.py
-│   ├── auth.py         # 登录认证 API
-│   ├── data_fetch.py   # 数据拉取核心逻辑 API
-│   └── dashboard.py    # 看板统计 API
-└── app.db             # SQLite 数据库（启动后自动创建）
+│
+├── blueprints/         # 8 个蓝图 API 模块
+│   ├── auth.py         # 登录认证 / 用户管理
+│   ├── data_fetch.py   # 核心：线上取数 API
+│   ├── dashboard.py    # 看板统计 API
+│   ├── sql_config.py   # SQL 模板配置
+│   ├── dispatch.py     # 任务分发
+│   ├── model_review.py # Model B 互检
+│   ├── prompt_rules.py # 提示词规则
+│   ├── analysis.py     # 数据分析
+│   ├── model_task_history.py
+│   └── task_history.py
+│
+├── services/           # 业务逻辑层
+│   ├── fetch_service.py  # 取数核心逻辑（分层抽样/iData调用）
+│   ├── stats_service.py  # 统计服务
+│   └── utils.py          # 工具函数
+│
+└── templates/ / static/  # 前端页面和资源
 ```
 
-## 安装依赖
+## 快速启动
 
 ```bash
+# 1. 安装依赖
 pip install -r requirements.txt
-```
 
-## 启动服务
-
-```bash
+# 2. 修改 config.py 中的 IDATA_COOKIE（第16行）
+# 3. 启动
 python3 app.py
+
+# 4. 访问 http://localhost:5000
+# 5. 默认账号：admin / admin123
 ```
 
+## 核心 API 路由
+
+| 模块 | 路由前缀 | 核心接口 |
+|------|----------|----------|
+| data_fetch | /api/data-fetch | POST 取数 / GET 批次列表 / DELETE 批次 |
+| dashboard | /api/dashboard | GET stats / reason-distribution / inconsistency-rate |
+| sql_config | /api/sql-config | CRUD SQL模板 / test执行 / Cookie管理 |
+| dispatch | /api/dispatch | task-pool / assign / history / annotator-load |
+| model_review | /api/model-review | trigger / status / review-items |
+| auth | /api/auth | login / logout / users / user-preference |
+
+详细 API 文档请参考 `docs/技术文档.md`。
 服务启动后访问 http://localhost:5000
 
 ## 配置 iData Cookie

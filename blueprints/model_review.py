@@ -679,6 +679,10 @@ def api_trigger_review():
     if not fetch_log:
         return jsonify({"success": False, "message": "批次不存在"}), 404
     
+    # 检查是否已有正在运行的互检任务
+    if fetch_log.review_status == 'running':
+        return jsonify({"success": False, "message": "该批次互检进行中，请稍后再试"}), 400
+
     # 如果是强制重新互检，先重置所有记录
     if force:
         RawData.query.filter_by(fetch_batch_id=batch_id).update({
@@ -689,21 +693,21 @@ def api_trigger_review():
         })
         fetch_log.inconsistent_count = 0
         db.session.commit()
-    
-    # 检查是否已有正在运行的互检任务（强制模式下忽略）
-    if not force and fetch_log.review_status == 'running':
-        return jsonify({"success": False, "message": "该批次互检进行中，请稍后再试"}), 400
-    
-    # 更新互检状态为 running
-    fetch_log.review_status = 'running'
-    db.session.commit()
-    
+        fetch_log.review_status = 'running'
+        db.session.commit()
+    else:
+        # 继续互检（中止后恢复）：只处理剩余未互检记录（run_modelb_review 内部已按 modelb_reviewed=False 过滤）
+        fetch_log.review_status = 'running'
+        fetch_log.abort_flag = False  # 清除中止标记（防止上次遗留）
+        db.session.commit()
+
     # 启动异步任务
     threading.Thread(target=run_modelb_review, args=(batch_id,), daemon=True).start()
-    
+
     return jsonify({
         "success": True,
-        "message": "互检任务已提交"
+        "message": "互检任务已提交",
+        "resume": not force  # 通知前端是否为继续模式
     })
 
 
@@ -711,21 +715,40 @@ def api_trigger_review():
 def api_abort_review(batch_id):
     """中止指定批次的模型B互检
 
-    将 abort_flag 设为 True，run_modelb_review 线程在下一条处理前检测到标志后停止
+    设置 abort_flag=True，worker 线程检测到后更新 review_status='aborted'
     """
-    # expire 缓存确保读到 DB 最新值
     db.session.expire_all()
     fetch_log = FetchLog.query.filter_by(batch_id=batch_id).first()
     if not fetch_log:
         return jsonify({"success": False, "message": "批次不存在"}), 404
 
+    if fetch_log.review_status == 'aborted':
+        # 已中止，直接返回（幂等）
+        reviewed_count = RawData.query.filter_by(
+            fetch_batch_id=batch_id, modelb_reviewed=True
+        ).count()
+        return jsonify({
+            "success": True,
+            "message": f"该批次已中止（已互检 {reviewed_count} 条）"
+        })
+
     if fetch_log.review_status != 'running':
         return jsonify({"success": False, "message": f"互检不在运行中（当前状态：{fetch_log.review_status}），无法中止"}), 400
 
     try:
+        # 设置 abort_flag 并立即更新状态（不等 worker 线程）
         fetch_log.abort_flag = True
+        fetch_log.review_status = 'aborted'
         db.session.commit()
-        return jsonify({"success": True, "message": "中止信号已发送，线程将在当前条处理完毕后停止"})
+
+        reviewed_count = RawData.query.filter_by(
+            fetch_batch_id=batch_id, modelb_reviewed=True
+        ).count()
+
+        return jsonify({
+            "success": True,
+            "message": f"互检已中止（已互检 {reviewed_count} 条）"
+        })
     except Exception as e:
         db.session.rollback()
         return jsonify({"success": False, "message": f"中止失败: {str(e)}"}), 500

@@ -462,6 +462,17 @@
         const isCollapsed = sidebar.classList.contains('collapsed');
         sidebarToggle.textContent = isCollapsed ? '»' : '☰';
         localStorage.setItem('sidebarCollapsed', isCollapsed);
+        // ✅ 通知所有 iframe 子页面侧边栏已切换，子页面自行重算宽度
+        document.querySelectorAll('iframe').forEach(function(iframe) {
+          try {
+            iframe.contentWindow && iframe.contentWindow.postMessage({
+              type: 'sidebarToggle',
+              collapsed: isCollapsed
+            }, '*');
+          } catch(e) {
+            // 跨域 iframe 忽略
+          }
+        });
       });
 
       // 展开父菜单
