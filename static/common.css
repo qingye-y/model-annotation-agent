@@ -624,6 +624,12 @@ a:hover {
 .badge-outline-warning { border: 1px solid var(--warning); color: var(--warning); background: transparent; }
 .badge-outline-danger { border: 1px solid var(--danger); color: var(--danger); background: transparent; }
 
+/* ---------- 批次详情页差异类型标签（v2.0 四分类） ---------- */
+.diff-unreviewed  { background: #f3f4f6; color: #6b7280; border: 1px solid #d1d5db; }
+.diff-missed     { background: #fff7ed; color: #c2410c; border: 1px solid #fed7aa; }
+.diff-consistent { background: #f0fdf4; color: #15803d; border: 1px solid #bbf7d0; }
+.diff-inconsistent { background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca; }
+
 /* ---------- 模态弹窗 ---------- */
 .modal-overlay {
   position: fixed;

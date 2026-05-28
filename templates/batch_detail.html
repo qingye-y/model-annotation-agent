@@ -248,28 +248,21 @@
           </select>
         </div>
         <div class="filter-item">
-          <label>互检状态</label>
-          <select class="form-select" id="filterReviewStatus">
-            <option value="">全部</option>
-            <option value="reviewed">已互检</option>
-            <option value="not_reviewed">未互检</option>
-          </select>
-        </div>
-        <div class="filter-item">
           <label>AB差异</label>
           <select class="form-select" id="filterDiffStatus">
             <option value="">全部</option>
             <option value="consistent">一致</option>
-            <option value="a_pass_b_reject">A合规B违规</option>
-            <option value="a_reject_b_pass">A违规B合规</option>
+            <option value="inconsistent">不一致</option>
           </select>
         </div>
         <div class="filter-item">
           <label>模型B结果</label>
           <select class="form-select" id="filterModelbResult">
             <option value="">全部</option>
+            <option value="未互检">未互检</option>
             <option value="合规">合规</option>
             <option value="违规">违规</option>
+            <option value="漏审">漏审</option>
           </select>
         </div>
         <div class="filter-item">
@@ -350,30 +343,36 @@
           批次：<strong id="genBatchId" style="color:var(--text-primary);"></strong>
           <span id="genBatchInstances" style="margin-left:12px;"></span>
         </div>
-        <!-- 抽检方式 -->
+        <!-- 抽检方式（v2.0 统一四分类） -->
         <div class="form-group">
           <label>抽检方式 <span class="required">*</span></label>
           <div style="display:flex;flex-direction:column;gap:8px;margin-top:6px;">
             <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:normal;">
-              <input type="radio" name="genSampleMode" value="inconsistent" checked style="width:16px;height:16px;">
-              <span><strong>仅不一致数据</strong>（A/B模型判定不一致的数据，100%全量进入）</span>
+              <input type="radio" name="genSampleMode" value="all" checked style="width:16px;height:16px;">
+              <span><strong>全部</strong>（差异 + 漏审 + 一致性抽检）<span id="genAllCount" style="color:#27ae60;font-weight:bold;"></span></span>
             </label>
             <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:normal;">
-              <input type="radio" name="genSampleMode" value="consistent" style="width:16px;height:16px;">
-              <span><strong>仅一致性数据</strong>（A/B模型判定一致的数据）</span>
+              <input type="radio" name="genSampleMode" value="diff_only" style="width:16px;height:16px;">
+              <span><strong>仅差异数据</strong>（A/B模型判定不一致，已互检）<span id="genDiffCount" style="color:#e67e22;font-weight:bold;"></span></span>
             </label>
             <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:normal;">
-              <input type="radio" name="genSampleMode" value="both" style="width:16px;height:16px;">
-              <span><strong>全部</strong>（不一致100% + 一致数据按比例）</span>
+              <input type="radio" name="genSampleMode" value="missed_only" style="width:16px;height:16px;">
+              <span><strong>仅漏审数据</strong>（并发时被跳过的应审未审记录）<span id="genMissedCount" style="color:#e67e22;font-weight:bold;"></span></span>
+            </label>
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:normal;">
+              <input type="radio" name="genSampleMode" value="consistency_sample" style="width:16px;height:16px;">
+              <span><strong>仅一致性抽检</strong>（A/B模型判定一致的数据）<span id="genConsistencyCount" style="color:#8e44ad;font-weight:bold;"></span></span>
             </label>
           </div>
         </div>
-        <!-- 一致性数据抽检比例（仅 consistent/both 时显示）-->
-        <div class="form-group" id="genPercentRow" style="display:none;">
-          <label>一致性数据抽检比例（%）</label>
-          <input type="number" class="form-input" id="genSamplePercent" value="5" min="0" max="100" step="0.1" style="width:120px;">
-          <span style="font-size:12px;color:var(--text-muted);margin-left:8px;">100 = 全量抽取</span>
+        <!-- 一致性数据抽检比例（仅 consistency_sample / all 时显示） -->
+        <div class="form-group" id="genPercentRow">
+          <label>一致性数据抽样比例（%）</label>
+          <input type="number" class="form-input" id="genSamplePercent" value="5" min="1" max="100" style="width:120px;">
+          <span style="font-size:12px;color:var(--text-muted);margin-left:8px;">（从一致性数据中随机抽取，向下取整）</span>
         </div>
+        <!-- v2.0: 抽取数量预览 -->
+        <div id="genPreviewText" style="background:#f8f9fa;border-radius:6px;padding:8px 12px;margin-bottom:12px;font-size:13px;color:var(--text-secondary);">正在加载数量...</div>
         <!-- 自动规则预览 -->
         <div style="background:#f0f0ff;border-left:3px solid var(--primary);padding:10px 12px;border-radius:4px;font-size:12px;color:var(--text-secondary);line-height:1.7;" id="genRulePreview">
           <strong>将自动生成以下规则的任务：</strong>
@@ -729,32 +728,103 @@
         })
         .catch(function() { _genRules = []; buildRulePreview(); });
 
-      // 默认选中"仅不一致"
+      // 默认选中"全部"（v2.0）
       document.querySelectorAll('input[name="genSampleMode"]').forEach(function(r) {
-        r.checked = (r.value === 'inconsistent');
+        r.checked = (r.value === 'all');
       });
 
-      // 比例行默认隐藏
+      // 比例行默认显示（all 模式需要）
       var percentRow = document.getElementById('genPercentRow');
-      if (percentRow) percentRow.style.display = 'none';
+      if (percentRow) percentRow.style.display = 'block';
 
-      // 监听变化
+      // 百分比输入框默认值
+      var spEl = document.getElementById('genSamplePercent');
+      if (spEl) spEl.value = (summaryData && summaryData.task_sample_percent) ? summaryData.task_sample_percent : 5;
+
+      // 监听抽取方式切换 → 更新比例行 + 预览（v2.0）
       document.querySelectorAll('input[name="genSampleMode"]').forEach(function(r) {
         r.onchange = function() {
           var pr = document.getElementById('genPercentRow');
-          if (pr) pr.style.display = (this.value === 'inconsistent') ? 'none' : 'block';
+          var val = this.value;
+          if (pr) pr.style.display = (val === 'diff_only' || val === 'missed_only') ? 'none' : 'block';
+          updateDetailGenPreview();
           buildRulePreview();
         };
       });
-      var spEl = document.getElementById('genSamplePercent');
-      if (spEl) spEl.oninput = buildRulePreview;
 
-      if (spEl) spEl.value = (summaryData && summaryData.task_sample_percent) ? summaryData.task_sample_percent : 5;
+      // 百分比变化 → 重新拉取数量（防抖）
+      if (spEl) {
+        spEl.oninput = function() {
+          clearTimeout(window._detailGenDebounce);
+          window._detailGenDebounce = setTimeout(function() {
+            fetchDetailGenCounts();
+          }, 500);
+        };
+      }
+
+      // 首次打开时拉取各分类数量（v2.0）
+      fetchDetailGenCounts();
 
       var btn = document.getElementById('genSubmitBtn');
       if (btn) { btn.disabled = false; btn.textContent = '确认生成'; }
 
       openModal('generateModal');
+    }
+
+    // v2.0: 从后端获取各分类数量（批次详情页）
+    function fetchDetailGenCounts() {
+      var pct = parseInt(document.getElementById('genSamplePercent').value) || 5;
+      fetch('/api/dispatch/generate-tasks', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ batch_id: BATCH_ID, data_mode: 'preview', sample_percent: pct })
+      })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          if (data.success) {
+            window._detailGenCounts = data;
+            // 更新各分类标签
+            var el = document.getElementById('genDiffCount');
+            if (el) el.textContent = (data.diff_count > 0) ? '（' + data.diff_count + ' 条）' : '（0 条）';
+            el = document.getElementById('genMissedCount');
+            if (el) el.textContent = (data.missed_count > 0) ? '（' + data.missed_count + ' 条）' : '（0 条）';
+            el = document.getElementById('genConsistencyCount');
+            if (el) el.textContent = (data.consistency_sampled > 0) ? '（' + data.consistency_sampled + ' 条）' : '（0 条）';
+            el = document.getElementById('genAllCount');
+            if (el) el.textContent = (data.total_count > 0) ? '（' + data.total_count + ' 条）' : '（0 条）';
+            updateDetailGenPreview();
+          }
+        })
+        .catch(function() {});
+    }
+
+    // v2.0: 批次详情页生成任务弹窗预览
+    function updateDetailGenPreview() {
+      var mode = document.querySelector('input[name="genSampleMode"]:checked').value;
+      var counts = window._detailGenCounts || {};
+      var diffCount = counts.diff_count || 0;
+      var missedCount = counts.missed_count || 0;
+      var consSampled = counts.consistency_sampled || 0;
+      var totalCount = counts.total_count || 0;
+
+      var modeLabels = {
+        'all': '全部',
+        'diff_only': '仅差异数据',
+        'missed_only': '仅漏审数据',
+        'consistency_sample': '仅一致性抽检'
+      };
+      var el = document.getElementById('genPreviewText');
+      if (!el) return;
+      if (mode === 'diff_only') {
+        el.textContent = '预计生成 ' + diffCount + ' 条（仅差异数据，100% 全量纳入标注池）';
+      } else if (mode === 'missed_only') {
+        el.textContent = '预计生成 ' + missedCount + ' 条（仅漏审数据，100% 全量纳入标注池）';
+      } else if (mode === 'consistency_sample') {
+        var pct = parseInt(document.getElementById('genSamplePercent').value) || 5;
+        el.textContent = '预计生成 ' + consSampled + ' 条（仅一致性抽检，' + pct + '%）';
+      } else {
+        el.textContent = '预计生成 ' + totalCount + ' 条（差异 ' + diffCount + ' + 漏审 ' + missedCount + ' + 一致性 ' + consSampled + '）';
+      }
     }
 
     // v3.1: 打开重新生成确认弹窗（详情页专用，与列表页统一交互）
@@ -773,13 +843,15 @@
       fetch('/api/dispatch/regenerate-task-pool', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ batch_id: BATCH_ID, rule_name: '合规抽检', data_mode: 'missed_review', sample_percent: 5 })
+        body: JSON.stringify({ batch_id: BATCH_ID, rule_name: '合规抽检', data_mode: 'all', sample_percent: 5 })
       })
         .then(function(r) { return r.json(); })
         .then(function(data) {
           closeModal('confirmRegenerateModal');
           if (data.success) {
             showToast('重新生成成功：撤回 ' + (data.revoked_count || 0) + ' 条，重新纳入 ' + (data.total_in_pool || 0) + ' 条');
+            loadSummary();   // Bug2-3 修复：刷新概览卡片（互检进度、状态）
+            loadData(1);     // Bug2-3 修复：刷新明细表格
           } else {
             showToast(data.error || '重新生成失败', 'error');
           }
@@ -796,7 +868,7 @@
 
     function confirmGenerateTask() {
       var modeRadio = document.querySelector('input[name="genSampleMode"]:checked');
-      var mode = modeRadio ? modeRadio.value : 'inconsistent';
+      var mode = modeRadio ? modeRadio.value : 'all';
       var samplePercent = parseFloat((document.getElementById('genSamplePercent') || {}).value) || 5;
 
       if (_genRules.length === 0) { showToast('规则加载中，请稍候', 'error'); return; }
@@ -805,12 +877,12 @@
       btn.disabled = true;
       btn.textContent = '生成中…';
 
-      // 遍历所有规则，并行请求
+      // 遍历所有规则，并行请求（v2.0：diff_only/missed_only 用 100%，其余用比例）
       var allRules = _genRules.map(function(r) { return r.name || r; });
       var promises = allRules.map(function(ruleName) {
         var instsForRule = _genRuleMap[ruleName] || [];
         var instance = instsForRule.length > 0 ? instsForRule[0] : null;
-        var percent = (mode === 'inconsistent') ? 0 : samplePercent;
+        var percent = (mode === 'diff_only' || mode === 'missed_only') ? 100 : samplePercent;
         return fetch('/api/dispatch/generate-tasks', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -825,19 +897,21 @@
       });
 
       Promise.all(promises).then(function(results) {
-        var totalInc = 0, totalCons = 0, okCount = 0;
+        var totalDiff = 0, totalMissed = 0, totalCons = 0, okCount = 0;
         var errors = [];
         results.forEach(function(data, i) {
           if (data.success) {
-            totalInc += data.inconsistent_count || 0;
-            totalCons += data.sampled_count || 0;
+            totalDiff += data.diff_count || 0;
+            totalMissed += data.missed_count || 0;
+            totalCons += data.consistency_sampled || 0;
             okCount++;
           } else {
             errors.push(allRules[i] + ':' + (data.error || '失败'));
           }
         });
-        var modeLabel = { 'inconsistent': '不一致', 'consistent': '一致', 'both': '全量' }[mode];
-        var msg = '完成：' + okCount + '个规则，共进 ' + (totalInc + totalCons) + ' 条（不一致' + totalInc + ' + 一致' + totalCons + '）';
+        var total = totalDiff + totalMissed + totalCons;
+        var modeLabels = { 'all': '全部', 'diff_only': '仅差异数据', 'missed_only': '仅漏审数据', 'consistency_sample': '仅一致性抽检' };
+        var msg = modeLabels[mode] + '：' + okCount + '个规则，共 ' + total + ' 条进入标注池';
         if (errors.length > 0) msg += '；部分失败：' + errors.join('；');
         showToast(msg);
         closeModal('generateModal');
@@ -974,7 +1048,6 @@
       var aiResult = document.getElementById('filterAiResult').value;
       var instance = document.getElementById('filterInstance').value;
       var keyword = document.getElementById('filterKeyword').value.trim();
-      var reviewStatus = document.getElementById('filterReviewStatus').value;
       var diffStatus = document.getElementById('filterDiffStatus').value;
       var modelbResult = document.getElementById('filterModelbResult').value;
       var taskStatus = document.getElementById('filterTaskStatus').value;  // v3.1
@@ -987,7 +1060,6 @@
       if (aiResult) url += '&ai_result=' + encodeURIComponent(aiResult);
       if (instance) url += '&instance=' + encodeURIComponent(instance);
       if (keyword) url += '&keyword=' + encodeURIComponent(keyword);
-      if (reviewStatus) url += '&review_status=' + encodeURIComponent(reviewStatus);
       if (diffStatus) url += '&diff_status=' + encodeURIComponent(diffStatus);
       if (modelbResult) url += '&modelb_result=' + encodeURIComponent(modelbResult);
       if (taskStatus) url += '&task_status=' + encodeURIComponent(taskStatus);  // v3.1
@@ -999,8 +1071,10 @@
 
           totalItems = data.total || 0;
           totalPages = data.pages || Math.ceil((data.total || 0) / pageSize);
+          // v2.0: 缓存 max_reviewed_id 供差异类型计算使用
+          window._maxReviewedId = data.max_reviewed_id || null;
           currentItems = (data.items || []).map(function(item) {
-            var diffType = calcDiffType(item.aiResult, item.modelBResult);
+            var diffType = calcDiffType(item);
             return {
               id: item.id,
               productId: item.product_id || '',
@@ -1042,20 +1116,33 @@
         });
     }
 
-    function calcDiffType(aiResult, modelBResult) {
-      var modelA = aiResult || '合规';
-      if (!modelBResult) return '未互检';
-      if (modelA === '合规' && modelBResult === '违规') return 'A合规B违规';
-      if (modelA === '违规' && modelBResult === '合规') return 'A违规B合规';
-      if (modelA === '合规' && modelBResult === '合规') return 'A合规B合规';
-      if (modelA === '违规' && modelBResult === '违规') return 'A违规B违规';
-      return '其他';
+    function calcDiffType(item) {
+      // 四分类（v2.0）
+      // 未互检：modelb_reviewed=False 且 id >= maxReviewedId（正常排队中）
+      // 漏审：modelb_reviewed=False 且 id < maxReviewedId（并发跳过）
+      // 一致：modelb_reviewed=True 且 modelb_consistent=True
+      // 不一致：modelb_reviewed=True 且 modelb_consistent=False
+      var maxId = window._maxReviewedId;
+      var reviewed = item.modelbReviewed;
+      var consistent = item.modelbConsistent;
+      var id = item.id;
+
+      if (!reviewed) {
+        // 未互检：id >= maxReviewedId 为正常排队，id < maxReviewedId 为漏审
+        if (maxId && id < maxId) {
+          return '漏审';
+        }
+        return '未互检';
+      }
+      if (consistent) return '一致';
+      return '不一致';
     }
 
     function diffTypeClass(dt) {
-      if (dt === 'A合规B违规' || dt === 'A违规B合规') return 'diff';
-      if (dt === 'A合规B合规' || dt === 'A违规B违规') return 'match';
-      return 'pending';
+      if (dt === '不一致') return 'diff';
+      if (dt === '一致') return 'match';
+      if (dt === '漏审') return 'missed';
+      return 'unreviewed';
     }
 
     // v3.1: 任务状态标签
@@ -1092,7 +1179,7 @@
       var html = '';
       currentItems.forEach(function(item) {
         var dtClass = diffTypeClass(item.diffType);
-        var rowClass = (item.diffType === 'A合规B违规' || item.diffType === 'A违规B合规') ? 'class="highlight"' : '';
+        var rowClass = (item.diffType === '不一致') ? 'class="highlight"' : '';
 
         var aiReasonShort = item.aiRejectReason ? (item.aiRejectReason.length > 18 ? item.aiRejectReason.substring(0, 18) + '...' : item.aiRejectReason) : '-';
         var modelBReasonShort = item.modelBReason ? (item.modelBReason.length > 18 ? item.modelBReason.substring(0, 18) + '...' : item.modelBReason) : '-';
@@ -1256,7 +1343,6 @@
 
     function resetFilters() {
       document.getElementById('filterAiResult').value = '';
-      document.getElementById('filterReviewStatus').value = '';
       document.getElementById('filterDiffStatus').value = '';
       document.getElementById('filterModelbResult').value = '';
       document.getElementById('filterInstance').value = '';

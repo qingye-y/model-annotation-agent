@@ -321,34 +321,34 @@
         <div id="genModalWarning" style="display:none;background:#fff3cd;border:1px solid #ffc107;border-radius:6px;padding:10px 12px;margin-bottom:16px;font-size:13px;color:#856404;">
           ⚠️ <strong>重新生成将智能撤回</strong>：已分配但未标注的任务（状态为「已分配」）将被自动撤回，重新纳入本次生成范围。已标注的数据不受影响。
         </div>
-        <!-- 抽取模式 -->
+        <!-- 抽取模式（v2.0 统一四分类） -->
         <div class="form-group">
           <label>抽取方式 <span class="required">*</span></label>
           <div style="display:flex;flex-direction:column;gap:8px;margin-top:6px;">
             <label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;font-weight:normal;">
-              <input type="radio" name="genSampleMode" value="missed_review" checked style="margin-top:2px;">
-              <span><strong>仅漏审数据</strong>：模型B未出结果的记录，100% 全部进入标注池 <span id="genMissedCount" style="color:#e67e22;font-weight:bold;"></span></span>
+              <input type="radio" name="genSampleMode" value="all" checked style="margin-top:2px;">
+              <span><strong>全部</strong>（差异 + 漏审 + 一致性抽检）<span id="genAllCount" style="color:#27ae60;font-weight:bold;"></span></span>
             </label>
             <label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;font-weight:normal;">
-              <input type="radio" name="genSampleMode" value="inconsistent" style="margin-top:2px;">
-              <span><strong>仅不一致数据</strong>：A/B 审核结果不一致的记录，100% 全部进入标注池</span>
+              <input type="radio" name="genSampleMode" value="diff_only" style="margin-top:2px;">
+              <span><strong>仅差异数据</strong>（A/B 审核结果不一致，已互检）<span id="genDiffCount" style="color:#e67e22;font-weight:bold;"></span></span>
             </label>
             <label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;font-weight:normal;">
-              <input type="radio" name="genSampleMode" value="consistent" style="margin-top:2px;">
-              <span><strong>仅一致性抽检</strong>：A/B 审核结果一致的数据</span>
+              <input type="radio" name="genSampleMode" value="missed_only" style="margin-top:2px;">
+              <span><strong>仅漏审数据</strong>（并发时被跳过的应审未审记录）<span id="genMissedCount" style="color:#e67e22;font-weight:bold;"></span></span>
             </label>
             <label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;font-weight:normal;">
-              <input type="radio" name="genSampleMode" value="both" style="margin-top:2px;">
-              <span><strong>全部</strong>：漏审数据 + 不一致数据 + 一致性抽检数据</span>
+              <input type="radio" name="genSampleMode" value="consistency_sample" style="margin-top:2px;">
+              <span><strong>仅一致性抽检</strong>（A/B 审核结果一致的数据）<span id="genConsistencyCount" style="color:#8e44ad;font-weight:bold;"></span></span>
             </label>
           </div>
         </div>
-        <!-- 抽样比例（仅 consistent/both 时显示） -->
-        <div class="form-group" id="genPercentRow" style="display:none;">
+        <!-- 一致性数据抽样比例（仅 consistency_sample / all 时显示） -->
+        <div class="form-group" id="genPercentRow">
           <label>一致性数据抽样比例（%）</label>
           <div style="display:flex;align-items:center;gap:8px;margin-top:6px;">
             <input type="number" id="genSamplePercent" value="5" min="1" max="100" style="width:80px;padding:6px 10px;border:1px solid var(--border);border-radius:4px;font-size:13px;">
-            <span style="color:var(--text-secondary);font-size:13px;">%（从一致性数据中随机抽取）</span>
+            <span style="color:var(--text-secondary);font-size:13px;">%（从一致性数据中随机抽取，向下取整）</span>
           </div>
         </div>
         <div class="preview-text" id="genPreviewText">请选择抽取方式</div>
@@ -1349,9 +1349,9 @@
       var instances = batch.instances || '';
       document.getElementById('genBatchInstances').textContent = instances ? '实例：' + instances : '';
 
-      // 重置 radio（默认选中漏审数据）和比例
-      document.querySelectorAll('input[name="genSampleMode"]').forEach(function(r) { r.checked = (r.value === 'missed_review'); });
-      document.getElementById('genPercentRow').style.display = 'none';
+      // 重置 radio（默认选中"全部"）和比例（v2.0）
+      document.querySelectorAll('input[name="genSampleMode"]').forEach(function(r) { r.checked = (r.value === 'all'); });
+      document.getElementById('genPercentRow').style.display = 'block';
       document.getElementById('genSamplePercent').value = 5;
       document.getElementById('genPreviewText').innerHTML = '正在加载数量...';
 
@@ -1430,7 +1430,7 @@
     }
     function confirmRegenerate() {
       var mode = document.querySelector('input[name="genSampleMode"]:checked').value;
-      var percent = (mode === 'missed_review' || mode === 'inconsistent') ? 100 :
+      var percent = (mode === 'diff_only' || mode === 'missed_only') ? 100 :
                     parseInt(document.getElementById('genSamplePercent').value) || 5;
       var batchId = regenerateBatchId;
       if (!batchId) return;
@@ -1482,7 +1482,7 @@
       window.location.href = '/dispatch_center.html?filter_batch=' + encodeURIComponent(batchId);
     }
 
-    // v2.1 从后端获取各分类数量（preview 模式）
+    // v2.0 从后端获取各分类数量（preview 模式）
     // samplePercent 可选，不传则默认用输入框当前值（用于百分比变化后重新拉取）
     function fetchGenCounts(batchId, samplePercent) {
       var pct = (samplePercent !== undefined) ? samplePercent :
@@ -1497,18 +1497,26 @@
         .then(function(data) {
           if (data.success) {
             window._genCounts = data;  // 缓存到全局，供 updateGenPreview 使用
-            // 更新漏审数据标签
+            // 更新各分类标签
+            document.getElementById('genDiffCount').textContent =
+              (data.diff_count > 0) ? '（' + data.diff_count + ' 条）' : '（0 条）';
             document.getElementById('genMissedCount').textContent =
-              data.missed_count > 0 ? '（' + data.missed_count + ' 条）' : '（0 条）';
+              (data.missed_count > 0) ? '（' + data.missed_count + ' 条）' : '（0 条）';
+            document.getElementById('genConsistencyCount').textContent =
+              (data.consistency_sampled > 0) ? '（' + data.consistency_sampled + ' 条）' : '（0 条）';
+            document.getElementById('genAllCount').textContent =
+              (data.total_count > 0) ? '（' + data.total_count + ' 条）' : '（0 条）';
             // 同步输入框百分比（以后端实际使用的为准）
             if (samplePercent !== undefined) {
               document.getElementById('genSamplePercent').value = pct;
             }
-            // 默认选中漏审数据（仅弹窗首次打开时）
+            // 默认选中"全部"（仅弹窗首次打开时）
             if (samplePercent === undefined) {
               document.querySelectorAll('input[name="genSampleMode"]').forEach(function(r) {
-                r.checked = (r.value === 'missed_review');
+                r.checked = (r.value === 'all');
               });
+              // 比例行默认显示（all 模式需要）
+              document.getElementById('genPercentRow').style.display = 'block';
             }
             updateGenPreview();
           } else {
@@ -1528,40 +1536,40 @@
     function saveAsNewPreset() { /* noop */ }
     function updatePreview() { /* noop - replaced by updateGenPreview */ }
 
-    // v1.4/v2.1 预览：根据抽取模式 + 后端返回的实时数量显示
+    // v2.0 预览：根据抽取模式 + 后端返回的实时数量显示
+    // 四分类：差异数据 / 漏审数据 / 一致性抽检 / 全部
     function updateGenPreview() {
       var mode = document.querySelector('input[name="genSampleMode"]:checked').value;
       var previewEl = document.getElementById('genPreviewText');
       var percentRow = document.getElementById('genPercentRow');
-      var counts = window._genCounts;
+      var counts = window._genCounts || {};
 
-      if (mode === 'missed_review') {
-        // 漏审数据（v2.1）：100% 全部纳入
+      var diffCount = counts.diff_count || 0;
+      var missedCount = counts.missed_count || 0;
+      var consTotal = counts.consistency_total || 0;
+      var consSampled = counts.consistency_sampled || 0;
+      var totalCount = counts.total_count || 0;
+
+      if (mode === 'diff_only') {
+        // 仅差异数据：已互检，A/B 不一致，100% 全量
         percentRow.style.display = 'none';
-        var mc = counts ? counts.missed_count : 0;
-        previewEl.innerHTML = '预计生成 <strong>' + mc + '</strong> 条（漏审数据，100% 纳入标注池）';
+        previewEl.innerHTML = '预计生成 <strong>' + diffCount + '</strong> 条（仅差异数据，100% 全量纳入标注池）';
 
-      } else if (mode === 'inconsistent') {
-        // 不一致数据：100% 全部纳入
+      } else if (mode === 'missed_only') {
+        // 仅漏审数据：并发跳过的应审未审记录
         percentRow.style.display = 'none';
-        var ic = counts ? counts.inconsistent_count : 0;
-        previewEl.innerHTML = '预计生成 <strong>' + ic + '</strong> 条（A/B 不一致数据，100% 纳入标注池）';
+        previewEl.innerHTML = '预计生成 <strong>' + missedCount + '</strong> 条（仅漏审数据，100% 全量纳入标注池）';
 
-      } else if (mode === 'consistent') {
-        // 一致性抽检：按比例
+      } else if (mode === 'consistency_sample') {
+        // 仅一致性抽检：按比例
         percentRow.style.display = 'block';
         var pct = parseInt(document.getElementById('genSamplePercent').value) || 5;
-        var sc = counts ? counts.sampled_count : 0;
-        previewEl.innerHTML = '预计生成 <strong>' + sc + '</strong> 条（一致性抽检，' + pct + '%）';
+        previewEl.innerHTML = '预计生成 <strong>' + consSampled + '</strong> 条（仅一致性抽检，从 ' + consTotal + ' 条中抽 ' + pct + '%）';
 
       } else {
-        // 全部：漏审 + 不一致 + 一致性抽检
+        // 全部：差异 + 漏审 + 一致性抽检
         percentRow.style.display = 'block';
-        var pct2 = parseInt(document.getElementById('genSamplePercent').value) || 5;
-        var ic2 = counts ? counts.inconsistent_count : 0;
-        var mc2 = counts ? counts.missed_count : 0;
-        var sc2 = counts ? counts.sampled_count : 0;
-        previewEl.innerHTML = '预计生成 <strong>' + (mc2 + ic2 + sc2) + '</strong> 条（漏审 ' + mc2 + ' + 不一致 ' + ic2 + ' + 一致性 ' + sc2 + '）';
+        previewEl.innerHTML = '预计生成 <strong>' + totalCount + '</strong> 条（差异 ' + diffCount + ' + 漏审 ' + missedCount + ' + 一致性 ' + consSampled + '）';
       }
     }
 
@@ -1587,8 +1595,8 @@
 
     function confirmGenerate() {
       var mode = document.querySelector('input[name="genSampleMode"]:checked').value;
-      // missed_review / inconsistent 均为 100%，其余用比例输入框值
-      var percent = (mode === 'missed_review' || mode === 'inconsistent') ? 100 :
+      // diff_only / missed_only 均为 100%，consistency_sample / all 用比例输入框值（v2.0）
+      var percent = (mode === 'diff_only' || mode === 'missed_only') ? 100 :
                     parseInt(document.getElementById('genSamplePercent').value) || 5;
       var batchId = generateBatchId;
 
@@ -1622,10 +1630,8 @@
         .then(function(data) {
           if (data.success) {
             var total = data.total_entered || 0;
-            var msg = '标注任务生成成功，' + total + ' 条数据已注入任务池';
-            if (mode === 'missed_review') {
-              msg = '漏审数据处理完成，' + (data.missed_count || 0) + ' 条已纳入任务池';
-            }
+            var modeLabel = { 'all': '全部', 'diff_only': '仅差异数据', 'missed_only': '仅漏审数据', 'consistency_sample': '仅一致性抽检' }[mode] || mode;
+            var msg = modeLabel + '：' + total + ' 条数据已注入任务池';
             showToast(msg);
             // 刷新批次列表和调度中心任务池
             if (typeof loadBatches === 'function') loadBatches();

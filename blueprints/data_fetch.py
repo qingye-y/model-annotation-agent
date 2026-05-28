@@ -699,34 +699,36 @@ def api_task_batch_items(batch_id):
             RawData.ai_reject_reason.ilike(f'%{keyword}%')
         )
 
-    # 互检状态筛选
-    review_status = request.args.get('review_status', '')
-    if review_status == 'reviewed':
-        filtered_query = filtered_query.filter(RawData.modelb_reviewed == True)
-    elif review_status == 'not_reviewed':
-        filtered_query = filtered_query.filter(RawData.modelb_reviewed == False)
-
-    # AB差异筛选
+    # AB差异筛选（v2.0: 精简为 consistent / inconsistent）
     diff_status = request.args.get('diff_status', '')
     if diff_status == 'consistent':
         filtered_query = filtered_query.filter(RawData.modelb_consistent == True)
-    elif diff_status == 'a_pass_b_reject':
-        filtered_query = filtered_query.filter(
-            RawData.ai_result.in_(['合规', '1', 'PASS']),
-            RawData.modelb_result.in_(['违规', '0', 'REJECT'])
-        )
-    elif diff_status == 'a_reject_b_pass':
-        filtered_query = filtered_query.filter(
-            RawData.ai_result.in_(['违规', '0', 'REJECT']),
-            RawData.modelb_result.in_(['合规', '1', 'PASS'])
-        )
+    elif diff_status == 'inconsistent':
+        filtered_query = filtered_query.filter(RawData.modelb_consistent == False)
 
-    # 模型B审核结果筛选
+    # 模型B审核结果筛选（v2.0: 扩展为 未互检/合规/违规/漏审）
     modelb_result = request.args.get('modelb_result', '')
-    if modelb_result == '合规':
+    if modelb_result == '未互检':
+        # modelb_reviewed=False → 还未进入互检流程（排队中，id >= max_reviewed_id 边界）
+        filtered_query = filtered_query.filter(RawData.modelb_reviewed == False)
+    elif modelb_result == '合规':
         filtered_query = filtered_query.filter(RawData.modelb_result.in_(['合规', '1', 'PASS']))
     elif modelb_result == '违规':
         filtered_query = filtered_query.filter(RawData.modelb_result.in_(['违规', '0', 'REJECT']))
+    elif modelb_result == '漏审':
+        # 已到 max_reviewed_id 边界但仍未被互检（并发互检跳过窗口内的数据）
+        max_reviewed_id = db.session.query(db.func.max(RawData.id)).filter(
+            RawData.fetch_batch_id == batch_id,
+            RawData.modelb_reviewed == True
+        ).scalar()
+        if max_reviewed_id:
+            filtered_query = filtered_query.filter(
+                RawData.modelb_reviewed == False,
+                RawData.id < max_reviewed_id
+            )
+        else:
+            # 无任何已互检数据，漏审查询返回空
+            filtered_query = filtered_query.filter(RawData.id < 0)
 
     # v3.1: 任务分配状态筛选（派生于现有字段，向后兼容 task_status 字段为 NULL 的历史数据）
     # 已标注：check_result 非空
@@ -806,13 +808,20 @@ def api_task_batch_items(batch_id):
             ),
         })
 
+    # 计算 max_reviewed_id（v2.0: 用于前端四分类中的"漏审"边界判断）
+    max_reviewed_id = db.session.query(db.func.max(RawData.id)).filter(
+        RawData.fetch_batch_id == batch_id,
+        RawData.modelb_reviewed == True
+    ).scalar() or None
+
     return jsonify({
         "items": result,
         "total": total,
         "page": page,
         "per_page": per_page,
         "pages": (total + per_page - 1) // per_page,
-        "summary": summary
+        "summary": summary,
+        "max_reviewed_id": max_reviewed_id
     })
 
 

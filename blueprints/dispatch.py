@@ -1545,13 +1545,20 @@ def api_config_labels():
 
 # ---------------------------------------------------------------------------
 # API-9: POST /api/dispatch/generate-tasks
-# 生成标注任务（v1.4 新增，v2.1 支持漏审数据抽取）
+# 生成标注任务（v1.4 新增，v2.1 支持漏审数据抽取，v2.0 四分类全局统一）
 # 接收 batch_id + rule_name + instance + sample_percent + data_mode
-# - data_mode=preview          返回各分类数量（弹窗预览用，不修改数据）
-# - data_mode=missed_review    漏审数据（modelb_reviewed=False）100% 纳入任务池
-# - data_mode=inconsistent     不一致数据（modelb_consistent=False）100% 纳入任务池
-# - data_mode=consistent       一致性数据按比例随机抽取
-# - data_mode=both             漏审+不一致+一致性抽检（默认）
+# v2.0 四分类定义：
+#   diff        = modelb_reviewed=True AND modelb_consistent=False
+#   missed      = modelb_reviewed=False AND id < max_reviewed_id（并发跳过）
+#   consistency = modelb_reviewed=True AND modelb_consistent=True
+#   un-reviewed = modelb_reviewed=False AND id >= max_reviewed_id（仍在排队，不入任何分类）
+#
+# data_mode（v2.0）：
+#   preview            → 返回各分类数量，不修改任何数据
+#   diff_only         → 仅纳入差异数据
+#   missed_only       → 仅纳入漏审数据（标记 modelb_reviewed=True，reason=漏审-并发跳过）
+#   consistency_sample → 仅一致性数据按比例抽样
+#   all               → 差异+漏审+一致性抽检（默认）
 # ---------------------------------------------------------------------------
 
 @dispatch_bp.route('/api/dispatch/generate-tasks', methods=['POST'])
@@ -1559,12 +1566,18 @@ def api_config_labels():
 def api_generate_tasks():
     """生成标注任务（管理员手动触发）
 
+    v2.0 四分类数据定义：
+      diff        = modelb_reviewed=True  AND modelb_consistent=False
+      missed      = modelb_reviewed=False AND id < max_reviewed_id（并发被跳过）
+      consistency = modelb_reviewed=True  AND modelb_consistent=True
+      un-reviewed = modelb_reviewed=False AND id >= max_reviewed_id（仍排队，不入任何分类）
+
     data_mode 行为说明：
-      preview         → 仅返回各分类数量，弹窗预览用，不修改任何数据
-      missed_review   → 将 modelb_reviewed=False 的记录标记为已审，纳入任务池
-      inconsistent    → 将已互检的不一致记录纳入任务池
-      consistent      → 从已互检的一致性记录中按比例抽样
-      both            → 上述三者均纳入（漏审100%、不一致100%、一致性按比例）
+      preview            → 仅返回各分类数量，弹窗预览用，不修改任何数据
+      diff_only         → 将差异记录纳入任务池（RawData 已有字段，无需修改）
+      missed_only        → 将漏审记录标记 modelb_reviewed=True，reason=漏审-并发跳过
+      consistency_sample → 从一致性记录中按比例随机抽样
+      all               → 差异+漏审（100%）+一致性（按比例）均纳入任务池
     """
     if current_user.role != 'admin':
         return jsonify({'success': False, 'error': '权限不足，仅管理员可操作'}), 403
@@ -1574,7 +1587,7 @@ def api_generate_tasks():
     rule_name = str(data.get('rule_name', '')).strip()
     instance_code = str(data.get('instance', '')).strip() or None
     sample_percent = float(data.get('sample_percent', 5.0))
-    data_mode = str(data.get('data_mode', 'both')).lower()
+    data_mode = str(data.get('data_mode', 'all')).lower()
 
     # preview 模式只需要 batch_id，不做其他校验
     is_preview = (data_mode == 'preview')
@@ -1591,103 +1604,126 @@ def api_generate_tasks():
     if not fetch_log:
         return jsonify({'success': False, 'error': '批次不存在'}), 404
 
+    # v2.0：允许在 aborted 状态下生成（漏审数据仍然有意义）
     if not is_preview and fetch_log.review_status not in ('completed', 'aborted'):
         return jsonify({'success': False, 'error': '该批次互检尚未开始，无法生成标注任务'}), 400
 
-    # 互检中止的批次：modelb_reviewed=False 是「尚未轮到检查」而非「模型B无返回」，
-    # 不应计入漏审，排除掉以保持预览与生成行为一致
-    is_aborted = fetch_log.review_status == 'aborted'
-
     import logging
+    import random
     logger = logging.getLogger('werkzeug')
     logger.error(f'[GenerateTasks] batch_id={batch_id} data_mode={data_mode} sample_percent={sample_percent}')
 
-    # ========== 核心计数查询 ==========
-    # 不一致数据（已互检且 modelb_consistent=False）
-    inconsistent_filter = [
+    # ========== v2.0 核心：计算 max_reviewed_id 作为漏审边界 ==========
+    # max_reviewed_id = 该批次中 modelb_reviewed=True 的最大 id
+    # id < max_reviewed_id 的 modelb_reviewed=False 记录 = 并发中被跳过的漏审数据
+    # id >= max_reviewed_id 的 modelb_reviewed=False 记录 = 仍在排队，不计入任何分类
+    max_reviewed_id = db.session.query(db.func.max(RawData.id)).filter(
         RawData.fetch_batch_id == batch_id,
+        RawData.modelb_reviewed == True,
+    ).scalar()
+
+    base_filter = [RawData.fetch_batch_id == batch_id]
+    if instance_code:
+        base_filter.append(RawData.instance_code == instance_code)
+
+    # 差异数据（已互检且 modelb_consistent=False）
+    diff_filter = base_filter + [
         RawData.modelb_reviewed == True,
         RawData.modelb_consistent == False,
     ]
-    if instance_code:
-        inconsistent_filter.append(RawData.instance_code == instance_code)
-    inconsistent_count = RawData.query.filter(*inconsistent_filter).count()
+    diff_count = RawData.query.filter(*diff_filter).count()
 
-    # 漏审数据（modelb_reviewed=False，模型B从未返回结果）
-    # 互检中止时排除：中止是因为互检被中途停止，并非模型B无返回
-    missed_filter = [
-        RawData.fetch_batch_id == batch_id,
+    # 漏审数据：modelb_reviewed=False 且 id < max_reviewed_id
+    missed_filter = base_filter + [
+        RawData.modelb_reviewed == False,
     ]
-    if not is_aborted:
-        missed_filter.append(RawData.modelb_reviewed == False)
-    if instance_code:
-        missed_filter.append(RawData.instance_code == instance_code)
+    if max_reviewed_id is not None:
+        missed_filter.append(RawData.id < max_reviewed_id)
+    else:
+        # 极端情况：没有任何记录被互检过，无漏审数据
+        pass
     missed_count = RawData.query.filter(*missed_filter).count()
 
     # 一致性数据（已互检且 modelb_consistent=True）
-    consistent_filter = [
-        RawData.fetch_batch_id == batch_id,
+    consistency_filter = base_filter + [
         RawData.modelb_reviewed == True,
         RawData.modelb_consistent == True,
     ]
-    if instance_code:
-        consistent_filter.append(RawData.instance_code == instance_code)
+    consistency_all = RawData.query.filter(*consistency_filter).all()
+    consistency_total = len(consistency_all)
 
-    import random
-    consistent_all = RawData.query.filter(*consistent_filter).all()
+    # 按比例抽样
     if sample_percent > 0 and sample_percent < 100:
         threshold = sample_percent / 100.0
-        sampled_records = [r for r in consistent_all if (r.random_num or random.random()) < threshold]
-        sampled_count = len(sampled_records)
+        sampled_records = [r for r in consistency_all if (r.random_num or random.random()) < threshold]
+        consistency_sampled = len(sampled_records)
     elif sample_percent >= 100:
-        sampled_records = consistent_all
-        sampled_count = len(sampled_records)
+        sampled_records = consistency_all
+        consistency_sampled = len(sampled_records)
     else:
         sampled_records = []
-        sampled_count = 0
+        consistency_sampled = 0
 
-    logger.error(f'[GenerateTasks] 一致总数={len(consistent_all)} 不一致={inconsistent_count} 漏审={missed_count} 抽样={sampled_count}(阈值={sample_percent}%)')
+    # all 模式总数量（预览用）
+    total_preview = diff_count + missed_count + consistency_sampled
+
+    logger.error(f'[GenerateTasks v2.0] max_reviewed_id={max_reviewed_id} '
+                  f'差异={diff_count} 漏审={missed_count} 一致性抽样={consistency_sampled}/{consistency_total}(阈值={sample_percent}%) '
+                  f'all总计={total_preview}')
 
     # ========== preview 模式：仅返回计数，不修改数据 ==========
     if is_preview:
         return jsonify({
             'success': True,
             'preview': True,
-            'inconsistent_count': inconsistent_count,
+            'diff_count': diff_count,
             'missed_count': missed_count,
-            'sampled_count': sampled_count,
-            'sample_percent': sample_percent,   # 传回前端用于百分比输入框同步
-            'consistent_total': len(consistent_all),  # 一致性数据总量
+            'consistency_total': consistency_total,
+            'consistency_sampled': consistency_sampled,
+            'total_count': total_preview,
+            'sample_percent': sample_percent,
+            'max_reviewed_id': max_reviewed_id,
         })
 
-    # ========== 执行模式：根据 data_mode 处理数据 ==========
+    # ========== v2.0 执行模式：根据 data_mode 处理数据 ==========
     updated_missed = 0
-    if data_mode == 'missed_review':
+    if data_mode == 'missed_only':
         # 漏审数据：标记 modelb_reviewed=True，让其进入任务池
         missed_records = RawData.query.filter(*missed_filter).all()
         for rec in missed_records:
             rec.modelb_reviewed = True
             rec.modelb_result = '漏审'
-            rec.modelb_reason = '漏审-模型B无返回'
+            rec.modelb_reason = '漏审-并发跳过'   # v2.0 新 reason
             rec.modelb_consistent = None
         updated_missed = len(missed_records)
-        inconsistent_count = 0
-        sampled_count = 0
+        diff_count = 0
+        consistency_sampled = 0
         sampled_records = []
-        logger.error(f'[GenerateTasks] 标记 {updated_missed} 条漏审数据 modelb_reviewed=True')
+        logger.error(f'[GenerateTasks v2.0] 标记 {updated_missed} 条漏审数据 modelb_reviewed=True')
 
-    elif data_mode == 'inconsistent':
-        # 仅不一致数据（已有字段，无需修改 RawData）
-        sampled_count = 0
+    elif data_mode == 'diff_only':
+        # 仅差异数据（RawData 已有字段，无需修改）
+        consistency_sampled = 0
         sampled_records = []
-
-    elif data_mode == 'consistent':
-        # 仅一致性数据（sampled_records/sampled_count 已在上方计算好）
-        inconsistent_count = 0
         updated_missed = 0
-        logger.error(f'[GenerateTasks] 执行一致性抽样，实际纳入 {sampled_count} 条（阈值 {sample_percent}%）')
 
-    # 'both' 或其他：漏审+不一致+sampling 均纳入任务池（RawData 已有标记，无需修改）
+    elif data_mode == 'consistency_sample':
+        # 仅一致性数据（sampled_records/consistency_sampled 已在上方计算好）
+        diff_count = 0
+        updated_missed = 0
+        logger.error(f'[GenerateTasks v2.0] 执行一致性抽样，实际纳入 {consistency_sampled} 条（阈值 {sample_percent}%）')
+
+    elif data_mode == 'all':
+        # 差异（100%）+ 漏审（100%，已在上方标记）+ 一致性（按比例）均纳入
+        # missed_only 已在上方处理过了，这里 diff_count 和 consistency_sampled 不变
+        logger.error(f'[GenerateTasks v2.0] 执行 all 模式：差异={diff_count} 漏审={updated_missed} 一致性抽样={consistency_sampled}')
+
+    else:
+        # 兜底：仅差异数据
+        diff_count = 0
+        consistency_sampled = 0
+        sampled_records = []
+        updated_missed = 0
 
     # 更新 FetchLog 标记已生成
     fetch_log.task_generated = True
@@ -1696,15 +1732,17 @@ def api_generate_tasks():
 
     db.session.commit()
 
+    total_entered = diff_count + updated_missed + consistency_sampled
+
     return jsonify({
         'success': True,
         'message': f'生成成功',
-        'inconsistent_count': inconsistent_count,
-        'missed_count': updated_missed if data_mode == 'missed_review' else missed_count,
-        'sampled_count': sampled_count,
-        'sampled_percent': sample_percent,       # 本次执行的抽样比例
-        'consistent_total': len(consistent_all),  # 一致性数据总量
-        'total_entered': inconsistent_count + (updated_missed if data_mode == 'missed_review' else missed_count) + sampled_count,
+        'diff_count': diff_count,
+        'missed_count': updated_missed,
+        'consistency_sampled': consistency_sampled,
+        'consistency_total': consistency_total,
+        'sample_percent': sample_percent,
+        'total_entered': total_entered,
         'task_generated': True,
         'task_generate_time': fetch_log.task_generate_time,
         'task_sample_percent': sample_percent,
@@ -1806,12 +1844,11 @@ def api_regenerate_task_pool():
         inconsistent_filter.append(RawData.instance_code == instance_code)
     inconsistent_count = RawData.query.filter(*inconsistent_filter).count()
 
-    # 漏审数据（互检中止时排除 modelb_reviewed=False）
+    # 漏审数据（始终只看未互检记录，与 is_aborted 无关）
     missed_filter = [
         RawData.fetch_batch_id == batch_id,
+        RawData.modelb_reviewed == False,  # Bug2-1 修复：始终追加此条件，移除 is_aborted 分支
     ]
-    if not is_aborted:
-        missed_filter.append(RawData.modelb_reviewed == False)
     if instance_code:
         missed_filter.append(RawData.instance_code == instance_code)
     missed_count = RawData.query.filter(*missed_filter).count()
@@ -1863,6 +1900,9 @@ def api_regenerate_task_pool():
     fetch_log.task_generated = True
     if not fetch_log.task_generate_time:
         fetch_log.task_generate_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    # Bug2-2 修复：重新生成任务后重置互检状态，允许重新互检
+    if data_mode in ('missed_review', 'all'):
+        fetch_log.review_status = 'pending'
 
     db.session.commit()
 
