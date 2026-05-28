@@ -706,29 +706,21 @@ def api_task_batch_items(batch_id):
     elif diff_status == 'inconsistent':
         filtered_query = filtered_query.filter(RawData.modelb_consistent == False)
 
-    # 模型B审核结果筛选（v2.0: 扩展为 未互检/合规/违规/漏审）
-    modelb_result = request.args.get('modelb_result', '')
-    if modelb_result == '未互检':
-        # modelb_reviewed=False → 还未进入互检流程（排队中，id >= max_reviewed_id 边界）
+    # v2.1: 互检状态筛选（独立筛选项，与模型B结果分离）
+    review_status_filter = request.args.get('review_status', '')
+    if review_status_filter == 'reviewed':
+        filtered_query = filtered_query.filter(RawData.modelb_reviewed == True)
+    elif review_status_filter == 'not_reviewed':
         filtered_query = filtered_query.filter(RawData.modelb_reviewed == False)
-    elif modelb_result == '合规':
+
+    # v2.1: 模型B审核结果筛选（回退为 3 选项：全部/合规/违规，移除"未互检""漏审"）
+    modelb_result = request.args.get('modelb_result', '')
+    if modelb_result == '合规':
         filtered_query = filtered_query.filter(RawData.modelb_result.in_(['合规', '1', 'PASS']))
     elif modelb_result == '违规':
         filtered_query = filtered_query.filter(RawData.modelb_result.in_(['违规', '0', 'REJECT']))
-    elif modelb_result == '漏审':
-        # 已到 max_reviewed_id 边界但仍未被互检（并发互检跳过窗口内的数据）
-        max_reviewed_id = db.session.query(db.func.max(RawData.id)).filter(
-            RawData.fetch_batch_id == batch_id,
-            RawData.modelb_reviewed == True
-        ).scalar()
-        if max_reviewed_id:
-            filtered_query = filtered_query.filter(
-                RawData.modelb_reviewed == False,
-                RawData.id < max_reviewed_id
-            )
-        else:
-            # 无任何已互检数据，漏审查询返回空
-            filtered_query = filtered_query.filter(RawData.id < 0)
+    elif modelb_result == '无法审核':  # v1.1新增
+        filtered_query = filtered_query.filter(RawData.modelb_result == '无法审核')
 
     # v3.1: 任务分配状态筛选（派生于现有字段，向后兼容 task_status 字段为 NULL 的历史数据）
     # 已标注：check_result 非空

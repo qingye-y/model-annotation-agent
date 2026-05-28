@@ -628,8 +628,8 @@ a:hover {
 .diff-unreviewed  { background: #f3f4f6; color: #6b7280; border: 1px solid #d1d5db; }
 .diff-missed     { background: #fff7ed; color: #c2410c; border: 1px solid #fed7aa; }
 .diff-consistent { background: #f0fdf4; color: #15803d; border: 1px solid #bbf7d0; }
-.diff-inconsistent { background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca; }
-
+.diff-inconsistent  { background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca; }
+.diff-unreviewable  { background: #fffde7; color: #f57f17; border: 1px solid #f9a825; }  /* v1.1: 无法审核 */
 /* ---------- 模态弹窗 ---------- */
 .modal-overlay {
   position: fixed;

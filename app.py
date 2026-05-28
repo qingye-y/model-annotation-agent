@@ -155,7 +155,7 @@ with app.app_context():
             try:
                 sql = "ALTER TABLE raw_data ADD COLUMN %s %s" % (col_name, col_type)
                 db.session.execute(text(sql))
-                print(f"已添加列 {col_name}")
+                print("已添加列 " + col_name)
             except:
                 pass
 
@@ -245,7 +245,7 @@ with app.app_context():
 
         db.session.commit()
     except Exception as e:
-        print(f"数据库迁移检查完成: {e}")
+        print("数据库迁移检查完成: " + str(e))
     
     if not User.query.filter_by(username='admin').first():
         admin = User(
@@ -384,7 +384,7 @@ ORDER BY `创建日期`, cnt DESC"""
             db.session.add(template)
             db.session.flush()
             PIPELINE_SQLS[key]['_id'] = template.id
-            print(f"已创建管道SQL模板: {info['name']} (id={template.id})")
+            print("已创建管道SQL模板: " + info['name'] + " (id=" + str(template.id) + ")")
         else:
             PIPELINE_SQLS[key]['_id'] = existing.id
 
@@ -414,7 +414,7 @@ ORDER BY `创建日期`, cnt DESC"""
                 enabled=True
             )
             db.session.add(pipe)
-            print(f"已创建管道步骤: {step['env']} - {step['name']}")
+            print("已创建管道步骤: " + step['env'] + " - " + step['name'])
 
     db.session.commit()
     print("取数管道初始化完成")
@@ -432,11 +432,11 @@ ORDER BY `创建日期`, cnt DESC"""
             SqlTemplate.category == 'detail',
             SqlTemplate.env == tpl.env
         ).first()
-        detail_ref = f"商品审核数据取数-{tpl.env}(id={detail_tpl.id})" if detail_tpl else "S1明细模板"
+        detail_ref = "商品审核数据取数-" + str(tpl.env) + "(id=" + str(detail_tpl.id) + ")" if detail_tpl else "S1明细模板"
 
         params = [
             {"name": "detail_sql", "required": True, "system_injected": True,
-             "description": f"← 引用模板「{detail_ref}」的展开SQL，系统自动注入"}
+             "description": "← 引用模板「" + str(detail_ref) + "」的展开SQL，系统自动注入"}
         ]
 
         if tpl.category == 'sample':
@@ -446,7 +446,7 @@ ORDER BY `创建日期`, cnt DESC"""
             )
 
         tpl.params_json = json_lib.dumps(params, ensure_ascii=False)
-        print(f"已补充params_json: {tpl.name} (id={tpl.id})")
+        print("已补充params_json: " + tpl.name + " (id=" + str(tpl.id) + ")")
 
     db.session.commit()
     print("管道模板params_json迁移完成")
@@ -594,12 +594,12 @@ and r.instance_code = '${instance}' '''
         ).all()
         for task in stuck_tasks:
             task.status = 'failed'
-            print(f"[启动清理] 批次 {task.batch_id} 已超时（fetch_time={task.fetch_time}），自动标记为失败")
+            print("[启动清理] 批次 " + str(task.batch_id) + " 已超时（fetch_time=" + str(task.fetch_time) + "），自动标记为失败")
         if stuck_tasks:
             db.session.commit()
-            print(f"[启动清理] 已清理 {len(stuck_tasks)} 个超时任务")
+            print("[启动清理] 已清理 " + str(len(stuck_tasks)) + " 个超时任务")
     except Exception as e:
-        print(f"[启动清理] 清理超时任务失败: {e}")
+        print("[启动清理] 清理超时任务失败: " + str(e))
 
 
 if __name__ == '__main__':

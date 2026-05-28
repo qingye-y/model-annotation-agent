@@ -1545,20 +1545,18 @@ def api_config_labels():
 
 # ---------------------------------------------------------------------------
 # API-9: POST /api/dispatch/generate-tasks
-# 生成标注任务（v1.4 新增，v2.1 支持漏审数据抽取，v2.0 四分类全局统一）
-# 接收 batch_id + rule_name + instance + sample_percent + data_mode
-# v2.0 四分类定义：
-#   diff        = modelb_reviewed=True AND modelb_consistent=False
-#   missed      = modelb_reviewed=False AND id < max_reviewed_id（并发跳过）
-#   consistency = modelb_reviewed=True AND modelb_consistent=True
-#   un-reviewed = modelb_reviewed=False AND id >= max_reviewed_id（仍在排队，不入任何分类）
+# 生成标注任务（v1.4 新增，v1.1 checkbox 多选模式重构）
+# 接收 batch_id + rule_name + instance + sample_percent + categories（数组）
+# v1.1 五分类定义：
+#   diff          = modelb_reviewed=True  AND modelb_consistent=False
+#   missed        = modelb_reviewed=False AND id < max_reviewed_id（并发被跳过）
+#   unreviewable  = modelb_reviewed=True  AND modelb_result='无法审核'
+#   consistency   = modelb_reviewed=True  AND modelb_consistent=True AND modelb_result!='无法审核'
+#   un-reviewed   = modelb_reviewed=False AND id >= max_reviewed_id（仍在排队，不入任何分类）
 #
-# data_mode（v2.0）：
-#   preview            → 返回各分类数量，不修改任何数据
-#   diff_only         → 仅纳入差异数据
-#   missed_only       → 仅纳入漏审数据（标记 modelb_reviewed=True，reason=漏审-并发跳过）
-#   consistency_sample → 仅一致性数据按比例抽样
-#   all               → 差异+漏审+一致性抽检（默认）
+# categories 数组（默认 ['diff','missed','unreviewable','consistency']）：
+#   传入 categories 时：精确控制纳入哪些类别
+#   不传 categories（兼容旧版）：fallback 到 data_mode 逻辑
 # ---------------------------------------------------------------------------
 
 @dispatch_bp.route('/api/dispatch/generate-tasks', methods=['POST'])
@@ -1566,18 +1564,16 @@ def api_config_labels():
 def api_generate_tasks():
     """生成标注任务（管理员手动触发）
 
-    v2.0 四分类数据定义：
-      diff        = modelb_reviewed=True  AND modelb_consistent=False
-      missed      = modelb_reviewed=False AND id < max_reviewed_id（并发被跳过）
-      consistency = modelb_reviewed=True  AND modelb_consistent=True
-      un-reviewed = modelb_reviewed=False AND id >= max_reviewed_id（仍排队，不入任何分类）
+    v1.1 五分类数据定义（checkbox 多选模式）：
+      diff          = modelb_reviewed=True  AND modelb_consistent=False
+      missed        = modelb_reviewed=False AND id < max_reviewed_id（并发被跳过）
+      unreviewable  = modelb_reviewed=True  AND modelb_result='无法审核'
+      consistency   = modelb_reviewed=True  AND modelb_consistent=True AND modelb_result!='无法审核'
+      un-reviewed   = modelb_reviewed=False AND id >= max_reviewed_id（仍排队，不入任何分类）
 
-    data_mode 行为说明：
-      preview            → 仅返回各分类数量，弹窗预览用，不修改任何数据
-      diff_only         → 将差异记录纳入任务池（RawData 已有字段，无需修改）
-      missed_only        → 将漏审记录标记 modelb_reviewed=True，reason=漏审-并发跳过
-      consistency_sample → 从一致性记录中按比例随机抽样
-      all               → 差异+漏审（100%）+一致性（按比例）均纳入任务池
+    categories 参数（数组，默认 ['diff','missed','unreviewable','consistency']）：
+      传入 categories 时：精确控制纳入哪些类别
+      不传 categories（兼容旧版）：fallback 到 data_mode 逻辑
     """
     if current_user.role != 'admin':
         return jsonify({'success': False, 'error': '权限不足，仅管理员可操作'}), 403
@@ -1587,10 +1583,12 @@ def api_generate_tasks():
     rule_name = str(data.get('rule_name', '')).strip()
     instance_code = str(data.get('instance', '')).strip() or None
     sample_percent = float(data.get('sample_percent', 5.0))
-    data_mode = str(data.get('data_mode', 'all')).lower()
+    categories = data.get('categories')   # v1.1: 数组，默认后端兜底
+    data_mode_legacy = str(data.get('data_mode', 'all')).lower()
 
-    # preview 模式只需要 batch_id，不做其他校验
-    is_preview = (data_mode == 'preview')
+    # v1.1 修复：有 categories 数组 → preview（用户点开弹窗看计数）
+    # 旧版兼容：data_mode=preview 时也走 preview
+    is_preview = (categories is not None) or (data_mode_legacy == 'preview')
 
     if not batch_id:
         return jsonify({'success': False, 'error': 'batch_id 不能为空'}), 400
@@ -1599,24 +1597,19 @@ def api_generate_tasks():
     if not is_preview and (sample_percent < 0 or sample_percent > 100):
         return jsonify({'success': False, 'error': '抽检比例需在 0~100 之间'}), 400
 
-    # 确认批次存在
     fetch_log = FetchLog.query.filter_by(batch_id=batch_id).first()
     if not fetch_log:
         return jsonify({'success': False, 'error': '批次不存在'}), 404
 
-    # v2.0：允许在 aborted 状态下生成（漏审数据仍然有意义）
     if not is_preview and fetch_log.review_status not in ('completed', 'aborted'):
         return jsonify({'success': False, 'error': '该批次互检尚未开始，无法生成标注任务'}), 400
 
     import logging
     import random
     logger = logging.getLogger('werkzeug')
-    logger.error(f'[GenerateTasks] batch_id={batch_id} data_mode={data_mode} sample_percent={sample_percent}')
+    logger.error(f'[GenerateTasks] batch_id={batch_id} categories={categories} sample_percent={sample_percent}')
 
-    # ========== v2.0 核心：计算 max_reviewed_id 作为漏审边界 ==========
-    # max_reviewed_id = 该批次中 modelb_reviewed=True 的最大 id
-    # id < max_reviewed_id 的 modelb_reviewed=False 记录 = 并发中被跳过的漏审数据
-    # id >= max_reviewed_id 的 modelb_reviewed=False 记录 = 仍在排队，不计入任何分类
+    # ========== 核心：计算 max_reviewed_id 作为漏审边界 ==========
     max_reviewed_id = db.session.query(db.func.max(RawData.id)).filter(
         RawData.fetch_batch_id == batch_id,
         RawData.modelb_reviewed == True,
@@ -1626,25 +1619,28 @@ def api_generate_tasks():
     if instance_code:
         base_filter.append(RawData.instance_code == instance_code)
 
-    # 差异数据（已互检且 modelb_consistent=False）
+    # 差异数据（已互检且 A/B 不一致，排除无法审核）
     diff_filter = base_filter + [
         RawData.modelb_reviewed == True,
         RawData.modelb_consistent == False,
+        RawData.modelb_result != '无法审核',   # v1.1：无法审核不计入差异数据
     ]
     diff_count = RawData.query.filter(*diff_filter).count()
 
     # 漏审数据：modelb_reviewed=False 且 id < max_reviewed_id
-    missed_filter = base_filter + [
-        RawData.modelb_reviewed == False,
-    ]
+    missed_filter = base_filter + [RawData.modelb_reviewed == False]
     if max_reviewed_id is not None:
         missed_filter.append(RawData.id < max_reviewed_id)
-    else:
-        # 极端情况：没有任何记录被互检过，无漏审数据
-        pass
     missed_count = RawData.query.filter(*missed_filter).count()
 
-    # 一致性数据（已互检且 modelb_consistent=True）
+    # 无法审核数据（已互检，modelb_result='无法审核'）
+    unreviewable_filter = base_filter + [
+        RawData.modelb_reviewed == True,
+        RawData.modelb_result == '无法审核',
+    ]
+    unreviewable_count = RawData.query.filter(*unreviewable_filter).count()
+
+    # 一致性数据（已互检且 A/B 一致，排除无法审核）
     consistency_filter = base_filter + [
         RawData.modelb_reviewed == True,
         RawData.modelb_consistent == True,
@@ -1664,12 +1660,9 @@ def api_generate_tasks():
         sampled_records = []
         consistency_sampled = 0
 
-    # all 模式总数量（预览用）
-    total_preview = diff_count + missed_count + consistency_sampled
-
-    logger.error(f'[GenerateTasks v2.0] max_reviewed_id={max_reviewed_id} '
-                  f'差异={diff_count} 漏审={missed_count} 一致性抽样={consistency_sampled}/{consistency_total}(阈值={sample_percent}%) '
-                  f'all总计={total_preview}')
+    logger.error(f'[GenerateTasks v1.1] max_reviewed_id={max_reviewed_id} '
+                  f'差异={diff_count} 漏审={missed_count} 无法审核={unreviewable_count} '
+                  f'一致性抽样={consistency_sampled}/{consistency_total}(阈值={sample_percent}%)')
 
     # ========== preview 模式：仅返回计数，不修改数据 ==========
     if is_preview:
@@ -1678,75 +1671,63 @@ def api_generate_tasks():
             'preview': True,
             'diff_count': diff_count,
             'missed_count': missed_count,
+            'unreviewable_count': unreviewable_count,      # v1.1 新增
             'consistency_total': consistency_total,
             'consistency_sampled': consistency_sampled,
-            'total_count': total_preview,
             'sample_percent': sample_percent,
             'max_reviewed_id': max_reviewed_id,
         })
 
-    # ========== v2.0 执行模式：根据 data_mode 处理数据 ==========
+    # ========== v1.1 执行模式：根据 categories 数组处理数据 ==========
+    # 默认包含全部类别（diff/missed/unreviewable/consistency）
+    cats = categories if isinstance(categories, list) else ['diff', 'missed', 'unreviewable', 'consistency']
+
     updated_missed = 0
-    if data_mode == 'missed_only':
-        # 漏审数据：标记 modelb_reviewed=True，让其进入任务池
+    updated_unreviewable = 0
+
+    # 1. 漏审数据：标记 modelb_reviewed=True
+    if 'missed' in cats:
         missed_records = RawData.query.filter(*missed_filter).all()
         for rec in missed_records:
             rec.modelb_reviewed = True
             rec.modelb_result = '漏审'
-            rec.modelb_reason = '漏审-并发跳过'   # v2.0 新 reason
+            rec.modelb_reason = '漏审-并发跳过'
             rec.modelb_consistent = None
         updated_missed = len(missed_records)
-        diff_count = 0
-        consistency_sampled = 0
-        sampled_records = []
-        logger.error(f'[GenerateTasks v2.0] 标记 {updated_missed} 条漏审数据 modelb_reviewed=True')
+        logger.error(f'[GenerateTasks v1.1] 标记 {updated_missed} 条漏审数据 modelb_reviewed=True')
 
-    elif data_mode == 'diff_only':
-        # 仅差异数据（RawData 已有字段，无需修改）
-        consistency_sampled = 0
-        sampled_records = []
-        updated_missed = 0
+    # 2. 无法审核数据（无需标记，已在池中）
+    updated_unreviewable = unreviewable_count if 'unreviewable' in cats else 0
 
-    elif data_mode == 'consistency_sample':
-        # 仅一致性数据（sampled_records/consistency_sampled 已在上方计算好）
-        diff_count = 0
-        updated_missed = 0
-        logger.error(f'[GenerateTasks v2.0] 执行一致性抽样，实际纳入 {consistency_sampled} 条（阈值 {sample_percent}%）')
+    # 3. 差异数据（无需修改字段）
+    active_diff_count = diff_count if 'diff' in cats else 0
 
-    elif data_mode == 'all':
-        # 差异（100%）+ 漏审（100%，已在上方标记）+ 一致性（按比例）均纳入
-        # missed_only 已在上方处理过了，这里 diff_count 和 consistency_sampled 不变
-        logger.error(f'[GenerateTasks v2.0] 执行 all 模式：差异={diff_count} 漏审={updated_missed} 一致性抽样={consistency_sampled}')
+    # 4. 一致性数据（已在上方按比例抽取）
+    active_consistency_sampled = consistency_sampled if 'consistency' in cats else 0
 
-    else:
-        # 兜底：仅差异数据
-        diff_count = 0
-        consistency_sampled = 0
-        sampled_records = []
-        updated_missed = 0
-
-    # 更新 FetchLog 标记已生成
+    # 更新 FetchLog
     fetch_log.task_generated = True
     fetch_log.task_generate_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     fetch_log.task_sample_percent = sample_percent
 
     db.session.commit()
 
-    total_entered = diff_count + updated_missed + consistency_sampled
+    total_entered = active_diff_count + updated_missed + updated_unreviewable + active_consistency_sampled
 
     return jsonify({
         'success': True,
-        'message': f'生成成功',
-        'diff_count': diff_count,
+        'message': '生成成功',
+        'diff_count': active_diff_count,
         'missed_count': updated_missed,
-        'consistency_sampled': consistency_sampled,
+        'unreviewable_count': updated_unreviewable,
+        'consistency_sampled': active_consistency_sampled,
         'consistency_total': consistency_total,
         'sample_percent': sample_percent,
         'total_entered': total_entered,
         'task_generated': True,
         'task_generate_time': fetch_log.task_generate_time,
         'task_sample_percent': sample_percent,
-        'data_mode': data_mode,
+        'categories': cats,
     })
 
 
@@ -1760,16 +1741,15 @@ def api_generate_tasks():
 def api_regenerate_task_pool():
     """重新生成任务池（智能撤回 + 重新生成）
 
-    逻辑：
-      Step 1 - 智能撤回：查询该批次 task_status='assigned' 但 check_result 仍为空的记录
-               （已分配但未完成标注），清空 annotator + 设置 revoked_batch + task_status='unassigned'
-               注意：task_status='annotated' 的记录完全不动（已完成标注不可逆）
-      Step 2 - 重新生成：复用 api_generate_tasks 的抽样逻辑，为退回的数据重新纳入任务池
-      Step 3 - 返回结果
+    v1.1 五分类（checkbox 多选模式）：
+      Step 1 - 智能撤回：已分配但未标注的任务撤回
+      Step 2 - 重新生成：根据 categories 数组纳入数据
 
-    与 api_generate_tasks 的区别：
-      - api_generate_tasks：从 0 开始生成任务，不处理已有任务
-      - 本接口：只撤回"已分配未标注"的任务，不影响"已标注"任务，再重新生成
+    categories 参数（数组，默认 ['diff','missed','unreviewable','consistency']）：
+      diff          → 差异数据（modelb_consistent=False，已互检）
+      missed        → 漏审数据（并发跳过）
+      unreviewable  → 无法审核数据（modelb_result='无法审核'）
+      consistency   → 一致性数据（按比例抽样）
     """
     if current_user.role != 'admin':
         return jsonify({'success': False, 'error': '权限不足，仅管理员可操作'}), 403
@@ -1779,41 +1759,28 @@ def api_regenerate_task_pool():
     rule_name = str(data.get('rule_name', '')).strip()
     instance_code = str(data.get('instance', '')).strip() or None
     sample_percent = float(data.get('sample_percent', 5.0))
-    data_mode = str(data.get('data_mode', 'inconsistent')).lower()
+    categories = data.get('categories')  # v1.1: 数组
 
     if not batch_id:
         return jsonify({'success': False, 'error': 'batch_id 不能为空'}), 400
 
-    # 确认批次存在
     fetch_log = FetchLog.query.filter_by(batch_id=batch_id).first()
     if not fetch_log:
         return jsonify({'success': False, 'error': '批次不存在'}), 404
 
-    # 互检中止时排除 modelb_reviewed=False（中止是中断，非模型B无返回）
-    is_aborted = fetch_log.review_status == 'aborted'
+    cats = categories if isinstance(categories, list) else ['diff', 'missed', 'unreviewable', 'consistency']
+
+    import logging
+    logger = logging.getLogger('werkzeug')
+    logger.error(f'[RegenerateTaskPool] batch_id={batch_id} categories={cats} sample_percent={sample_percent}')
 
     # ========== Step 1：智能撤回 ==========
-    # 查询该批次中：已分配（task_status='assigned'）但未标注（check_result 为空）的记录
-    # 注意：task_status 为 NULL 的历史数据用派生逻辑计算
-    assigned_filter = [
-        RawData.fetch_batch_id == batch_id,
-    ]
-    if instance_code:
-        assigned_filter.append(RawData.instance_code == instance_code)
-
-    # 找出已分配但未完成的记录
-    # 精确条件：annotator 有实际值（非空字符串 AND 非NULL）AND check_result 为空 AND 未被撤回
-    # 关键修复：
-    #   - SQLAlchemy 中 annotator!='' 对空字符串返回 0 行，对 NULL 返回 124 行
-    #   - SQLite 中 '' IS NOT NULL = True（空字符串不是 NULL）
-    #   - 因此必须用 AND(annotator != '', annotator.isnot(None)) 确保两边同时满足
-    #     对空字符串：False AND True = False ✅
-    #     对 NULL：True AND False = False ✅
-    #     对 '林柒'：True AND True = True ✅
     revoke_filter = db.and_(
-        db.and_(RawData.annotator != '', RawData.annotator.isnot(None)),    # annotator 有实际值（非空非NULL）
-        db.or_(RawData.check_result == '', RawData.check_result.is_(None)),  # check_result 为空
-        db.or_(RawData.revoked_batch == '', RawData.revoked_batch.is_(None)),  # 未被撤回
+        RawData.task_status == 'assigned',
+        db.and_(RawData.annotator != '', RawData.annotator.isnot(None)),
+        db.or_(RawData.check_result == '', RawData.check_result.is_(None)),
+        db.or_(RawData.revoked_batch == '', RawData.revoked_batch.is_(None)),
+        RawData.modelb_reviewed == False,
     )
     to_revoke = RawData.query.filter(
         RawData.fetch_batch_id == batch_id,
@@ -1823,108 +1790,98 @@ def api_regenerate_task_pool():
     revoked_count = len(to_revoke)
     import datetime as dt
     batch_no_prefix = f'REGEN-{dt.date.today().strftime("%Y%m%d")}-{batch_id}'
-
     for rec in to_revoke:
         rec.revoked_batch = batch_no_prefix
         rec.annotator = ''
-        rec.task_status = 'unassigned'  # v3.1
+        rec.task_status = 'unassigned'
 
-    import logging
-    logger = logging.getLogger('werkzeug')
-    logger.error(f'[RegenerateTaskPool] batch_id={batch_id} revoked_count={revoked_count}')
+    logger.error(f'[RegenerateTaskPool] 撤回 {revoked_count} 条')
 
-    # ========== Step 2：重新生成（复用 api_generate_tasks 的核心逻辑）==========
-    # 不一致数据
-    inconsistent_filter = [
-        RawData.fetch_batch_id == batch_id,
+    # ========== Step 2：重新生成（按 categories 纳入）==========
+    base_filter = [RawData.fetch_batch_id == batch_id]
+    if instance_code:
+        base_filter.append(RawData.instance_code == instance_code)
+
+    # 差异数据
+    diff_filter = base_filter + [
         RawData.modelb_reviewed == True,
         RawData.modelb_consistent == False,
+        RawData.modelb_result != '无法审核',   # v1.1：无法审核不计入差异数据
     ]
-    if instance_code:
-        inconsistent_filter.append(RawData.instance_code == instance_code)
-    inconsistent_count = RawData.query.filter(*inconsistent_filter).count()
+    active_diff_count = RawData.query.filter(*diff_filter).count() if 'diff' in cats else 0
 
-    # 漏审数据（始终只看未互检记录，与 is_aborted 无关）
-    missed_filter = [
-        RawData.fetch_batch_id == batch_id,
-        RawData.modelb_reviewed == False,  # Bug2-1 修复：始终追加此条件，移除 is_aborted 分支
-    ]
-    if instance_code:
-        missed_filter.append(RawData.instance_code == instance_code)
-    missed_count = RawData.query.filter(*missed_filter).count()
+    # 无法审核数据
+    unreviewable_filter = base_filter + [RawData.modelb_reviewed == True, RawData.modelb_result == '无法审核']
+    active_unreviewable = RawData.query.filter(*unreviewable_filter).count() if 'unreviewable' in cats else 0
 
-    # 一致性数据抽样
-    consistent_filter = [
-        RawData.fetch_batch_id == batch_id,
-        RawData.modelb_reviewed == True,
-        RawData.modelb_consistent == True,
-    ]
-    if instance_code:
-        consistent_filter.append(RawData.instance_code == instance_code)
-
-    import random
-    consistent_all = RawData.query.filter(*consistent_filter).all()
-    if sample_percent > 0 and sample_percent < 100:
-        threshold = sample_percent / 100.0
-        sampled_records = [r for r in consistent_all if (r.random_num or random.random()) < threshold]
-        sampled_count = len(sampled_records)
-    elif sample_percent >= 100:
-        sampled_records = consistent_all
-        sampled_count = len(sampled_records)
-    else:
-        sampled_records = []
-        sampled_count = 0
-
-    # 处理漏审数据（标记 modelb_reviewed=True）
-    updated_missed = 0
-    if data_mode == 'missed_review':
+    # 漏审数据
+    missed_filter = base_filter + [RawData.modelb_reviewed == False]
+    if 'missed' in cats:
         missed_records = RawData.query.filter(*missed_filter).all()
         for rec in missed_records:
             rec.modelb_reviewed = True
             rec.modelb_result = '漏审'
-            rec.modelb_reason = '漏审-模型B无返回'
+            rec.modelb_reason = '漏审-重新生成'
             rec.modelb_consistent = None
         updated_missed = len(missed_records)
-        inconsistent_count = 0
-        sampled_count = 0
-        sampled_records = []
-        logger.error(f'[RegenerateTaskPool] 标记 {updated_missed} 条漏审数据')
-    elif data_mode == 'inconsistent':
-        sampled_count = 0
-        sampled_records = []
-    elif data_mode == 'consistent':
-        inconsistent_count = 0
+    else:
         updated_missed = 0
 
-    # 确保 FetchLog.task_generated 保持 True
+    # 一致性数据抽样
+    consistent_filter = base_filter + [RawData.modelb_reviewed == True, RawData.modelb_consistent == True]
+    import random
+    if 'consistency' in cats:
+        consistent_all = RawData.query.filter(*consistent_filter).all()
+        if sample_percent > 0 and sample_percent < 100:
+            threshold = sample_percent / 100.0
+            sampled_records = [r for r in consistent_all if (r.random_num or random.random()) < threshold]
+            active_sampled = len(sampled_records)
+        elif sample_percent >= 100:
+            sampled_records = consistent_all
+            active_sampled = len(sampled_records)
+        else:
+            sampled_records = []
+            active_sampled = 0
+    else:
+        sampled_records = []
+        active_sampled = 0
+
     fetch_log.task_generated = True
     if not fetch_log.task_generate_time:
         fetch_log.task_generate_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    # Bug2-2 修复：重新生成任务后重置互检状态，允许重新互检
-    if data_mode in ('missed_review', 'all'):
+
+    if 'missed' in cats:
         fetch_log.review_status = 'pending'
 
     db.session.commit()
 
-    # 统计任务池当前总数量（未被撤回的 assigned/unassigned 记录）
     pool_filter = [
         RawData.fetch_batch_id == batch_id,
         db.or_(RawData.revoked_batch == '', RawData.revoked_batch.is_(None)),
+        db.or_(
+            RawData.task_status == 'assigned',
+            db.and_(RawData.task_status == '', RawData.task_status.isnot(None)),
+            RawData.task_status.is_(None),
+        ),
+        RawData.modelb_reviewed == False,
     ]
     if instance_code:
         pool_filter.append(RawData.instance_code == instance_code)
     total_in_pool = RawData.query.filter(*pool_filter).count()
 
-    logger.error(f'[RegenerateTaskPool] 重新生成完成: revoked={revoked_count}, inconsistent={inconsistent_count}, missed={updated_missed}, sampled={sampled_count}, total_pool={total_in_pool}')
+    total_reentered = active_diff_count + updated_missed + active_unreviewable + active_sampled
+    logger.error(f'[RegenerateTaskPool] 完成: 撤回={revoked_count}, 重新纳入={total_reentered}, 任务池={total_in_pool}')
 
     return jsonify({
         'success': True,
         'revoked_count': revoked_count,
-        'regenerated_inconsistent': inconsistent_count,
-        'regenerated_missed': updated_missed if data_mode == 'missed_review' else missed_count,
-        'regenerated_sampled': sampled_count,
+        'regenerated_diff': active_diff_count,
+        'regenerated_missed': updated_missed,
+        'regenerated_unreviewable': active_unreviewable,
+        'regenerated_sampled': active_sampled,
         'total_in_pool': total_in_pool,
-        'message': f'重新生成成功。撤回 {revoked_count} 条，重新纳入 {inconsistent_count + (updated_missed if data_mode == "missed_review" else missed_count) + sampled_count} 条。',
+        'categories': cats,
+        'message': f'重新生成成功。撤回 {revoked_count} 条，重新纳入 {total_reentered} 条。',
     })
 
 

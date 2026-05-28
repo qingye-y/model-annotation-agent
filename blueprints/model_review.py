@@ -553,7 +553,12 @@ def run_modelb_review(batch_id):
                         if 'error' in result:
                             record.modelb_result = record.ai_result
                             record.modelb_reason = result.get('error', '调用失败')
-                            record.modelb_consistent = True
+                            record.modelb_consistent = False  # 修复：API调用失败≠一致
+                        elif result.get('result') == '无法审核':
+                            record.modelb_result = '无法审核'
+                            record.modelb_reason = result.get('reason', '')[:200]
+                            record.modelb_detail = result.get('detail', '')[:2000]
+                            record.modelb_consistent = False  # 修复：无法审核不参与一致性判断
                         else:
                             record.modelb_result = result.get('result', record.ai_result)
                             record.modelb_reason = result.get('reason', '')[:200]
@@ -577,7 +582,7 @@ def run_modelb_review(batch_id):
                             if record and not record.modelb_reviewed:
                                 record.modelb_result = record.ai_result
                                 record.modelb_reason = f"处理异常: {str(e)}"
-                                record.modelb_consistent = True
+                                record.modelb_consistent = False  # 修复：处理异常≠一致
                                 record.modelb_reviewed = True
                                 worker_db.session.commit()
                     except:
@@ -739,6 +744,24 @@ def api_abort_review(batch_id):
         # 设置 abort_flag 并立即更新状态（不等 worker 线程）
         fetch_log.abort_flag = True
         fetch_log.review_status = 'aborted'
+
+        # 中止后，将本批次所有 task_status='assigned' 的记录退回未分配状态
+        # 关键原则（修复）：
+        #   - 中止时必须清空 task_status，否则任务池统计仍显示"已分配"
+        #   - annotator：check_result 为空才清空（未标注任务释放回池），有标注结果的不动（保留用户工作）
+        #   - 这覆盖了 Model B self-review 记录（annotator=''）、标注员已领取但未标注的记录（annotator 有值）
+        revoked_count = 0
+        records_to_revoke = RawData.query.filter(
+            RawData.fetch_batch_id == batch_id,
+            RawData.task_status == 'assigned'
+        ).all()
+        for rec in records_to_revoke:
+            rec.task_status = 'unassigned'
+            # 只有未完成标注的才清空 annotator（已标注的保留标注员信息）
+            if not rec.check_result or not rec.check_result.strip():
+                rec.annotator = ''
+            revoked_count += 1
+
         db.session.commit()
 
         reviewed_count = RawData.query.filter_by(
@@ -747,7 +770,7 @@ def api_abort_review(batch_id):
 
         return jsonify({
             "success": True,
-            "message": f"互检已中止（已互检 {reviewed_count} 条）"
+            "message": f"互检已中止（已互检 {reviewed_count} 条，撤回 {revoked_count} 条已分配任务）"
         })
     except Exception as e:
         db.session.rollback()

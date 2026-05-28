@@ -255,14 +255,23 @@
             <option value="inconsistent">不一致</option>
           </select>
         </div>
+        <!-- v2.1: 互检状态独立筛选项 -->
+        <div class="filter-item">
+          <label>互检状态</label>
+          <select class="form-select" id="filterReviewStatus">
+            <option value="">全部</option>
+            <option value="reviewed">已互检</option>
+            <option value="not_reviewed">未互检</option>
+          </select>
+        </div>
+        <!-- v2.1: 模型B结果回退为 3 选项 -->
         <div class="filter-item">
           <label>模型B结果</label>
           <select class="form-select" id="filterModelbResult">
             <option value="">全部</option>
-            <option value="未互检">未互检</option>
             <option value="合规">合规</option>
             <option value="违规">违规</option>
-            <option value="漏审">漏审</option>
+            <option value="无法审核">无法审核</option>  <!-- v1.1新增 -->
           </select>
         </div>
         <div class="filter-item">
@@ -344,34 +353,35 @@
           <span id="genBatchInstances" style="margin-left:12px;"></span>
         </div>
         <!-- 抽检方式（v2.0 统一四分类） -->
+        <!-- v1.1 抽取方式改版：checkbox 多选模式 -->
         <div class="form-group">
-          <label>抽检方式 <span class="required">*</span></label>
+          <label>数据类别 <span class="required">*</span></label>
           <div style="display:flex;flex-direction:column;gap:8px;margin-top:6px;">
             <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:normal;">
-              <input type="radio" name="genSampleMode" value="all" checked style="width:16px;height:16px;">
-              <span><strong>全部</strong>（差异 + 漏审 + 一致性抽检）<span id="genAllCount" style="color:#27ae60;font-weight:bold;"></span></span>
+              <input type="checkbox" name="genCategory" value="diff" checked style="width:16px;height:16px;">
+              <span><strong>差异数据</strong>（A/B模型判定不一致，已互检）<span id="genDiffCount" style="color:#e67e22;font-weight:bold;"></span></span>
             </label>
             <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:normal;">
-              <input type="radio" name="genSampleMode" value="diff_only" style="width:16px;height:16px;">
-              <span><strong>仅差异数据</strong>（A/B模型判定不一致，已互检）<span id="genDiffCount" style="color:#e67e22;font-weight:bold;"></span></span>
+              <input type="checkbox" name="genCategory" value="missed" style="width:16px;height:16px;">
+              <span><strong>漏审数据</strong>（并发时被跳过的应审未审记录）<span id="genMissedCount" style="color:#e67e22;font-weight:bold;"></span></span>
             </label>
             <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:normal;">
-              <input type="radio" name="genSampleMode" value="missed_only" style="width:16px;height:16px;">
-              <span><strong>仅漏审数据</strong>（并发时被跳过的应审未审记录）<span id="genMissedCount" style="color:#e67e22;font-weight:bold;"></span></span>
+              <input type="checkbox" name="genCategory" value="unreviewable" style="width:16px;height:16px;">
+              <span><strong>无法审核</strong>（Model B 无法完成审核）<span id="genUnreviewableCount" style="color:#e67e22;font-weight:bold;"></span></span>
             </label>
             <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:normal;">
-              <input type="radio" name="genSampleMode" value="consistency_sample" style="width:16px;height:16px;">
-              <span><strong>仅一致性抽检</strong>（A/B模型判定一致的数据）<span id="genConsistencyCount" style="color:#8e44ad;font-weight:bold;"></span></span>
+              <input type="checkbox" name="genCategory" value="consistency" checked style="width:16px;height:16px;">
+              <span><strong>一致性抽检</strong>（A/B模型判定一致，按比例抽取）<span id="genConsistencyCount" style="color:#8e44ad;font-weight:bold;"></span></span>
             </label>
           </div>
         </div>
-        <!-- 一致性数据抽检比例（仅 consistency_sample / all 时显示） -->
-        <div class="form-group" id="genPercentRow">
-          <label>一致性数据抽样比例（%）</label>
+        <!-- 一致性比例（仅勾选一致性时显示） -->
+        <div class="form-group" id="genPercentRow" style="display:none;">
+          <label>一致性抽样比例（%）</label>
           <input type="number" class="form-input" id="genSamplePercent" value="5" min="1" max="100" style="width:120px;">
-          <span style="font-size:12px;color:var(--text-muted);margin-left:8px;">（从一致性数据中随机抽取，向下取整）</span>
+          <span style="font-size:12px;color:var(--text-muted);margin-left:8px;">（从一致性数据中随机抽取）</span>
         </div>
-        <!-- v2.0: 抽取数量预览 -->
+        <!-- v1.1: 抽取数量预览（多选实时计算） -->
         <div id="genPreviewText" style="background:#f8f9fa;border-radius:6px;padding:8px 12px;margin-bottom:12px;font-size:13px;color:var(--text-secondary);">正在加载数量...</div>
         <!-- 自动规则预览 -->
         <div style="background:#f0f0ff;border-left:3px solid var(--primary);padding:10px 12px;border-radius:4px;font-size:12px;color:var(--text-secondary);line-height:1.7;" id="genRulePreview">
@@ -381,7 +391,7 @@
       </div>
       <div class="modal-footer">
         <button class="btn-default" onclick="closeModal('generateModal')">取消</button>
-        <button class="btn-primary" id="genSubmitBtn" onclick="confirmGenerateTask()">确认生成</button>
+        <button class="btn-primary" id="genSubmitBtn" onclick="confirmGenerateTask()" disabled>确认生成</button>
       </div>
     </div>
   </div>
@@ -634,6 +644,9 @@
             updateStatusBadge('互检中止');
             renderActionButtons();
             loadSummary();
+            // 刷新数据表格：中止后任务状态会变化（task_status='unassigned'），必须刷新表格才能看到最新状态
+            currentPage = 1;  // 重置到第一页，避免页码越界
+            loadData(currentPage);
           } else {
             showToast(data.message || '中止失败', 'error');
           }
@@ -698,6 +711,7 @@
       previewList.innerHTML = html || '<span style="color:var(--text-muted);">无有效规则</span>';
     }
 
+    // v1.1 打开生成任务弹窗（checkbox 多选模式）
     function openGenerateModalForDetail() {
       var insts = summaryData && summaryData.instances ? summaryData.instances : '';
       _genInstances = insts ? insts.split(',').map(function(s) { return s.trim(); }).filter(Boolean) : [];
@@ -719,7 +733,6 @@
             if (_genRuleMap[rule] !== undefined) {
               _genRuleMap[rule].push(inst);
             } else {
-              // 未匹配归入第一规则
               var first = _genRules.length > 0 ? (_genRules[0].name || _genRules[0]) : null;
               if (first) _genRuleMap[first].push(inst);
             }
@@ -728,106 +741,109 @@
         })
         .catch(function() { _genRules = []; buildRulePreview(); });
 
-      // 默认选中"全部"（v2.0）
-      document.querySelectorAll('input[name="genSampleMode"]').forEach(function(r) {
-        r.checked = (r.value === 'all');
+      // v1.1 checkbox 默认勾选：diff / consistency；missed / unreviewable 不勾选
+      document.querySelectorAll('input[name="genCategory"]').forEach(function(cb) {
+        if (cb.value === 'diff' || cb.value === 'consistency') cb.checked = true;
+        else cb.checked = false;
       });
 
-      // 比例行默认显示（all 模式需要）
+      // 比例行：根据 consistency 勾选状态显示（v1.1 修改：一致性默认勾选）
       var percentRow = document.getElementById('genPercentRow');
-      if (percentRow) percentRow.style.display = 'block';
+      var checkedConsistencyInit = document.querySelector('input[name="genCategory"][value="consistency"]').checked;
+      if (percentRow) percentRow.style.display = checkedConsistencyInit ? 'block' : 'none';
 
       // 百分比输入框默认值
       var spEl = document.getElementById('genSamplePercent');
       if (spEl) spEl.value = (summaryData && summaryData.task_sample_percent) ? summaryData.task_sample_percent : 5;
 
-      // 监听抽取方式切换 → 更新比例行 + 预览（v2.0）
-      document.querySelectorAll('input[name="genSampleMode"]').forEach(function(r) {
-        r.onchange = function() {
-          var pr = document.getElementById('genPercentRow');
-          var val = this.value;
-          if (pr) pr.style.display = (val === 'diff_only' || val === 'missed_only') ? 'none' : 'block';
-          updateDetailGenPreview();
-          buildRulePreview();
-        };
-      });
-
-      // 百分比变化 → 重新拉取数量（防抖）
-      if (spEl) {
-        spEl.oninput = function() {
-          clearTimeout(window._detailGenDebounce);
-          window._detailGenDebounce = setTimeout(function() {
-            fetchDetailGenCounts();
-          }, 500);
-        };
-      }
-
-      // 首次打开时拉取各分类数量（v2.0）
-      fetchDetailGenCounts();
-
+      // 确认按钮默认禁用（至少选一项才启用）
       var btn = document.getElementById('genSubmitBtn');
-      if (btn) { btn.disabled = false; btn.textContent = '确认生成'; }
+      if (btn) { btn.disabled = true; btn.textContent = '确认生成'; }
+
+      // v1.1 首次打开时拉取各分类数量
+      fetchDetailGenCounts();
 
       openModal('generateModal');
     }
 
-    // v2.0: 从后端获取各分类数量（批次详情页）
+    // v1.1: 从后端获取各分类数量（批次详情页，preview 模式）
     function fetchDetailGenCounts() {
       var pct = parseInt(document.getElementById('genSamplePercent').value) || 5;
+      var el = document.getElementById('genPreviewText');
+      if (el) el.innerHTML = '<span style="color:#888;">正在加载...</span>';
       fetch('/api/dispatch/generate-tasks', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ batch_id: BATCH_ID, data_mode: 'preview', sample_percent: pct })
+        body: JSON.stringify({ batch_id: BATCH_ID, categories: ['diff','missed','unreviewable','consistency'], sample_percent: pct })
       })
         .then(function(r) { return r.json(); })
         .then(function(data) {
           if (data.success) {
             window._detailGenCounts = data;
             // 更新各分类标签
-            var el = document.getElementById('genDiffCount');
-            if (el) el.textContent = (data.diff_count > 0) ? '（' + data.diff_count + ' 条）' : '（0 条）';
-            el = document.getElementById('genMissedCount');
-            if (el) el.textContent = (data.missed_count > 0) ? '（' + data.missed_count + ' 条）' : '（0 条）';
-            el = document.getElementById('genConsistencyCount');
-            if (el) el.textContent = (data.consistency_sampled > 0) ? '（' + data.consistency_sampled + ' 条）' : '（0 条）';
-            el = document.getElementById('genAllCount');
-            if (el) el.textContent = (data.total_count > 0) ? '（' + data.total_count + ' 条）' : '（0 条）';
+            var el2 = document.getElementById('genDiffCount');
+            if (el2) el2.textContent = (data.diff_count > 0) ? '（' + data.diff_count + ' 条）' : '（0 条）';
+            el2 = document.getElementById('genMissedCount');
+            if (el2) el2.textContent = (data.missed_count > 0) ? '（' + data.missed_count + ' 条）' : '（0 条）';
+            el2 = document.getElementById('genUnreviewableCount');
+            if (el2) el2.textContent = (data.unreviewable_count > 0) ? '（' + data.unreviewable_count + ' 条）' : '（0 条）';
+            el2 = document.getElementById('genConsistencyCount');
+            if (el2) el2.textContent = (data.consistency_total > 0) ? '（' + data.consistency_total + ' 条）' : '（0 条）';
             updateDetailGenPreview();
+          } else {
+            window._detailGenCounts = null;
+            var el3 = document.getElementById('genPreviewText');
+            if (el3) el3.innerHTML = '<span style="color:#e74c3c;">加载失败</span>';
           }
         })
-        .catch(function() {});
+        .catch(function() {
+          window._detailGenCounts = null;
+          var el4 = document.getElementById('genPreviewText');
+          if (el4) el4.innerHTML = '<span style="color:#e74c3c;">网络错误</span>';
+        });
     }
 
-    // v2.0: 批次详情页生成任务弹窗预览
+    // v1.1: 多选预览（批次详情页）
     function updateDetailGenPreview() {
-      var mode = document.querySelector('input[name="genSampleMode"]:checked').value;
       var counts = window._detailGenCounts || {};
       var diffCount = counts.diff_count || 0;
       var missedCount = counts.missed_count || 0;
-      var consSampled = counts.consistency_sampled || 0;
-      var totalCount = counts.total_count || 0;
+      var unreviewableCount = counts.unreviewable_count || 0;
+      var consistencyTotal = counts.consistency_total || 0;
+      var pct = parseInt(document.getElementById('genSamplePercent').value) || 5;
+      var consSampled = Math.ceil(consistencyTotal * pct / 100);
 
-      var modeLabels = {
-        'all': '全部',
-        'diff_only': '仅差异数据',
-        'missed_only': '仅漏审数据',
-        'consistency_sample': '仅一致性抽检'
-      };
+      var checkedDiff = document.querySelector('input[name="genCategory"][value="diff"]').checked;
+      var checkedMissed = document.querySelector('input[name="genCategory"][value="missed"]').checked;
+      var checkedUnreviewable = document.querySelector('input[name="genCategory"][value="unreviewable"]').checked;
+      var checkedConsistency = document.querySelector('input[name="genCategory"][value="consistency"]').checked;
+
+      // 一致性比例输入框显隐
+      document.getElementById('genPercentRow').style.display = checkedConsistency ? 'block' : 'none';
+
+      // 计算预计数量
+      var total = 0;
+      var parts = [];
+      if (checkedDiff) { total += diffCount; parts.push('差异 ' + diffCount); }
+      if (checkedMissed) { total += missedCount; parts.push('漏审 ' + missedCount); }
+      if (checkedUnreviewable) { total += unreviewableCount; parts.push('无法审核 ' + unreviewableCount); }
+      if (checkedConsistency) { total += consSampled; parts.push('一致性 ' + consSampled); }
+
+      // 至少选一项
+      var anyChecked = checkedDiff || checkedMissed || checkedUnreviewable || checkedConsistency;
+      var btn = document.getElementById('genSubmitBtn');
+      if (btn) btn.disabled = !anyChecked;
+
       var el = document.getElementById('genPreviewText');
       if (!el) return;
-      if (mode === 'diff_only') {
-        el.textContent = '预计生成 ' + diffCount + ' 条（仅差异数据，100% 全量纳入标注池）';
-      } else if (mode === 'missed_only') {
-        el.textContent = '预计生成 ' + missedCount + ' 条（仅漏审数据，100% 全量纳入标注池）';
-      } else if (mode === 'consistency_sample') {
-        var pct = parseInt(document.getElementById('genSamplePercent').value) || 5;
-        el.textContent = '预计生成 ' + consSampled + ' 条（仅一致性抽检，' + pct + '%）';
+      if (!anyChecked) {
+        el.innerHTML = '<span style="color:#e74c3c;">请至少选择一项</span>';
       } else {
-        el.textContent = '预计生成 ' + totalCount + ' 条（差异 ' + diffCount + ' + 漏审 ' + missedCount + ' + 一致性 ' + consSampled + '）';
+        el.innerHTML = '预计生成 <strong>' + total + '</strong> 条' + (parts.length > 0 ? '（' + parts.join(' + ') + '）' : '');
       }
     }
 
-    // v3.1: 打开重新生成确认弹窗（详情页专用，与列表页统一交互）
+    // v3.1: 打开重新生成确认弹窗（详情页专用）
     function openRegenerateModalForDetail() {
       var insts = summaryData && summaryData.instances ? summaryData.instances : '';
       document.getElementById('crBatchId').textContent = BATCH_ID;
@@ -835,23 +851,25 @@
       openModal('confirmRegenerateModal');
     }
 
-    // v3.1: 执行重新生成任务（详情页确认弹窗触发）
+    // v3.1 / v1.1: 执行重新生成任务（发送 categories 数组）
     function executeRegenerateForDetail() {
+      // 从弹窗收集类别（复用 generateModal 的 checkbox，默认全部勾选 diff/missed/unreviewable）
+      var categories = ['diff', 'missed', 'unreviewable'];
       var btn = document.getElementById('crConfirmBtn');
       btn.disabled = true;
       btn.textContent = '重新生成中…';
       fetch('/api/dispatch/regenerate-task-pool', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ batch_id: BATCH_ID, rule_name: '合规抽检', data_mode: 'all', sample_percent: 5 })
+        body: JSON.stringify({ batch_id: BATCH_ID, rule_name: '合规抽检', categories: categories, sample_percent: 5 })
       })
         .then(function(r) { return r.json(); })
         .then(function(data) {
           closeModal('confirmRegenerateModal');
           if (data.success) {
             showToast('重新生成成功：撤回 ' + (data.revoked_count || 0) + ' 条，重新纳入 ' + (data.total_in_pool || 0) + ' 条');
-            loadSummary();   // Bug2-3 修复：刷新概览卡片（互检进度、状态）
-            loadData(1);     // Bug2-3 修复：刷新明细表格
+            loadSummary();
+            loadData(1);
           } else {
             showToast(data.error || '重新生成失败', 'error');
           }
@@ -866,9 +884,15 @@
         });
     }
 
+    // v1.1: 确认生成（多选模式）
     function confirmGenerateTask() {
-      var modeRadio = document.querySelector('input[name="genSampleMode"]:checked');
-      var mode = modeRadio ? modeRadio.value : 'all';
+      // 收集勾选类别
+      var categories = [];
+      document.querySelectorAll('input[name="genCategory"]:checked').forEach(function(cb) {
+        categories.push(cb.value);
+      });
+      if (categories.length === 0) { showToast('请至少选择一项数据类别', 'error'); return; }
+
       var samplePercent = parseFloat((document.getElementById('genSamplePercent') || {}).value) || 5;
 
       if (_genRules.length === 0) { showToast('规则加载中，请稍候', 'error'); return; }
@@ -877,12 +901,11 @@
       btn.disabled = true;
       btn.textContent = '生成中…';
 
-      // 遍历所有规则，并行请求（v2.0：diff_only/missed_only 用 100%，其余用比例）
+      // 遍历所有规则，并行请求
       var allRules = _genRules.map(function(r) { return r.name || r; });
       var promises = allRules.map(function(ruleName) {
         var instsForRule = _genRuleMap[ruleName] || [];
         var instance = instsForRule.length > 0 ? instsForRule[0] : null;
-        var percent = (mode === 'diff_only' || mode === 'missed_only') ? 100 : samplePercent;
         return fetch('/api/dispatch/generate-tasks', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -890,28 +913,26 @@
             batch_id: BATCH_ID,
             rule_name: ruleName,
             instance: instance,
-            sample_percent: percent,
-            data_mode: mode
+            sample_percent: samplePercent,
+            categories: categories  // v1.1: categories 数组替代 data_mode 字符串
           })
         }).then(function(res) { return res.json(); });
       });
 
       Promise.all(promises).then(function(results) {
-        var totalDiff = 0, totalMissed = 0, totalCons = 0, okCount = 0;
+        var total = 0, okCount = 0;
         var errors = [];
         results.forEach(function(data, i) {
           if (data.success) {
-            totalDiff += data.diff_count || 0;
-            totalMissed += data.missed_count || 0;
-            totalCons += data.consistency_sampled || 0;
+            total += data.total_entered || 0;
             okCount++;
           } else {
             errors.push(allRules[i] + ':' + (data.error || '失败'));
           }
         });
-        var total = totalDiff + totalMissed + totalCons;
-        var modeLabels = { 'all': '全部', 'diff_only': '仅差异数据', 'missed_only': '仅漏审数据', 'consistency_sample': '仅一致性抽检' };
-        var msg = modeLabels[mode] + '：' + okCount + '个规则，共 ' + total + ' 条进入标注池';
+        var labelMap = { 'diff': '差异数据', 'missed': '漏审数据', 'unreviewable': '无法审核', 'consistency': '一致性抽检' };
+        var labels = categories.map(function(c) { return labelMap[c] || c; });
+        var msg = labels.join(' + ') + '：' + okCount + '个规则，共 ' + total + ' 条进入标注池';
         if (errors.length > 0) msg += '；部分失败：' + errors.join('；');
         showToast(msg);
         closeModal('generateModal');
@@ -925,9 +946,25 @@
       });
     }
 
-    // 弹窗控制函数（v1.4）
+    // v1.1 弹窗控制函数
     function openModal(id) { var el = document.getElementById(id); if (el) el.classList.add('active'); }
     function closeModal(id) { var el = document.getElementById(id); if (el) el.classList.remove('active'); }
+
+    // v1.1 事件监听器：checkbox 变化和百分比输入实时触发预览
+    document.querySelectorAll('input[name="genCategory"]').forEach(function(cb) {
+      cb.addEventListener('change', updateDetailGenPreview);
+    });
+    var spEl2 = document.getElementById('genSamplePercent');
+    if (spEl2) {
+      spEl2.addEventListener('input', function() {
+        clearTimeout(window._detailGenDebounce);
+        window._detailGenDebounce = setTimeout(function() {
+          // 一致性比例变化时重新拉取数量
+          var checkedConsistency = document.querySelector('input[name="genCategory"][value="consistency"]').checked;
+          if (checkedConsistency) updateDetailGenPreview();
+        }, 300);
+      });
+    }
 
 
     function loadSummary() {
@@ -1049,7 +1086,8 @@
       var instance = document.getElementById('filterInstance').value;
       var keyword = document.getElementById('filterKeyword').value.trim();
       var diffStatus = document.getElementById('filterDiffStatus').value;
-      var modelbResult = document.getElementById('filterModelbResult').value;
+      var reviewStatus = document.getElementById('filterReviewStatus').value;  // v2.1
+      var modelbResult = document.getElementById('filterModelbResult').value;  // v2.1: 回退为 3 选项
       var taskStatus = document.getElementById('filterTaskStatus').value;  // v3.1
 
       document.getElementById('tableLoading').style.display = 'block';
@@ -1061,6 +1099,7 @@
       if (instance) url += '&instance=' + encodeURIComponent(instance);
       if (keyword) url += '&keyword=' + encodeURIComponent(keyword);
       if (diffStatus) url += '&diff_status=' + encodeURIComponent(diffStatus);
+      if (reviewStatus) url += '&review_status=' + encodeURIComponent(reviewStatus);  // v2.1
       if (modelbResult) url += '&modelb_result=' + encodeURIComponent(modelbResult);
       if (taskStatus) url += '&task_status=' + encodeURIComponent(taskStatus);  // v3.1
 
@@ -1123,8 +1162,8 @@
       // 一致：modelb_reviewed=True 且 modelb_consistent=True
       // 不一致：modelb_reviewed=True 且 modelb_consistent=False
       var maxId = window._maxReviewedId;
-      var reviewed = item.modelbReviewed;
-      var consistent = item.modelbConsistent;
+      var reviewed = item.modelb_reviewed;   // 修复：API返回snake_case字段
+      var consistent = item.modelb_consistent;
       var id = item.id;
 
       if (!reviewed) {
@@ -1134,15 +1173,18 @@
         }
         return '未互检';
       }
+      // 五分类（v1.1）：无法审核优先级最高
+      if (item.modelb_result === '无法审核') return '无法审核';
       if (consistent) return '一致';
       return '不一致';
     }
 
     function diffTypeClass(dt) {
-      if (dt === '不一致') return 'diff';
-      if (dt === '一致') return 'match';
-      if (dt === '漏审') return 'missed';
-      return 'unreviewed';
+      if (dt === '不一致')   return 'diff-inconsistent';
+      if (dt === '一致')     return 'diff-consistent';
+      if (dt === '漏审')     return 'diff-missed';
+      if (dt === '无法审核') return 'diff-unreviewable';  // v1.1新增
+      return 'diff-unreviewed';
     }
 
     // v3.1: 任务状态标签
@@ -1344,6 +1386,7 @@
     function resetFilters() {
       document.getElementById('filterAiResult').value = '';
       document.getElementById('filterDiffStatus').value = '';
+      document.getElementById('filterReviewStatus').value = '';  // v2.1
       document.getElementById('filterModelbResult').value = '';
       document.getElementById('filterInstance').value = '';
       document.getElementById('filterKeyword').value = '';
