@@ -62,6 +62,10 @@
     .diff-rate-high { color: var(--danger); font-weight: 600; }
     .diff-rate-mid { color: var(--warning); font-weight: 600; }
     .diff-rate-low { color: var(--success); font-weight: 600; }
+    /* 操作列 */
+    .table-action-cell { text-align: center; }
+    .detail-link { color: var(--primary); text-decoration: none; font-size: 13px; padding: 3px 10px; border: 1px solid var(--primary); border-radius: 4px; transition: all 0.2s; display: inline-block; }
+    .detail-link:hover { background: var(--primary); color: #fff; }
 
     .status-tag { display: inline-flex; padding: 3px 10px; font-size: 12px; font-weight: 500; border-radius: 12px; white-space: nowrap; }
     .status-tag.completed { background: var(--success-light); color: var(--success); }
@@ -69,6 +73,7 @@
     .status-tag.failed { background: var(--danger-light); color: var(--danger); }
     .status-tag.pending { background: #f0f4ff; color: #6b7280; }
     .status-tag.default { background: #f3f4f6; color: #6b7280; }
+    .status-tag.aborted { background: #eceff1; color: #546e7a; }
     @keyframes badge-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.7; } }
     @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
     @keyframes highlight-flash { 0%, 100% { background: rgba(59, 130, 246, 0.2); } 50% { background: rgba(59, 130, 246, 0.4); } }
@@ -267,6 +272,7 @@
               <option value="pending">待互检</option>
               <option value="running">互检中</option>
               <option value="completed">已完成</option>
+              <option value="aborted">互检中止</option>
             </select>
           </div>
         </div>
@@ -648,6 +654,7 @@
         loadBatches();
       } else {
         setDefaultDates();
+        loadBatches();  // 【修复】正常访问时加载批次列表
       }
 
       checkRunningTasks();
@@ -988,6 +995,7 @@
       fetch('/api/task-batches?' + params.toString())
         .then(function(res) { return res.json(); })
         .then(function(data) {
+          var batchCount = (data.batches || []).length;
           // 字段映射：batch_id -> id，包含完整字段
           allBatches = (data.batches || []).map(function(b) {
             return {
@@ -1080,7 +1088,14 @@
       const tbody = document.getElementById('batchTableBody');
       const start = (currentPage - 1) * pageSize; const end = start + pageSize;
       const pageData = filteredBatches.slice(start, end);
-      if (!pageData.length) { tbody.innerHTML = '<tr><td colspan="9" style="padding:40px;text-align:center;color:var(--text-muted)">暂无数据</td></tr>'; syncTableHeight(); return; }
+      // 表格上方实时调试条
+      var rdEl = document.getElementById('renderDebug');
+      if (rdEl) { rdEl.style.display = 'block'; document.getElementById('rd-filtered-len').textContent = filteredBatches.length; document.getElementById('rd-page-len').textContent = pageData.length; document.getElementById('rd-page').textContent = currentPage; }
+      if (!pageData.length) {
+        tbody.innerHTML = '<tr><td colspan="14" style="padding:40px;text-align:center;color:var(--text-muted)">暂无数据</td></tr>';
+        syncTableHeight();
+        return;
+      }
       tbody.innerHTML = pageData.map(batch => {
         const diffRateClass = batch.diffRate > 10 ? 'diff-rate-high' : batch.diffRate >= 5 ? 'diff-rate-mid' : 'diff-rate-low';
         const isRunning = batch.status === 'running' || batch.status === 'processing';
@@ -1090,9 +1105,45 @@
           : isPending ? '<span class="status-tag pending">待处理</span>'
           : '<span class="status-tag failed">失败</span>';
         const source = batch.source || 'fetch';
-        const sourceTag = source === 'upload' ? '<span class="status-tag" style="background: #d4edda; color: #28a745;">文件上传</span>' : '<span class="status-tag" style="background: #cce5ff; color: #004085;">线上获取</span>';
-        const execDate = batch.execDate || batch.fetch_time || '';
-        return `<tr data-batch-id="${batch.id}"><td>${batch.id}</td><td>${sourceTag}</td><td>${execDate}</td><td>${batch.dataCount.toLocaleString()}</td><td>${batch.diffCount.toLocaleString()}</td><td><span class="${diffRateClass}">${batch.diffRate.toFixed(1)}%</span></td><td>${batch.instanceCount}</td><td>${statusTag}</td></tr>`;
+        const sourceTag = source === 'upload'
+          ? '<span class="status-tag" style="background:#d4edda;color:#28a745;">文件上传</span>'
+          : '<span class="status-tag" style="background:#cce5ff;color:#004085;">线上获取</span>';
+        // 互检进度标签
+        const reviewStatus = batch.review_status || '未互检';
+        const reviewTag = reviewStatus === '已互检'
+          ? `<span class="status-tag completed">已互检 ${batch.reviewed_count || 0}/${batch.total_items || 0}</span>`
+          : reviewStatus === '互检中'
+          ? `<span class="status-tag processing">互检中 ${batch.reviewed_count || 0}/${batch.total_items || 0}</span>`
+          : reviewStatus === '互检失败'
+          ? `<span class="status-tag failed">互检失败</span>`
+          : reviewStatus === '互检中止'
+          ? `<span class="status-tag failed">互检中止</span>`
+          : `<span class="status-tag pending">未互检</span>`;
+        // 抽样标识
+        const sampleTag = batch.samplePercent > 0
+          ? `<span class="status-tag" style="background:#e9d5ff;color:#7c3aed;">是</span>`
+          : `<span class="status-tag" style="background:#f3f4f6;color:#6b7280;">否</span>`;
+        // 数据日期
+        const dataDateRange = batch.dataDateRange || '';
+        // 拉取时间
+        const fetchTime = batch.fetch_time || '';
+        const detailLink = `<a href="/batch-detail/${batch.id}" class="detail-link" title="查看详情">明细</a>`;
+        return `<tr data-batch-id="${batch.id}">
+<td>${batch.id}</td>
+<td>${sourceTag}</td>
+<td>${batch.env || '-'}</td>
+<td>${batch.instanceCount || 0}</td>
+<td>${sampleTag}</td>
+<td>${(batch.originalTotal || 0).toLocaleString()}</td>
+<td>${(batch.originalCompliant || 0).toLocaleString()}</td>
+<td>${(batch.originalNonCompliant || 0).toLocaleString()}</td>
+<td>${(batch.dataCount || 0).toLocaleString()}</td>
+<td>${dataDateRange}</td>
+<td>${fetchTime}</td>
+<td>${statusTag}</td>
+<td>${reviewTag}</td>
+<td class="table-action-cell">${detailLink}</td>
+</tr>`;
       }).join('');
       syncTableHeight();
     }
@@ -1147,12 +1198,13 @@
           if (filterReviewStatus === 'pending' && batchReviewStatus !== '未互检') return false;
           if (filterReviewStatus === 'running' && batchReviewStatus !== '互检中') return false;
           if (filterReviewStatus === 'completed' && batchReviewStatus !== '已互检' && batchReviewStatus !== '互检失败') return false;
+          if (filterReviewStatus === 'aborted' && batchReviewStatus !== '互检中止') return false;
         }
-        // v1.4: 任务分配状态筛选（已分配 = 互检完成 + 任务已生成）
+        // v1.4: 任务分配状态筛选（已分配 = 互检完成 + 任务已生成；互检中止也参与筛选）
         var filterTaskGenerated = document.getElementById('filterTaskGenerated').value;
         if (filterTaskGenerated !== 'all') {
           var isGenerated = batch.task_generated === true || batch.task_generated === 'true';
-          if (filterTaskGenerated === 'true' && (!isGenerated || batchReviewStatus !== '已互检')) return false;
+          if (filterTaskGenerated === 'true' && (!isGenerated || (batchReviewStatus !== '已互检' && batchReviewStatus !== '互检中止'))) return false;
           if (filterTaskGenerated === 'false' && isGenerated) return false;
         }
         // 规则筛选：兼容 mapping 值有无 .md 后缀的两种情况
@@ -1168,7 +1220,11 @@
         return true;
       });
       currentPage = 1;
-      renderBatchTable();
+      // 表格上方实时调试条（applyFilter末尾，renderBatchTable之前）
+      var rdEl = document.getElementById('renderDebug');
+      if (rdEl) { rdEl.style.display = 'block'; document.getElementById('rd-filtered-len').textContent = filteredBatches.length; document.getElementById('rd-page-len').textContent = Math.min(pageSize, filteredBatches.length); document.getElementById('rd-page').textContent = 1; }
+      // 直接调用带互检状态的渲染函数（绕过旧版renderBatchTable，避免覆盖时机问题）
+      if (typeof renderBatchTableWithReview === 'function') { renderBatchTableWithReview(); } else { renderBatchTable(); }
       renderPagination();
     }
 
@@ -1720,7 +1776,6 @@
       var start = (currentPage - 1) * pageSize;
       var end = start + pageSize;
       var pageData = filteredBatches.slice(start, end);
-      
       if (!pageData.length) {
         tbody.innerHTML = '<tr><td colspan="14" style="padding:40px;text-align:center;color:var(--text-muted)">暂无数据</td></tr>';
         syncTableHeight();
@@ -1773,20 +1828,20 @@
           // 互检状态 - 直接从后端返回的 review_status 读取
           var reviewStatus = batchReviewStatus;
           var isReviewDone = (reviewStatus === '已互检');
-          var reviewStatusClass = reviewStatus === '互检中' ? 'processing' : reviewStatus === '已互检' ? 'completed' : reviewStatus === '互检失败' ? 'failed' : 'default';
+          var reviewStatusClass = reviewStatus === '互检中' ? 'processing' : reviewStatus === '已互检' ? 'completed' : reviewStatus === '互检失败' ? 'failed' : reviewStatus === '互检中止' ? 'aborted' : 'default';
           var reviewStatusText = reviewStatus;
 
           // 有数据时隐藏"已完成"，仅在"进行中"或"失败"时显示
           var dataStatusTag = (dataStatus === 'completed' && hasData) ? '' : '<span class="status-tag ' + dataStatusClass + '">' + dataStatusText + '</span>';
           var reviewStatusTag = '<span class="status-tag ' + reviewStatusClass + '" data-review-status>' + reviewStatusText + '</span>';
-          // 任务分配状态（仅"已互检"批次显示），合并进状态列
+          // 任务分配状态（"已互检"和"互检中止"批次均显示），合并进状态列
           var taskGenTag = '-';
-          if (isReviewDone) {
+          if (isReviewDone || reviewStatus === '互检中止') {
             var taskGenClass = batch.task_generated ? 'completed' : 'pending';
             var taskGenText = batch.task_generated ? '已分配' : '未分配';
             taskGenTag = '<span class="status-tag ' + taskGenClass + '" style="font-size:11px;">' + taskGenText + '</span>';
           }
-          var statusTag = '<div style="display:flex;flex-direction:column;gap:2px;align-items:center;">' + (dataStatusTag ? dataStatusTag + reviewStatusTag : reviewStatusTag) + (isReviewDone ? taskGenTag : '') + '</div>';
+          var statusTag = '<div style="display:flex;flex-direction:column;gap:2px;align-items:center;">' + (dataStatusTag ? dataStatusTag + reviewStatusTag : reviewStatusTag) + ((isReviewDone || reviewStatus === '互检中止') ? taskGenTag : '') + '</div>';
 
           // 互检进度显示 - 使用后端返回的数据
           var reviewProgress = '-';
@@ -1848,8 +1903,7 @@
                 var batchStatus = batch.status;
                 var isCompleted = batchStatus === 'completed';
                 var isRunning = (batchStatus === 'running' || batchStatus === 'processing');
-                var isFailed = (batchStatus === 'failed' || batchStatus === 'pending' || batchStatus === 'initializing' || !batchStatus);
-                var reviewStatus = batchReviewStatus;
+                var reviewStatus = batch.review_status || '未互检';
                 var isReviewDone = (reviewStatus === '已互检');
                 var isReviewRunning = (reviewStatus === '互检中');
 
@@ -1859,29 +1913,37 @@
                     // 已完成 + 互检中 → 中止互检
                     menuItems += '<div class="more-menu-item" onclick="closeAllMoreMenus();abortBatch(\'' + batch.id + '\')" style="padding:7px 12px;cursor:pointer;border-bottom:1px solid var(--border-light);font-size:12px;color:#ff9800;">⏹ 中止互检</div>';
                   } else if (isReviewDone) {
-                    // v3.1: 根据 task_generated 显示不同按钮
+                    // 已互检 → 任务生成 / 重新互检
                     if (batch.task_generated) {
-                      // 已生成过任务 → 显示"重新生成任务"和"查看任务池"
                       menuItems += '<div class="more-menu-item" onclick="closeAllMoreMenus();openRegenerateModal(\'' + batch.id + '\')" style="padding:7px 12px;cursor:pointer;border-bottom:1px solid var(--border-light);font-size:12px;">🔄 重新生成任务</div>';
                       menuItems += '<div class="more-menu-item" onclick="closeAllMoreMenus();viewGeneratedTasks(\'' + batch.id + '\')" style="padding:7px 12px;cursor:pointer;border-bottom:1px solid var(--border-light);font-size:12px;">📋 查看任务池</div>';
                     } else {
-                      // 首次生成 → 显示"生成标注任务"
                       menuItems += '<div class="more-menu-item" onclick="closeAllMoreMenus();openGenerateModal(\'' + batch.id + '\')" style="padding:7px 12px;cursor:pointer;border-bottom:1px solid var(--border-light);font-size:12px;">📝 生成标注任务</div>';
                     }
                     menuItems += '<div class="more-menu-item" onclick="closeAllMoreMenus();triggerReview(\'' + batch.id + '\', true)" style="padding:7px 12px;cursor:pointer;border-bottom:1px solid var(--border-light);font-size:12px;">🔄 重新互检</div>';
+                  } else if (reviewStatus === '互检中止') {
+                    // 已完成 + 互检中止 → 任务生成 + 继续互检 + 重新互检
+                    if (batch.task_generated) {
+                      menuItems += '<div class="more-menu-item" onclick="closeAllMoreMenus();openRegenerateModal(\'' + batch.id + '\')" style="padding:7px 12px;cursor:pointer;border-bottom:1px solid var(--border-light);font-size:12px;">🔄 重新生成任务</div>';
+                      menuItems += '<div class="more-menu-item" onclick="closeAllMoreMenus();viewGeneratedTasks(\'' + batch.id + '\')" style="padding:7px 12px;cursor:pointer;border-bottom:1px solid var(--border-light);font-size:12px;">📋 查看任务池</div>';
+                    } else {
+                      menuItems += '<div class="more-menu-item" onclick="closeAllMoreMenus();openGenerateModal(\'' + batch.id + '\')" style="padding:7px 12px;cursor:pointer;border-bottom:1px solid var(--border-light);font-size:12px;">📝 生成标注任务</div>';
+                    }
+                    menuItems += '<div class="more-menu-item" onclick="closeAllMoreMenus();triggerReview(\'' + batch.id + '\', false)" style="padding:7px 12px;cursor:pointer;border-bottom:1px solid var(--border-light);font-size:12px;">▶ 继续互检</div>';
+                    menuItems += '<div class="more-menu-item" onclick="closeAllMoreMenus();triggerReview(\'' + batch.id + '\', true)" style="padding:7px 12px;cursor:pointer;border-bottom:1px solid var(--border-light);font-size:12px;">🔄 重新互检</div>';
                   } else {
-                    // 已完成 + 未互检 / 互检失败 / 互检中止 → 触发互检
+                    // 已完成 + 未互检 / 互检失败 → 仅触发互检
                     menuItems += '<div class="more-menu-item" onclick="closeAllMoreMenus();triggerReview(\'' + batch.id + '\', false)" style="padding:7px 12px;cursor:pointer;border-bottom:1px solid var(--border-light);font-size:12px;">🔄 触发互检</div>';
                   }
                 }
-                // ====== 进行中批次（取数中 / 互检中，但 batch.status 非 completed）======
+                // ====== 进行中批次 ======
                 else if (isRunning) {
                   menuItems += '<div class="more-menu-item" onclick="closeAllMoreMenus();abortBatch(\'' + batch.id + '\')" style="padding:7px 12px;cursor:pointer;border-bottom:1px solid var(--border-light);font-size:12px;color:#ff9800;">⏹ 中止</div>';
                 }
                 // ====== 失败 / 待处理 → 无操作按钮，直接显示分隔线 ======
 
-                // 分隔线 + 导出 + 删除（所有状态统一）
-                menuItems = '<div style="border-top:1px dashed var(--border-light);"></div>' + menuItems;
+                // 分隔线 + 导出 + 删除（所有状态统一，放在条件菜单之后）
+                menuItems += '<div style="border-top:1px dashed var(--border-light);"></div>';
                 menuItems += '<div class="more-menu-item" onclick="closeAllMoreMenus();openExportModal(\'' + batch.id + '\')" style="padding:7px 12px;cursor:pointer;border-bottom:1px solid var(--border-light);font-size:12px;">📥 导出全量</div>';
                 menuItems += '<div class="more-menu-item" onclick="closeAllMoreMenus();deleteBatch(\'' + batch.id + '\')" style="padding:7px 12px;cursor:pointer;font-size:12px;color:var(--danger);">🗑 删除</div>';
                 return menuItems;

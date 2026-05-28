@@ -12,6 +12,20 @@ app.config['SQLALCHEMY_DATABASE_URI'] = SQLALCHEMY_DATABASE_URI
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = SQLALCHEMY_TRACK_MODIFICATIONS
 app.config['MAX_CONTENT_LENGTH'] = 10 * 1024 * 1024  # 上传文件大小限制 10MB
 
+# 禁用模板缓存，确保每次请求都读取最新磁盘文件
+app.config['TEMPLATES_AUTO_RELOAD'] = True
+app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 0
+
+
+@app.after_request
+def add_header(response):
+    """禁用浏览器缓存，确保每次拿到最新资源"""
+    response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+    response.headers['Pragma'] = 'no-cache'
+    response.headers['Expires'] = '0'
+    return response
+
+
 db.init_app(app)
 
 login_manager = LoginManager()
