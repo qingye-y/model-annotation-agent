@@ -853,8 +853,11 @@
 
     // v3.1 / v1.1: 执行重新生成任务（发送 categories 数组）
     function executeRegenerateForDetail() {
-      // 从弹窗收集类别（复用 generateModal 的 checkbox，默认全部勾选 diff/missed/unreviewable）
-      var categories = ['diff', 'missed', 'unreviewable'];
+      // 从弹窗收集类别（复用 generateModal 的 checkbox）
+      var categories = [];
+      document.querySelectorAll('input[name="genCategory"]:checked').forEach(function(cb) {
+        categories.push(cb.value);
+      });
       var btn = document.getElementById('crConfirmBtn');
       btn.disabled = true;
       btn.textContent = '重新生成中…';

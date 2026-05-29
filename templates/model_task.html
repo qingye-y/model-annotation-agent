@@ -331,17 +331,17 @@
               <span style="color:var(--text-muted);font-size:12px;">（A/B 审核结果不一致）</span>
             </label>
             <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:normal;">
-              <input type="checkbox" name="genCategory" value="missed" checked style="width:16px;height:16px;margin-top:2px;">
+              <input type="checkbox" name="genCategory" value="missed" style="width:16px;height:16px;margin-top:2px;">
               <span>漏审数据 <span id="genMissedCount" style="color:#e67e22;font-weight:bold;"></span></span>
               <span style="color:var(--text-muted);font-size:12px;">（并发时被跳过的应审未审记录）</span>
             </label>
             <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:normal;">
-              <input type="checkbox" name="genCategory" value="unreviewable" checked style="width:16px;height:16px;margin-top:2px;">
+              <input type="checkbox" name="genCategory" value="unreviewable" style="width:16px;height:16px;margin-top:2px;">
               <span>无法审核 <span id="genUnreviewableCount" style="color:#f57f17;font-weight:bold;"></span></span>
               <span style="color:var(--text-muted);font-size:12px;">（模型B 返回无法审核）</span>
             </label>
             <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:normal;">
-              <input type="checkbox" name="genCategory" value="consistency" id="genConsistencyCb" style="width:16px;height:16px;margin-top:2px;">
+              <input type="checkbox" name="genCategory" value="consistency" id="genConsistencyCb" checked style="width:16px;height:16px;margin-top:2px;">
               <span>一致性抽检 <span id="genConsistencyCount" style="color:#8e44ad;font-weight:bold;"></span></span>
               <span style="color:var(--text-muted);font-size:12px;">（A/B 审核结果一致）</span>
             </label>
@@ -1503,10 +1503,10 @@
               (data.unreviewable_count > 0) ? '（' + data.unreviewable_count + ' 条）' : '（0 条）';
             document.getElementById('genConsistencyCount').textContent =
               (data.consistency_total > 0) ? '（' + data.consistency_total + ' 条）' : '（0 条）';
-            // 默认勾选 diff/missed/unreviewable（一致性不勾选）
+            // 默认勾选 diff/consistency（漏审/无法审核不勾选）
             document.querySelectorAll('input[name="genCategory"]').forEach(function(cb) {
-              if (cb.value === 'consistency') cb.checked = false;
-              else cb.checked = true;
+              if (cb.value === 'diff' || cb.value === 'consistency') cb.checked = true;
+              else cb.checked = false;
             });
             updateGenPreview();
           } else {
