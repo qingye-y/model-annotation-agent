@@ -263,6 +263,10 @@
           <select class="pool-filter-select" id="poolRuleFilter" onchange="onPoolRuleFilterChange()">
             <option value="">全部规则</option>
           </select>
+          <span class="pool-filter-label" style="margin-left:12px;">数据日期：</span>
+          <select class="pool-filter-select" id="poolDateFilter" onchange="onPoolDateFilterChange()">
+            <option value="">全部日期</option>
+          </select>
           <span class="pool-filter-count" id="poolFilterCount"></span>
         </div>
         <div id="taskPoolLoading" class="loading-spinner">加载中…</div>
@@ -508,6 +512,22 @@
     </div>
   </div>
 
+  <!-- v1.0：日期选择弹窗 -->
+  <div class="modal-overlay" id="datePickerModal">
+    <div class="modal" style="max-width:400px;">
+      <div class="modal-header">
+        <span class="modal-title">选择数据日期</span>
+        <button class="modal-close" onclick="closeDatePicker()">×</button>
+      </div>
+      <div class="modal-body" id="datePickerBody" style="max-height:400px;overflow-y:auto;"></div>
+      <div id="datePickerSummary" style="padding:8px 16px;font-size:13px;color:#666;border-top:1px solid var(--border);"></div>
+      <div style="padding:12px 16px;display:flex;justify-content:flex-end;gap:8px;">
+        <button class="btn btn-default" onclick="closeDatePicker()">取消</button>
+        <button class="btn btn-primary" onclick="confirmDatePicker()">确认</button>
+      </div>
+    </div>
+  </div>
+
   <script>
     // ================================================================
     // API 工具函数（已迁移至 /static/common.js，全局共享）
@@ -654,6 +674,7 @@
           });
 
           populatePoolRuleFilter();
+          populatePoolDateFilter();
           renderTaskPool();
           renderOverview();
       });  // closes apiGet().then()
@@ -733,6 +754,7 @@
               id: String(u.id),              // User DB id（用于 PUT/DELETE）
               username: u.username,          // 登录用户名
               name: u.name,                  // 显示名
+              role: u.role,                  // 用户角色（用于负载卡片过滤）
               ruleIds: boundRuleIds,          // 绑定规则（从本地 bindings 读取）
               quota: u.daily_quota || 200,
               used: 0
@@ -858,7 +880,7 @@
       var instanceSet = {};
       pool.forEach(function(t) { (t.instanceIds || []).forEach(function(i) { instanceSet[i] = true; }); });
 
-      var workers = annotators.filter(function(a) { return (a.quota - a.used) > 0; }).length;
+      var workers = annotators.filter(function(a) { return a.role === 'annotator' && (a.quota - a.used) > 0; }).length;
 
       document.getElementById('overviewPending').textContent = pending;
       document.getElementById('overviewAllocated').textContent = allocated;
@@ -871,9 +893,16 @@
     // 任务池规则筛选
     // ================================================================
     var currentPoolRuleFilter = '';  // 当前选中的规则过滤值（空=全部）
+    var currentPoolDateFilter = '';  // 当前选中的日期过滤值（空=全部，格式 MM/DD）
 
     function onPoolRuleFilterChange() {
       currentPoolRuleFilter = document.getElementById('poolRuleFilter').value;
+      populatePoolDateFilter();  // 切换规则后刷新日期下拉选项
+      renderTaskPool();
+    }
+
+    function onPoolDateFilterChange() {
+      currentPoolDateFilter = document.getElementById('poolDateFilter').value;
       renderTaskPool();
     }
 
@@ -889,6 +918,54 @@
         opt.textContent = r.name;
         select.appendChild(opt);
       });
+    }
+
+    // 从 date_range 字符串提取端点，格式: "YYYY/MM/DD ~ YYYY/MM/DD" 或 "YYYY/MM/DD"
+    function _parseDateRange(dateRange) {
+      if (!dateRange) return null;
+      var parts = dateRange.split(' ~ ');
+      var end = parts[parts.length - 1].trim();  // 取末端日期
+      // 归一化为 MM/DD
+      if (end && end.length === 10 && end.indexOf('/') !== -1) {
+        var mmdd = end.substring(5, 10).replace('-', '/');
+        return mmdd;  // "05/20"
+      }
+      return null;
+    }
+
+    // 填充任务池日期下拉（随规则筛选联动：先选规则，再提取该规则下的所有日期）
+    function populatePoolDateFilter() {
+      var select = document.getElementById('poolDateFilter');
+      if (!select) return;
+      select.innerHTML = '<option value="">全部日期</option>';
+
+      // 根据当前规则筛选范围
+      var pool = currentPoolRuleFilter
+        ? _cachedTaskPool.filter(function(t) { return t.ruleId === currentPoolRuleFilter; })
+        : _cachedTaskPool;
+
+      // 提取所有唯一日期（取 date_range 末端），保留原始文本用于显示
+      var dateMap = {};  // mmdd -> display
+      pool.forEach(function(t) {
+        var mmdd = _parseDateRange(t.date);
+        if (mmdd && !dateMap[mmdd]) {
+          dateMap[mmdd] = mmdd;  // display = value
+        }
+      });
+
+      // 按日期排序（最新在前）
+      Object.keys(dateMap).sort().reverse().forEach(function(mmdd) {
+        var opt = document.createElement('option');
+        opt.value = mmdd;
+        opt.textContent = mmdd;
+        select.appendChild(opt);
+      });
+
+      // 若当前选中值不在新列表中则重置
+      if (currentPoolDateFilter && !dateMap[currentPoolDateFilter]) {
+        currentPoolDateFilter = '';
+        select.value = '';
+      }
     }
 
     // ================================================================
@@ -1031,17 +1108,17 @@
         var bnSeq = h.seq > 1 ? bn + '-' + h.seq : bn;
         var subRowClass = h.seq > 1 ? bn + '-' + h.seq : bn;
 
-        var batchNoCell = '<span class="batch-no-text" onclick="window.location.href=\'/annotation_list.html?batch_no=' + encodeURIComponent(bn) + '\'" title="点击查看该批次的标注任务" style="cursor:pointer;">' + escHtml(bnSeq) + '</span>' +
+        var batchNoCell = '<span class="batch-no-text" onclick="window.location.href=\'/annotation_list.html?dispatch_batch_no=' + encodeURIComponent(bn) + '\'" title="点击查看该批次的标注任务" style="cursor:pointer;">' + escHtml(bnSeq) + '</span>' +
           (hasAnnotators
             ? '<button class="expand-arrow" id="expand-btn-' + escAttr(subRowClass) + '" onclick="toggleHistoryExpand(\'' + escAttr(subRowClass) + '\')" title="展开/收起标注员明细" style="margin-left:4px;cursor:pointer;background:none;border:none;color:var(--primary);">▶</button>'
             : '');
 
         var actionCell;
         if (h.isPartiallyRevoked) {
-          actionCell = '<button class="btn btn-xs" style="background:var(--primary);color:#fff;padding:3px 10px;border:none;border-radius:4px;cursor:pointer;font-size:12px;" onclick="window.location.href=\'/annotation_list.html?batch_no=' + encodeURIComponent(bn) + '&status=done\'">查看已完成任务</button>';
+          actionCell = '<button class="btn btn-xs" style="background:var(--primary);color:#fff;padding:3px 10px;border:none;border-radius:4px;cursor:pointer;font-size:12px;" onclick="window.location.href=\'/annotation_list.html?dispatch_batch_no=' + encodeURIComponent(bn) + '&status=done\'">查看已完成任务</button>';
         } else {
           actionCell = '' +
-            '<button class="btn btn-xs" style="background:var(--primary);color:#fff;padding:3px 10px;border:none;border-radius:4px;cursor:pointer;font-size:12px;" onclick="window.location.href=\'/annotation_list.html?batch_no=' + encodeURIComponent(bn) + '\'">查看任务</button> ' +
+            '<button class="btn btn-xs" style="background:var(--primary);color:#fff;padding:3px 10px;border:none;border-radius:4px;cursor:pointer;font-size:12px;" onclick="window.location.href=\'/annotation_list.html?dispatch_batch_no=' + encodeURIComponent(bn) + '\'">查看任务</button> ' +
             (pending > 0
               ? '<button class="btn btn-xs" style="background:var(--warning);color:#fff;padding:3px 10px;border:none;border-radius:4px;cursor:pointer;font-size:12px;" onclick="revokeBatch(\'' + escAttr(bn) + '\', \'revoke\')">撤回整批</button>'
               : '<span style="color:var(--text-muted);font-size:12px;">—</span>'
@@ -1118,15 +1195,24 @@
       if (table) table.style.display = '';
       if (filterBar) filterBar.style.display = '';
 
-      // 根据下拉筛选过滤
+      // 根据规则下拉筛选过滤
       var pool = currentPoolRuleFilter
         ? allPool.filter(function(t) { return t.ruleId === currentPoolRuleFilter; })
         : allPool;
 
+      // 根据日期下拉筛选过滤（取 date_range 末端 MM/DD 匹配）
+      if (currentPoolDateFilter) {
+        pool = pool.filter(function(t) {
+          return _parseDateRange(t.date) === currentPoolDateFilter;
+        });
+      }
+
       // 更新计数
       if (filterCount) {
         var total = allPool.length;
-        filterCount.textContent = '共 ' + total + ' 条' + (currentPoolRuleFilter ? '，显示 ' + pool.length + ' 条' : '，显示全部');
+        var ruleHint = currentPoolRuleFilter ? '（' + currentPoolRuleFilter + '）' : '';
+        var dateHint = currentPoolDateFilter ? ' · ' + currentPoolDateFilter : '';
+        filterCount.textContent = '共 ' + total + ' 条' + ruleHint + dateHint + '，显示 ' + pool.length + ' 条';
       }
 
       var html = pool.map(function(t) {
@@ -1234,17 +1320,17 @@
         var bnSeq = h.seq > 1 ? bn + '-' + h.seq : bn;
         var subRowClass = h.seq > 1 ? bn + '-' + h.seq : bn;
 
-        var batchNoCell = '<span class="batch-no-text" onclick="window.location.href=\'/annotation_list.html?batch_no=' + encodeURIComponent(bn) + '\'" title="点击查看该批次的标注任务" style="cursor:pointer;">' + escHtml(bnSeq) + '</span>' +
+        var batchNoCell = '<span class="batch-no-text" onclick="window.location.href=\'/annotation_list.html?dispatch_batch_no=' + encodeURIComponent(bn) + '\'" title="点击查看该批次的标注任务" style="cursor:pointer;">' + escHtml(bnSeq) + '</span>' +
           (hasAnnotators
             ? '<button class="expand-arrow" id="expand-btn-' + escAttr(subRowClass) + '" onclick="toggleHistoryExpand(\'' + escAttr(subRowClass) + '\')" title="展开/收起标注员明细" style="margin-left:4px;cursor:pointer;background:none;border:none;color:var(--primary);">▶</button>'
             : '');
 
         var actionCell;
         if (h.isPartiallyRevoked) {
-          actionCell = '<button class="btn btn-xs" style="background:var(--primary);color:#fff;padding:3px 10px;border:none;border-radius:4px;cursor:pointer;font-size:12px;" onclick="window.location.href=\'/annotation_list.html?batch_no=' + encodeURIComponent(bn) + '&status=done\'">查看已完成任务</button>';
+          actionCell = '<button class="btn btn-xs" style="background:var(--primary);color:#fff;padding:3px 10px;border:none;border-radius:4px;cursor:pointer;font-size:12px;" onclick="window.location.href=\'/annotation_list.html?dispatch_batch_no=' + encodeURIComponent(bn) + '&status=done\'">查看已完成任务</button>';
         } else {
           actionCell = '' +
-            '<button class="btn btn-xs" style="background:var(--primary);color:#fff;padding:3px 10px;border:none;border-radius:4px;cursor:pointer;font-size:12px;" onclick="window.location.href=\'/annotation_list.html?batch_no=' + encodeURIComponent(bn) + '\'">查看任务</button> ' +
+            '<button class="btn btn-xs" style="background:var(--primary);color:#fff;padding:3px 10px;border:none;border-radius:4px;cursor:pointer;font-size:12px;" onclick="window.location.href=\'/annotation_list.html?dispatch_batch_no=' + encodeURIComponent(bn) + '\'">查看任务</button> ' +
             (pending > 0
               ? '<button class="btn btn-xs" style="background:var(--warning);color:#fff;padding:3px 10px;border:none;border-radius:4px;cursor:pointer;font-size:12px;" onclick="revokeBatch(\'' + escAttr(bn) + '\', \'revoke\')">撤回整批</button>'
               : '<span style="color:var(--text-muted);font-size:12px;">—</span>'
@@ -1530,9 +1616,9 @@
       var loading = document.getElementById('loadCardsLoading');
       if (loading) loading.style.display = 'none';
 
-      var annotators = _cachedAnnotators;
+      var annotators = _cachedAnnotators.filter(function(a) { return a.role !== 'admin'; });
       var rules = getRules();
-      console.log('[renderLoadCards] 调用，_cachedAnnotators 长度:', annotators.length, '规则数:', rules.length);
+      console.log('[renderLoadCards] 调用，标注员（不含admin）数量:', annotators.length, '规则数:', rules.length);
 
       var html = annotators.map(function(a) {
         var ruleTags = (a.ruleIds || []).map(function(rid) {
@@ -1589,7 +1675,17 @@
         '</div>' +
         '<div class="assign-info-row">' +
         '<span class="assign-info-label">剩余待分配总量</span>' +
-        '<span class="assign-info-value">' + remaining + ' 条</span>' +
+        '<span class="assign-info-value" id="assignTotalRemaining">' + remaining + ' 条</span>' +
+        '</div>' +
+
+        // v1.0：日期筛选区域
+        '<div class="assign-info-row" style="flex-direction:column;align-items:flex-start;gap:6px;">' +
+        '<span class="assign-info-label">数据日期</span>' +
+        '<div style="display:flex;gap:8px;">' +
+        '<button type="button" class="btn btn-sm" id="btnAllDates" onclick="selectAllDates()">📅 全部日期</button>' +
+        '<button type="button" class="btn btn-sm btn-default" id="btnCustomDates" onclick="openDatePicker()">📅 自定义日期</button>' +
+        '</div>' +
+        '<div id="selectedDatesInfo" style="font-size:12px;color:#666;min-height:18px;"></div>' +
         '</div>' +
 
         '<div class="smart-actions">' +
@@ -1614,11 +1710,135 @@
             '</div>';
         }).join('') +
         '</div>' +
-        '<div class="assign-total" id="assignTotalInfo">本次将分配总计 0 条，剩余未分配 ' + remaining + ' 条</div>' +
+        '<div class="assign-total" id="assignTotalInfo">本次将分配总计 <span id="assignCountDisplay">0</span> 条，剩余未分配 <span id="assignRemainingDisplay">' + remaining + '</span> 条</div>' +
         '<div id="quotaErrorMsg" style="color:var(--danger);font-size:12px;margin-top:8px;display:none;"></div>';
 
       document.getElementById('assignModal').classList.add('active');
+
+      // v1.0：加载该规则的可用日期
+      loadAvailableDates(ruleId);
     };
+
+    // ================================================================
+    // v1.0：日期筛选状态（分配弹窗内）
+    // ================================================================
+    var availableDates = [];       // [{date:'05/26', count:120}, ...]
+    var selectedDates = [];        // ['05/26', '05/28']
+    var currentFilteredCount = 0;  // 当前选中日期对应的待分配总数
+
+    // 加载某个规则下的所有日期及数量
+    function loadAvailableDates(ruleName) {
+      availableDates = [];
+      selectedDates = [];
+      currentFilteredCount = 0;
+      return fetch('/api/dispatch/available-dates?rule_name=' + encodeURIComponent(ruleName))
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          availableDates = data.dates || [];
+          selectAllDates();  // 默认全选
+        })
+        .catch(function(err) {
+          console.warn('[loadAvailableDates] 加载失败', err);
+          availableDates = [];
+        });
+    }
+
+    // 全选所有日期
+    window.selectAllDates = function() {
+      selectedDates = availableDates.map(function(d) { return d.date; });
+      currentFilteredCount = availableDates.reduce(function(s, d) { return s + d.count; }, 0);
+      var btnAll = document.getElementById('btnAllDates');
+      var btnCust = document.getElementById('btnCustomDates');
+      if (btnAll) btnAll.classList.add('btn-primary');
+      if (btnAll) btnAll.classList.remove('btn-default');
+      if (btnCust) btnCust.classList.add('btn-default');
+      if (btnCust) btnCust.classList.remove('btn-primary');
+      updateSelectedDatesInfo();
+    };
+
+    // 打开自定义日期弹窗
+    window.openDatePicker = function() {
+      var btnAll = document.getElementById('btnAllDates');
+      var btnCust = document.getElementById('btnCustomDates');
+      if (btnAll) { btnAll.classList.remove('btn-primary'); btnAll.classList.add('btn-default'); }
+      if (btnCust) { btnCust.classList.add('btn-primary'); btnCust.classList.remove('btn-default'); }
+
+      if (availableDates.length === 0) {
+        showToast('暂无可选日期', true);
+        return;
+      }
+
+      var html = availableDates.map(function(d) {
+        var checked = selectedDates.indexOf(d.date) !== -1 ? 'checked' : '';
+        return '<label style="display:block;padding:8px 0;border-bottom:1px solid var(--border);cursor:pointer;">' +
+          '<input type="checkbox" class="date-checkbox" value="' + escAttr(d.date) + '" ' + checked + ' onchange="updateDatePickerSummary()" style="margin-right:8px;">' +
+          '<span style="font-weight:500;">' + escHtml(d.date) + '</span>' +
+          '<span style="float:right;color:var(--text-muted);font-size:13px;">' + d.count + ' 条</span>' +
+          '</label>';
+      }).join('');
+      document.getElementById('datePickerBody').innerHTML = html || '<div style="padding:16px;color:var(--text-muted);text-align:center;">无日期数据</div>';
+      updateDatePickerSummary();
+      document.getElementById('datePickerModal').classList.add('active');
+    };
+
+    // 关闭日期弹窗（不保存）
+    window.closeDatePicker = function() {
+      document.getElementById('datePickerModal').classList.remove('active');
+    };
+
+    // 确认日期弹窗
+    window.confirmDatePicker = function() {
+      var checks = document.querySelectorAll('.date-checkbox:checked');
+      selectedDates = Array.prototype.slice.call(checks).map(function(c) { return c.value; });
+      currentFilteredCount = availableDates
+        .filter(function(d) { return selectedDates.indexOf(d.date) !== -1; })
+        .reduce(function(s, d) { return s + d.count; }, 0);
+      closeDatePicker();
+      updateSelectedDatesInfo();
+    };
+
+    // 更新日期弹窗底部汇总
+    window.updateDatePickerSummary = function() {
+      var checks = document.querySelectorAll('.date-checkbox:checked');
+      var count = 0;
+      Array.prototype.slice.call(checks).forEach(function(c) {
+        var d = availableDates.find(function(a) { return a.date === c.value; });
+        if (d) count += d.count;
+      });
+      document.getElementById('datePickerSummary').textContent =
+        '已选 ' + checks.length + ' 天，共 ' + count + ' 条';
+    };
+
+    // 更新分配弹窗中的已选日期提示和待分配总数
+    function updateSelectedDatesInfo() {
+      var count = currentFilteredCount;
+      var info;
+      if (availableDates.length === 0) {
+        info = '加载中…';
+      } else if (selectedDates.length === availableDates.length) {
+        info = '已选择全部日期（' + selectedDates.join('、') + '），共 ' + count + ' 条待分配';
+      } else if (selectedDates.length === 0) {
+        info = '<span style="color:var(--danger);">未选择任何日期，无法分配</span>';
+      } else {
+        info = '已选日期：' + selectedDates.join('、') + '（' + selectedDates.length + '天，共 ' + count + ' 条）';
+      }
+      var infoEl = document.getElementById('selectedDatesInfo');
+      if (infoEl) infoEl.innerHTML = info;
+
+      // 更新待分配总数显示
+      var remEl = document.getElementById('assignRemainingDisplay');
+      if (remEl) remEl.textContent = count;
+
+      // 更新每个标注员的输入上限
+      document.querySelectorAll('input[name="assignCount"]').forEach(function(inp) {
+        var row = inp.closest('.assign-table-row');
+        var remCell = row ? row.querySelector('.assign-quota-info') : null;
+        var maxQuota = remCell ? parseInt(remCell.dataset.remaining || '0') : 0;
+        inp.max = Math.min(maxQuota, count);
+        if (parseInt(inp.value) > inp.max) inp.value = inp.max;
+      });
+      updateAssignTotal();
+    }
 
     window.toggleAssignRow = function(checkbox) {
       var row = checkbox.closest('.assign-table-row');
@@ -1775,7 +1995,8 @@
         rule_name: currentTask.ruleId,
         annotator_ids: pendingAssign.map(function(p) { return p.username; }),
         assign_method: 'manual',
-        assign_count: pendingAssign.reduce(function(s, p) { return s + p.count; }, 0)
+        assign_count: pendingAssign.reduce(function(s, p) { return s + p.count; }, 0),
+        dates: selectedDates.length > 0 && selectedDates.length < availableDates.length ? selectedDates : []
       };
 
       apiPost('/api/dispatch/assign', assignData).then(function(res) {

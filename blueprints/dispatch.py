@@ -221,6 +221,7 @@ def api_assign():
     annotator_ids = data.get('annotator_ids', [])
     assign_method = data.get('assign_method', '平均分配')
     assign_count = int(data.get('assign_count', 0))
+    selected_dates = data.get('dates', [])  # v1.0：日期筛选，格式 ["MM/DD", "MM/DD"]
 
     if not rule_name:
         return jsonify({'success': False, 'error': '规则名不能为空'}), 400
@@ -256,6 +257,20 @@ def api_assign():
         raw_filter = base_filter + [or_(*[RawData.instance_code == inst for inst in matched_instances])]
     else:
         raw_filter = base_filter
+
+    # v1.0：按日期筛选（前端传 MM/DD，需转原始格式匹配 created_date）
+    if selected_dates:
+        date_patterns = []
+        for d in selected_dates:
+            parts = d.split('/')
+            if len(parts) == 2:
+                mm, dd = parts
+                date_patterns.append(db.or_(
+                    RawData.created_date.like(f'%/{mm}/{dd}'),
+                    RawData.created_date.like(f'%{mm}{dd}')
+                ))
+        if date_patterns:
+            raw_filter = raw_filter + [db.or_(*date_patterns)]
 
     available = RawData.query.filter(*raw_filter).order_by(RawData.id).all()
     if len(available) < assign_count:
@@ -1939,3 +1954,58 @@ def api_badcase_list():
         'pages': (total + per_page - 1) // per_page,
         'items': items,
     })
+
+
+# ---------------------------------------------------------------------------
+# API-10: GET /api/dispatch/available-dates
+# 获取指定规则下所有待分配数据的数据日期及其数量（用于分配弹窗日期筛选）
+# ---------------------------------------------------------------------------
+
+@dispatch_bp.route('/api/dispatch/available-dates', methods=['GET'])
+@login_required
+def api_available_dates():
+    from sqlalchemy import func, or_ as sql_or
+    from services.fetch_service import get_instance_rule_mapping
+    rule_name = request.args.get('rule_name', '').strip()
+
+    # 获取该规则绑定的实例列表
+    instance_rule_map = get_instance_rule_mapping()
+    matched_instances = [inst for inst, r in instance_rule_map.items() if r == rule_name]
+
+    # 待分配记录过滤条件（与 api_task_pool / api_assign 保持一致）
+    base_filter = [
+        RawData.modelb_reviewed == True,
+        sql_or(RawData.annotator == '', RawData.annotator.is_(None)),
+        sql_or(RawData.check_result == '', RawData.check_result.is_(None)),
+    ]
+    if matched_instances:
+        raw_filter = base_filter + [sql_or(*[RawData.instance_code == inst for inst in matched_instances])]
+    else:
+        raw_filter = base_filter
+
+    # 按 created_date 分组计数（支持 YYYY/MM/DD 和 YYYYMMDD 两种格式）
+    # 统一归一化为 MM/DD 格式返回
+    records = RawData.query.filter(*raw_filter).all()
+
+    date_count_map = {}
+    for r in records:
+        cd = r.created_date
+        if not cd:
+            continue
+        # 归一化为 MM/DD
+        if '/' in cd:
+            parts = cd.split('/')
+            if len(parts) == 3:
+                mm, dd = parts[1], parts[2]
+            else:
+                continue
+        else:
+            if len(cd) == 8:
+                mm, dd = cd[4:6], cd[6:8]
+            else:
+                continue
+        key = f"{mm}/{dd}"
+        date_count_map[key] = date_count_map.get(key, 0) + 1
+
+    dates = [{'date': k, 'count': v} for k, v in sorted(date_count_map.items())]
+    return jsonify({'success': True, 'dates': dates})
