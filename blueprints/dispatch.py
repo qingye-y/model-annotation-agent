@@ -17,7 +17,7 @@ API 列表：
 """
 
 import random
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from flask import Blueprint, request, jsonify
 from flask_login import login_required, current_user
 from models import db, User, RawData, Annotation, FetchLog, DispatchLog, SqlConfig, QcRecord
@@ -357,6 +357,9 @@ def api_assign():
     db.session.commit()
 
     # 返回实际分配数量；若与请求不符，给出提示
+    if actual_assigned == 0:
+        # 分配了 0 条：可能是请求数量为 0，或所有标注员额度已满
+        return jsonify({'success': False, 'message': '无可分配数据（请求数量为 0 或所有标注员今日额度已用尽）'}), 400
     if actual_assigned < assign_count:
         return jsonify({
             'success': True,
@@ -366,14 +369,15 @@ def api_assign():
 
 
 def _today_assigned(annotator_id):
-    """今日已分配给该标注员的总数量（含已完成，v2.3：完成任务也占据额度）"""
+    """今日已分配给该标注员的总数量（含已完成）
+    2026-05-31 修复：改用 DispatchLog.count 求和，替代 COUNT(RawData.id)，
+    避免 assigned_at 字段时效性问题导致分配 18 条只统计到 1 条的问题。"""
     today_cutoff = bj_today_utc()  # 北京今日 00:00 UTC
-    return db.session.query(db.func.count(RawData.id)).filter(
-        RawData.annotator == User.query.get(annotator_id).username,
-        db.or_(RawData.annotator != '', RawData.annotator.isnot(None)),
-        # v2.3 改动：移除 check_result == '' 过滤，已完成的任务也占据额度
-        RawData.assigned_at >= today_cutoff,  # 用 assigned_at 而非 created_at（后者是抓取时间）
-    ).scalar() or 0
+    result = db.session.query(db.func.sum(DispatchLog.count)).filter(
+        DispatchLog.annotator_id == annotator_id,
+        DispatchLog.created_at >= today_cutoff,
+    ).scalar()
+    return result or 0
 
 
 # ---------------------------------------------------------------------------
@@ -436,6 +440,13 @@ def api_history():
         per_annot_completed = sum(1 for r in per_annot_records if is_completed(r))  # FIX: 正确处理 NULL
         per_annot_pending = sum(1 for r in per_annot_records if is_pending(r))
         per_annot_count = len(per_annot_records)  # 该标注员在此批次的总分配数
+
+        # 【修复 DISP-20260527-001 跳转失败】
+        # 如果当前用户是标注员且该批次对其没有可见记录，跳过不显示
+        # （如 REGEN 撤回后该用户记录全部清空的情况）
+        current_user_obj = current_user
+        if current_user_obj.role == 'annotator' and per_annot_count == 0:
+            continue
 
         items.append({
             'batch_no': bn,
@@ -902,6 +913,10 @@ def api_my_task_groups():
     if instance_filter:
         base.append(RawData.instance_code == instance_filter)
 
+    # 修复：从任务调度模块跳转时，后端按 dispatch_batch_no 精确过滤（问题3）
+    if dispatch_batch_filter:
+        base.append(RawData.dispatch_batch_no == dispatch_batch_filter)
+
     if rule_filter:
         from services.fetch_service import get_instance_rule_mapping
         instance_rule_map = get_instance_rule_mapping()
@@ -1159,19 +1174,22 @@ def api_dispatch_annotator_load():
 
     result = []
     for u in users:
-        today = date.today()
-        # 今日已分配（cast 为 DATE 后比较，跨数据库兼容）
-        from sqlalchemy import cast, Date
+        # 修复：用 bj_today_utc() 与 assigned_at/created_at（UTC）保持一致
+        # date.today() = UTC date，但北京时间 00:00~08:00 时 UTC 日期比北京少一天
+        bj_today_dt = bj_today_utc()
+        bj_today_date = (bj_today_dt + timedelta(hours=8)).date()
+        # 今日已分配：DispatchLog.created_at >= bj今日00:00 UTC
         today_assigned = DispatchLog.query.filter(
             DispatchLog.annotator_id == u.id,
-            cast(DispatchLog.created_at, Date) == today
+            DispatchLog.created_at >= bj_today_dt
         ).count()
-        # 今日已完成
+        # 今日已完成：Annotation.updated_at >= bj今日00:00 UTC
         today_completed = Annotation.query.filter_by(annotator_id=u.id, is_submitted=True).filter(
-            cast(Annotation.updated_at, Date) == today
+            Annotation.updated_at >= bj_today_dt
         ).count()
 
         result.append({
+            'id': u.id,
             'username': u.username,
             'display_name': u.name or u.username,
             'today_assigned': today_assigned,
@@ -1180,7 +1198,7 @@ def api_dispatch_annotator_load():
             'used': today_assigned,   # used ≈ 今日已分配
         })
 
-    return jsonify({'success': True, 'data': result})
+    return jsonify({'success': True, 'items': result, 'data': result})
 
 
 # ---------------------------------------------------------------------------
@@ -1254,6 +1272,7 @@ def api_annotation_stats():
     today_remaining = 0
     today_completed = 0
     today_accuracy = None
+    today_progress = None
     if current_user.role == 'annotator':
         from datetime import timedelta
         bj_today = (datetime.utcnow() + timedelta(hours=8)).date()
@@ -1278,6 +1297,7 @@ def api_annotation_stats():
         today_error = sum(1 for r in today_ann if r.result == 'error')
         today_accuracy = round(today_correct / (today_correct + today_error) * 100, 1) \
             if (today_correct + today_error) > 0 else None
+        today_progress = round(today_completed / quota * 100, 1) if quota > 0 else None
 
     return jsonify({
         'success': True,
@@ -1295,7 +1315,54 @@ def api_annotation_stats():
         'today_remaining': today_remaining,
         'today_completed': today_completed,
         'today_accuracy': today_accuracy,
+        'today_progress': today_progress,
     })
+
+
+# API-8: GET /api/annotation/daily-progress
+# 返回近 N 天每日标注完成数趋势（标注员用）
+# ---------------------------------------------------------------------------
+@dispatch_bp.route('/api/annotation/daily-progress', methods=['GET'])
+@login_required
+def api_daily_progress():
+    if current_user.role not in ('annotator', 'admin'):
+        return jsonify({'success': False, 'error': '权限不足'}), 403
+
+    days = int(request.args.get('days', 7))
+    days = min(days, 90)
+
+    # 使用北京时间
+    from datetime import timedelta
+    bj_now = datetime.utcnow() + timedelta(hours=8)
+    bj_today = bj_now.date()
+    start_date = bj_today - timedelta(days=days - 1)
+
+    start_utc = datetime.combine(start_date, datetime.min.time()) - timedelta(hours=8)
+    end_utc = datetime.combine(bj_today, datetime.max.time()) - timedelta(hours=8)
+
+    # 查询每日完成数
+    daily_counts = db.session.query(
+        db.func.date(Annotation.created_at + timedelta(hours=8)).label('date'),
+        db.func.count(Annotation.id).label('count')
+    ).filter(
+        Annotation.annotator_id == current_user.id,
+        Annotation.is_submitted == True,
+        Annotation.created_at >= start_utc,
+        Annotation.created_at <= end_utc,
+    ).group_by(
+        db.func.date(Annotation.created_at + timedelta(hours=8))
+    ).order_by(
+        db.func.date(Annotation.created_at + timedelta(hours=8))
+    ).all()
+
+    trend_map = {str(r.date): r.count for r in daily_counts}
+    trend = []
+    for i in range(days):
+        d = start_date + timedelta(days=i)
+        d_str = d.strftime('%Y-%m-%d')
+        trend.append({'date': d_str, 'count': trend_map.get(d_str, 0)})
+
+    return jsonify({'success': True, 'trend': trend})
 
 
 def api_annotator_load():

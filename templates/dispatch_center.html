@@ -1078,7 +1078,7 @@
 
       filteredHistory.forEach(function(h) {
         var bn = h.batch_no || '__none__';
-        var rn = h.rule_name || '';
+        var rn = h.rule || h.rule_name || '';
         var key = bn + '||' + rn;
 
         // 记录该规则在此 batch_no 下的顺序编号
@@ -1160,7 +1160,7 @@
           '<tr class="batch-main-row" data-batch-no="' + escAttr(bn) + '">' +
           '<td style="text-align:center;"><input type="checkbox" class="history-row-cb" value="' + escAttr(bn) + '" onchange="onHistoryRowCheckChange()"></td>' +
           '<td style="white-space:nowrap;">' + batchNoCell + '</td>' +
-          '<td><span class="rule-tag">' + escHtml(h.rule_name || h.rule || '') + '</span></td>' +
+          '<td><span class="rule-tag">' + escHtml(h.rule || h.rule_name || '') + '</span></td>' +
           '<td>' + statusText + '</td>' +
           '<td>' + total + '</td>' +
           '<td>' + (h.pending_count || 0) + '</td>' +
@@ -1282,7 +1282,7 @@
 
       history.forEach(function(h) {
         var bn = h.batch_no || '__none__';
-        var rn = h.rule_name || '';
+        var rn = h.rule || h.rule_name || '';
         var key = bn + '||' + rn;
 
         if (!batchRulesMap[bn]) batchRulesMap[bn] = [];
@@ -1374,7 +1374,7 @@
             '<input type="checkbox" class="history-row-cb" value="' + escAttr(bn) + '" onchange="onHistoryRowCheckChange()">' +
           '</td>' +
           '<td style="white-space:nowrap;">' + batchNoCell + '</td>' +
-          '<td><span class="rule-tag">' + escHtml(h.rule_name || h.rule || '') + '</span></td>' +
+          '<td><span class="rule-tag">' + escHtml(h.rule || h.rule_name || '') + '</span></td>' +
           '<td>' + statusText + '</td>' +
           '<td>' + total + '</td>' +
           '<td>' + (h.pending_count || 0) + '</td>' +
@@ -2022,11 +2022,18 @@
     window.executeAssign = function() {
       if (!currentTask || pendingAssign.length === 0) return;
 
+      var assignCount = pendingAssign.reduce(function(s, p) { return s + p.count; }, 0);
+      // 【修复】前端拦截 assign_count == 0（避免后端返回 success:True 但实际 0 条）
+      if (assignCount === 0) {
+        showToast('分配数量为 0，请先点击"平均分配"或"按比例分配"', true);
+        return;
+      }
+
       var assignData = {
         rule_name: currentTask.ruleId,
         annotator_ids: pendingAssign.map(function(p) { return p.username; }),
         assign_method: 'manual',
-        assign_count: pendingAssign.reduce(function(s, p) { return s + p.count; }, 0),
+        assign_count: assignCount,
         dates: selectedDates.length > 0 && selectedDates.length < availableDates.length ? selectedDates : []
       };
 
@@ -2036,12 +2043,22 @@
 
         if (res && res.success) {
           showToast(res.message || '分配成功');
-          // 刷新数据
-          fetchTaskPool();
-          fetchAssignHistory().then(function() { fetchAnnotatorLoad(); });
+          pendingAssign = [];
+          // 【修复】Promise 串行化：taskPool → history → annotatorLoad → renderOverview + renderLoadCards
+          return fetchTaskPool().then(function() {
+            return fetchAssignHistory();
+          }).then(function() {
+            return fetchAnnotatorLoad();
+          }).then(function() {
+            renderOverview();   // 确保概览数字同步刷新
+            renderLoadCards();  // 安全兜底（fetchAnnotatorLoad 内部已调用，此处防御性重复）
+          });
         } else {
           showToast((res && res.message) ? res.message : '分配失败', true);
+          pendingAssign = [];
         }
+      }).catch(function(err) {
+        showToast('分配请求异常：' + (err && err.message ? err.message : '未知错误'), true);
         pendingAssign = [];
       });
     };
@@ -2395,7 +2412,7 @@
       _cachedHistory.forEach(function(h) {
         // h.created_at 格式: "2026-05-25 10:30"
         if (!h.created_at || !h.created_at.startsWith(todayStr)) return;
-        var rn = h.rule_name || '未分类';
+        var rn = h.rule || h.rule_name || '未分类';
         (h.annotators || []).forEach(function(ann) {
           // 通过 annotator_name 匹配（annotator_id 不在 history 缓存结构中）
           // 标注员名字唯一，所以用名字匹配

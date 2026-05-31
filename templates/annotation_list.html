@@ -8,6 +8,8 @@
   <link rel="stylesheet" href="/static/common.css">
   <script src="/static/config.js"></script>
   <script src="/static/common.js"></script>
+  <!-- ApexCharts for trend chart (v4.0) -->
+  <script src="https://cdn.jsdelivr.net/npm/apexcharts@3.45.0"></script>
   <style>
     .annotation-page {
       padding: 16px 12px 20px 16px;
@@ -70,8 +72,11 @@
       margin-left: 8px;
     }
 
-    /* 统计区（v4.0：标注员区 + 管理员区，按 role 条件显示） */
+    /* 统计区（v4.1：flex wrap，五卡片第一行，管理员区第二行占满宽） */
     .stats-section {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0;
       background: var(--white);
       border-radius: var(--radius-lg);
       box-shadow: var(--shadow);
@@ -89,7 +94,7 @@
     .stats-annotator-area { display: none; }
     .stats-annotator-area.active { display: flex; }
     /* 管理员区：全局准确率进度条 + 全局数字 */
-    .stats-admin-area { display: none; }
+    .stats-admin-area { display: none; width: 100%; margin-top: 12px; }
     .stats-admin-area.active { display: flex; flex-direction: column; gap: 12px; }
     /* 管理员准确率进度条行 */
     .stats-admin-bars {
@@ -128,33 +133,27 @@
     .stats-admin-bar-fill.compliance { background: var(--success); }
     .stats-admin-bar-fill.violation { background: var(--danger); }
     /* 数字行（双区共用） */
-    .stats-raw-row {
-      font-size: 12px;
-      color: var(--text-secondary);
-      border-top: 1px solid var(--border-light);
-      padding-top: 10px;
+    /* v4.1：stats-raw-row 已删除 */
+    /* 标注员 KPI 卡片组 */
+    /* v4.1：五卡片单行水平排列，占满整行 */
+    .stats-unified-area {
       display: flex;
       gap: 16px;
-      flex-wrap: wrap;
-    }
-    .stats-raw-item { display: flex; gap: 4px; align-items: center; }
-    .stats-raw-item .lbl { color: var(--text-secondary); }
-    .stats-raw-item .val { font-weight: 600; color: var(--text-primary); }
-    .stats-raw-item .val.success { color: var(--success); }
-    .stats-raw-item .val.danger { color: var(--danger); }
-    .stats-raw-item .val.warning { color: var(--warning); }
-    /* 标注员 KPI 卡片组 */
-    .stats-kpi-group {
-      display: flex;
-      gap: 24px;
-      flex-wrap: wrap;
+      flex-wrap: nowrap;
+      width: 100%;
+      justify-content: space-between;
     }
     .stats-kpi-card {
-      min-width: 90px;
+      flex: 1;
+      min-width: 0;
       display: flex;
       flex-direction: column;
       gap: 4px;
+      padding: 10px 0;
+      border-right: 1px solid var(--border-light);
+      overflow: hidden; /* 防止内部进度条溢出 */
     }
+    .stats-kpi-card:last-child { border-right: none; }
     .stats-kpi-label {
       font-size: 12px;
       color: var(--text-secondary);
@@ -1158,6 +1157,8 @@
     .task-group-view { display: none; }
     .task-group-view.active { display: block; }
 
+    /* v4.1：stats-section 改为 flex wrap（在行76统一设置） */
+
     /* 任务表格 */
     .task-group-table { width: 100%; border-collapse: collapse; font-size: 13px; background: var(--white); border-radius: var(--radius-lg); box-shadow: var(--shadow); overflow: hidden; }
     .task-group-table thead th {
@@ -1462,12 +1463,60 @@
         </div>
       </div>
 
-      <!-- 任务统计摘要（简化版） -->
-      <div class="stats-summary" id="tgStatsSummary" style="margin-bottom:12px;">
-        <div class="stat-item"><span class="stat-label">任务分组</span><span class="stat-value">-</span></div>
-        <div class="stat-item"><span class="stat-label">总条数</span><span class="stat-value">-</span></div>
-        <div class="stat-item"><span class="stat-label">待标注</span><span class="stat-value stat-pending">-</span></div>
-        <div class="stat-item"><span class="stat-label">已标注</span><span class="stat-value stat-done">-</span></div>
+
+      <!-- ========== v4.1 五卡片（单行水平，筛选栏下方） ========== -->
+      <div class="stats-section" id="detailStats">
+        <div class="stats-unified-area" id="statsUnifiedArea">
+          <div class="stats-kpi-card">
+            <span class="stats-kpi-label">总任务数</span>
+            <span class="stats-kpi-value" id="kpiTotalNum">-</span>
+          </div>
+          <div class="stats-kpi-card">
+            <span class="stats-kpi-label">今日已分配</span>
+            <span class="stats-kpi-value" id="kpiTodayAssigned">-</span>
+          </div>
+          <div class="stats-kpi-card">
+            <span class="stats-kpi-label">待标注</span>
+            <span class="stats-kpi-value warn" id="kpiPendingNum">-</span>
+          </div>
+          <div class="stats-kpi-card" id="kpiAccuracyCard">
+            <span class="stats-kpi-label">整体准确率</span>
+            <span class="stats-kpi-value" id="kpiAccuracyVal">-</span>
+            <div class="stats-accuracy-track" style="margin-top:4px;">
+              <div class="stats-accuracy-fill" id="kpiAccuracyBar" style="width:0%"></div>
+            </div>
+          </div>
+          <div class="stats-kpi-card" id="kpiProgressCard">
+            <span class="stats-kpi-label">今日标注进度</span>
+            <span class="stats-kpi-value done" id="kpiProgressVal">-</span>
+            <div class="stats-accuracy-track" style="margin-top:4px;">
+              <div class="stats-accuracy-fill done" id="kpiProgressBar" style="width:0%"></div>
+            </div>
+          </div>
+        </div>
+        <!-- 管理员补充区（合规/违规准确率条） -->
+        <div class="stats-admin-area" id="statsAdminArea" style="display:none;">
+          <div class="stats-admin-bars">
+            <div class="stats-admin-bar-item">
+              <div class="stats-admin-bar-label">
+                <span class="bar-name">合规数据准确率</span>
+                <span class="bar-pct" id="adminAccComplianceNum">-</span>
+              </div>
+              <div class="stats-admin-bar-track">
+                <div class="stats-admin-bar-fill compliance" id="adminAccComplianceBar" style="width:0%"></div>
+              </div>
+            </div>
+            <div class="stats-admin-bar-item">
+              <div class="stats-admin-bar-label">
+                <span class="bar-name">违规数据准确率</span>
+                <span class="bar-pct" id="adminAccViolationNum">-</span>
+              </div>
+              <div class="stats-admin-bar-track">
+                <div class="stats-admin-bar-fill violation" id="adminAccViolationBar" style="width:0%"></div>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
 
       <!-- 任务列表表格 -->
@@ -1498,6 +1547,7 @@
         <div class="pagination-center" id="tgPaginationCenter"></div>
       </div>
     </div>
+
 
     <!-- ========== 视图二：商品明细（现有逻辑） ========== -->
     <div class="view-section" id="detailSection">
@@ -1555,97 +1605,6 @@
       </div>
     </div>
 
-    <!-- 统计区（v4.0：标注员区 + 管理员区，按 role 条件显示） -->
-    <div class="stats-section" id="detailStats">
-
-      <!-- ========== 标注员区 ========== -->
-      <div class="stats-annotator-area" id="statsAnnotatorArea">
-        <div class="stats-kpi-group">
-          <!-- 今日已标 -->
-          <div class="stats-kpi-card">
-            <span class="stats-kpi-label">今日已标</span>
-            <span class="stats-kpi-value done" id="kpiTodayCompleted">-</span>
-            <span class="stats-kpi-sub" id="kpiTodayAssigned">已分配 <span id="kpiAssignedNum">-</span> 条</span>
-          </div>
-          <!-- 今日剩余 -->
-          <div class="stats-kpi-card">
-            <span class="stats-kpi-label">今日剩余</span>
-            <span class="stats-kpi-value warn" id="kpiTodayRemaining">-</span>
-            <span class="stats-kpi-sub" id="kpiQuota">日限额 <span id="kpiQuotaNum">-</span> 条</span>
-          </div>
-          <!-- 今日忽略（数字） -->
-          <div class="stats-kpi-card">
-            <span class="stats-kpi-label">今日正确</span>
-            <span class="stats-kpi-value" id="kpiTodayCorrect">-</span>
-            <span class="stats-kpi-sub" id="kpiTodayAccuracy">准确率 <span id="kpiAccuracyNum">-</span></span>
-          </div>
-        </div>
-        <!-- 我的准确率（进度条，标注员也有一个整体准确率看自己今天的表现） -->
-        <div class="stats-accuracy-block" id="statsAnnotatorAccBlock" style="margin-top:4px;">
-          <div class="stats-accuracy-label">
-            <span class="acc-name">我的今日准确率</span>
-            <span class="acc-pct" id="annotAccPct">-</span>
-          </div>
-          <div class="stats-accuracy-track">
-            <div class="stats-accuracy-fill" id="annotAccBar" style="width:0%"></div>
-          </div>
-        </div>
-        <!-- 辅助数字行 -->
-        <div class="stats-raw-row" id="statsAnnotatorRaw">
-          <span class="stats-raw-item"><span class="lbl">总数</span><span class="val" id="rawTotalAnnot">-</span></span>
-          <span class="stats-raw-item"><span class="lbl">待标注</span><span class="val warning" id="rawPendingAnnot">-</span></span>
-          <span class="stats-raw-item"><span class="lbl">已标</span><span class="val" id="rawAnnotatedAnnot">-</span></span>
-          <span class="stats-raw-item"><span class="lbl">正确</span><span class="val success" id="rawCorrectAnnot">-</span></span>
-          <span class="stats-raw-item"><span class="lbl">错误</span><span class="val danger" id="rawErrorAnnot">-</span></span>
-          <span class="stats-raw-item"><span class="lbl">忽略</span><span class="val" id="rawIgnoreAnnot">-</span></span>
-        </div>
-      </div>
-
-      <!-- ========== 管理员区 ========== -->
-      <div class="stats-admin-area" id="statsAdminArea">
-        <!-- 准确率进度条 -->
-        <div class="stats-admin-bars">
-          <div class="stats-admin-bar-item">
-            <div class="stats-admin-bar-label">
-              <span class="bar-name">整体准确率</span>
-              <span class="bar-pct" id="adminAccOverallNum">-</span>
-            </div>
-            <div class="stats-admin-bar-track">
-              <div class="stats-admin-bar-fill overall" id="adminAccOverallBar" style="width:0%"></div>
-            </div>
-          </div>
-          <div class="stats-admin-bar-item">
-            <div class="stats-admin-bar-label">
-              <span class="bar-name">合规数据准确率</span>
-              <span class="bar-pct" id="adminAccComplianceNum">-</span>
-            </div>
-            <div class="stats-admin-bar-track">
-              <div class="stats-admin-bar-fill compliance" id="adminAccComplianceBar" style="width:0%"></div>
-            </div>
-          </div>
-          <div class="stats-admin-bar-item">
-            <div class="stats-admin-bar-label">
-              <span class="bar-name">违规数据准确率</span>
-              <span class="bar-pct" id="adminAccViolationNum">-</span>
-            </div>
-            <div class="stats-admin-bar-track">
-              <div class="stats-admin-bar-fill violation" id="adminAccViolationBar" style="width:0%"></div>
-            </div>
-          </div>
-        </div>
-        <!-- 辅助数字行 -->
-        <div class="stats-raw-row" id="statsAdminRaw">
-          <span class="stats-raw-item"><span class="lbl">总数</span><span class="val" id="rawTotalAdmin">-</span></span>
-          <span class="stats-raw-item"><span class="lbl">待标注</span><span class="val warning" id="rawPendingAdmin">-</span></span>
-          <span class="stats-raw-item"><span class="lbl">已标</span><span class="val" id="rawAnnotatedAdmin">-</span></span>
-          <span class="stats-raw-item"><span class="lbl">正确</span><span class="val success" id="rawCorrectAdmin">-</span></span>
-          <span class="stats-raw-item"><span class="lbl">错误</span><span class="val danger" id="rawErrorAdmin">-</span></span>
-          <span class="stats-raw-item"><span class="lbl">忽略</span><span class="val" id="rawIgnoreAdmin">-</span></span>
-        </div>
-      </div>
-
-    </div>
-
     <!-- 批量操作按钮 -->
     <div class="batch-actions">
       <button class="batch-btn secondary" onclick="batchSave()">💾 全部保存</button>
@@ -1687,20 +1646,25 @@
       <div class="pagination-right" id="paginationRight"></div>
     </div>
     </div><!-- end #detailSection -->
+    </div><!-- end #annotation-page -->
 
 
   <script>
     // 当前用户角色（后端注入）
     const CURRENT_ROLE = {{ user_role | tojson }};
 
-    // v4.0：根据角色显示对应统计区（初始化）
+    // v4.0：根据角色显示统计区
+    // 统一卡片（statsUnifiedArea）对所有角色显示
+    // 管理员补充区（合规/违规准确率条）仅 admin 显示
     (function initStatsArea() {
-      if (CURRENT_ROLE === 'annotator') {
-        var el = document.getElementById('statsAnnotatorArea');
-        if (el) el.classList.add('active');
-      } else if (CURRENT_ROLE === 'admin') {
-        var el = document.getElementById('statsAdminArea');
-        if (el) el.classList.add('active');
+      // 五卡片始终显示
+      var unified = document.getElementById('statsUnifiedArea');
+      if (unified) { unified.style.display = ''; }
+
+      // 管理员：管理区加 active 类（使其 display: flex 生效）
+      if (CURRENT_ROLE === 'admin') {
+        var admin = document.getElementById('statsAdminArea');
+        if (admin) { admin.classList.add('active'); }
       }
     })();
 
@@ -1773,49 +1737,51 @@
     function isAiFail(val) {
       return ['违规', 'fail', '0', 'REJECT'].includes(String(val).trim());
     }
-    // v4.0：写入统计区 DOM（兼容标注员/管理员两套 ID）
+    // v4.1：写入统一5卡片（标注员/管理员共用，单行水平排列）
+    // 卡片：总任务数 | 今日已分配 | 待标注 | 整体准确率（含进度条）| 今日标注进度（含进度条）
     function _writeStats(target, s, isAnnotator) {
       var fmt = function(v) {
         if (v === null || v === undefined || v === '') return '-';
         return v;
       };
-      if (isAnnotator) {
-        // 标注员区：KPI 卡片 + 我的今日准确率进度条 + raw 辅助行
-        document.getElementById('kpiTodayCompleted').textContent = fmt(s.today_completed);
-        document.getElementById('kpiTodayRemaining').textContent = fmt(s.today_remaining);
-        document.getElementById('kpiAssignedNum').textContent = fmt(s.today_assigned);
-        document.getElementById('kpiTodayCorrect').textContent = fmt(s.correct || '-');
-        document.getElementById('kpiAccuracyNum').textContent = s.today_accuracy != null ? s.today_accuracy + '%' : '-';
-        var myAccPct  = s.accuracy != null ? (s.accuracy * 100).toFixed(1) + '%' : '-';
-        var myAccWidth = s.accuracy != null ? (s.accuracy * 100).toFixed(1) : '0';
-        document.getElementById('annotAccPct').textContent = myAccPct;
-        document.getElementById('annotAccBar').style.width = myAccWidth + '%';
-        document.getElementById('rawTotalAnnot').textContent    = fmt(s.total);
-        document.getElementById('rawPendingAnnot').textContent = fmt(s.pending);
-        document.getElementById('rawAnnotatedAnnot').textContent = fmt(s.annotated);
-        document.getElementById('rawCorrectAnnot').textContent = fmt(s.correct);
-        document.getElementById('rawErrorAnnot').textContent   = fmt(s.error);
-        document.getElementById('rawIgnoreAnnot').textContent   = fmt(s.ignore);
+
+      // 第一行数字卡片
+      document.getElementById('kpiTotalNum').textContent      = fmt(s.total);
+      document.getElementById('kpiTodayAssigned').textContent = fmt(s.today_assigned || 0);
+      document.getElementById('kpiPendingNum').textContent    = fmt(s.pending);
+
+      // 第二行动态值
+      // 修复：accuracy=null 时 null*100=NaN，isNaN 判断兜底
+      var accVal = (s.accuracy != null && !isNaN(s.accuracy)) ? (s.accuracy * 100) : null;
+      var accPct = accVal !== null ? accVal.toFixed(1) + '%' : '-';
+      var accW   = accVal !== null ? accVal.toFixed(1) : '0';
+      document.getElementById('kpiAccuracyVal').textContent = accPct;
+      document.getElementById('kpiAccuracyBar').style.width = accW + '%';
+
+      // 进度：统一用批次完成度（total - pending），语义比"今日个人配额完成度"更直观
+      var progVal, progW;
+      if (s.total > 0 && s.pending != null) {
+        var completedEst = s.total - (s.pending || 0);
+        var progEst = Math.round(completedEst / s.total * 100 * 10) / 10;
+        progVal = progEst + '%';
+        progW   = Math.min(progEst, 100).toFixed(1);
       } else {
-        // 管理员区：整体/合规/违规准确率进度条 + raw 辅助行
-        var ovPct = s.accuracy != null ? (s.accuracy * 100).toFixed(1) + '%' : '-';
-        var ovW   = s.accuracy != null ? (s.accuracy * 100).toFixed(1) : '0';
+        progVal = '-';
+        progW   = '0';
+      }
+      document.getElementById('kpiProgressVal').textContent = progVal;
+      document.getElementById('kpiProgressBar').style.width = progW + '%';
+
+      // 管理员补充区：合规/违规准确率条
+      if (!isAnnotator) {
         var cpPct = s.compliant_accuracy != null ? (s.compliant_accuracy * 100).toFixed(1) + '%' : '-';
         var cpW   = s.compliant_accuracy != null ? (s.compliant_accuracy * 100).toFixed(1) : '0';
         var vpPct = s.non_compliant_accuracy != null ? (s.non_compliant_accuracy * 100).toFixed(1) + '%' : '-';
         var vpW   = s.non_compliant_accuracy != null ? (s.non_compliant_accuracy * 100).toFixed(1) : '0';
-        document.getElementById('adminAccOverallNum').textContent    = ovPct;
-        document.getElementById('adminAccOverallBar').style.width    = ovW + '%';
         document.getElementById('adminAccComplianceNum').textContent = cpPct;
         document.getElementById('adminAccComplianceBar').style.width = cpW + '%';
         document.getElementById('adminAccViolationNum').textContent  = vpPct;
         document.getElementById('adminAccViolationBar').style.width  = vpW + '%';
-        document.getElementById('rawTotalAdmin').textContent    = fmt(s.total);
-        document.getElementById('rawPendingAdmin').textContent = fmt(s.pending);
-        document.getElementById('rawAnnotatedAdmin').textContent = fmt(s.annotated);
-        document.getElementById('rawCorrectAdmin').textContent = fmt(s.correct);
-        document.getElementById('rawErrorAdmin').textContent   = fmt(s.error);
-        document.getElementById('rawIgnoreAdmin').textContent   = fmt(s.ignore);
       }
     }
 
@@ -1857,6 +1823,7 @@
         today_remaining: 0,
         today_completed: 0,
         today_accuracy: null,
+        today_progress: null,
       };
       _writeStats(null, fakeStats, isAnnotator);
     }
@@ -1980,6 +1947,8 @@
       // v1.0：加载规则/实例标签元数据
       loadFilterMeta();
       fetchLabels();
+      // v4.0：页面加载时同步拉取统计数字，填充顶部5卡片
+      fetchTaskStats();
     }
 
     /** v3.0：返回调度中心（恢复侧边栏后导航） */
@@ -2096,6 +2065,11 @@
         rule_name: tgFilterRule,
         instance: tgFilterInstance,
       }, extraParams || {});
+      // 修复：dispatch_batch_no 需传给后端过滤，否则前端 filter 依赖 DOM 输入框值（可能未及时填入）导致 0526+0531 同时出现
+      var batchFilter = (extraParams || {}).dispatch_batch_no
+        || (document.getElementById('tgFilterBatchNo') || {}).value.trim()
+        || '';
+      if (batchFilter) params.dispatch_batch_no = batchFilter;
       var qs = Object.entries(params).filter(function([, v]) { return v !== '' && v !== null; })
         .map(function([k, v]) { return k + '=' + encodeURIComponent(v); }).join('&');
       safeFetch('/api/annotation/my-task-groups?' + qs, { credentials: 'same-origin' })
@@ -2167,21 +2141,18 @@
         .finally(function() { isLoading = false; });
     }
 
-    /** 渲染任务列表统计摘要 */
+    /** 渲染任务列表统计摘要（直接更新静态模板中的 span，避免 innerHTML 覆盖模板中的 ID） */
     function renderTaskGroupStats(items) {
       var totalGroups = items.length;
       var totalItems = items.reduce(function(s, g) { return s + (g.total_count || 0); }, 0);
       var totalPending = items.reduce(function(s, g) { return s + (g.pending_count || 0); }, 0);
       var totalDone = items.reduce(function(s, g) { return s + (g.annotated_count || 0); }, 0);
       var totalMyPending = items.reduce(function(s, g) { return s + (g.my_pending_count || 0); }, 0);
-      var el = document.getElementById('tgStatsSummary');
-      if (!el) return;
-      el.innerHTML =
-        '<div class="stat-item"><span class="stat-label">任务分组</span><span class="stat-value">' + totalGroups + '</span></div>' +
-        '<div class="stat-item"><span class="stat-label">总条数</span><span class="stat-value">' + totalItems + '</span></div>' +
-        '<div class="stat-item"><span class="stat-label">待标注</span><span class="stat-value stat-pending">' + totalPending + '</span></div>' +
-        '<div class="stat-item"><span class="stat-label">已标注</span><span class="stat-value stat-done">' + totalDone + '</span></div>' +
-        '<div class="stat-item"><span class="stat-label">你的份额</span><span class="stat-value" style="color:#0969da">' + totalMyPending + ' 条</span></div>';
+      var set = function(id, val) { var el = document.getElementById(id); if (el) el.textContent = val; };
+      set('tgGroupCount', totalGroups);
+      set('tgTotalCount', totalItems);
+      set('tgPendingCount', totalPending);
+      set('tgDoneCount', totalDone);
     }
 
     /** 渲染任务列表表格 */
@@ -2205,14 +2176,14 @@
         var taskDateStr = g.assign_time ? g.assign_time.substring(0, 10) : (g.data_date ? g.data_date.substring(0, 10) : '-');
         var myShare = g.my_pending_count || 0;
         var myShareBadge = myShare > 0
-          ? '<span class="my-share-badge">你的 ' + myShare + ' 条</span>'
-          : '<span class="my-share-badge none">无</span>';
+          ? '<span class="my-share-badge">' + myShare + ' 条</span>'
+          : '<span class="my-share-badge none">-</span>';
         var enterBtn = '<button class="btn btn-primary btn-sm" onclick="enterTaskGroup(\'' + (g.task_code || '') + '\', \'' + (g.dispatch_batch_no || '') + '\', \'' + encodeURIComponent(g.rule_name || '') + '\', \'' + (g.data_date || '') + '\')">进入标注</button>';
         html += '<tr>' +
           '<td><span class="task-code">' + (g.dispatch_batch_no || g.task_code || '-') + '</span></td>' +
           '<td>' + (g.rule_name || '-') + '</td>' +
           '<td>' + taskDateStr + '</td>' +
-          '<td class="stat-num">' + (g.total_count || 0) + myShareBadge + '</td>' +
+          '<td class="stat-num">' + (g.total_count || 0) + ' ' + myShareBadge + '</td>' +
           '<td class="stat-num" style="' + accColor(g.overall_accuracy) + '">' + (g.overall_accuracy || 0) + '%</td>' +
           '<td class="stat-num">' + (g.compliant_total || 0) + '</td>' +
           '<td class="stat-num" style="' + accColor(g.compliant_accuracy) + '">' + (g.compliant_accuracy || 0) + '%</td>' +
@@ -3062,10 +3033,98 @@
     });
 
     // =====================================================================
+    // 标注进度趋势图弹窗（v4.0）
+    // =====================================================================
+
+    // 点击「今日标注进度」卡片打开趋势图
+    var _progressChartInstance = null;
+    var _progressDays = 7;
+
+    window.openProgressTrend = function() {
+      document.getElementById('progressTrendModal').classList.add('active');
+      loadProgressTrend(_progressDays);
+    };
+
+    window.closeProgressTrend = function() {
+      document.getElementById('progressTrendModal').classList.remove('active');
+    };
+
+    window.loadProgressTrend = function(days) {
+      _progressDays = days;
+      document.getElementById('progressDaysSel').value = days;
+      var chartEl = document.getElementById('progressTrendChart');
+      if (_progressChartInstance) {
+        _progressChartInstance.destroy();
+        _progressChartInstance = null;
+      }
+      fetch('/api/annotation/daily-progress?days=' + days, { credentials: 'same-origin' })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          if (!data || !data.success) return;
+          var trend = data.trend || [];
+          var labels = trend.map(function(d) { return d.date.slice(5); }); // MM-DD
+          var series = trend.map(function(d) { return d.count });
+          var maxVal = Math.max.apply(null, series.concat([1]));
+          var options = {
+            chart: { type: 'line', height: 220, toolbar: { show: false }, zoom: { enabled: false } },
+            stroke: { curve: 'smooth', width: 2 },
+            colors: ['#0969da'],
+            fill: { type: 'gradient', gradient: { shadeIntensity: 1, opacityFrom: 0.4, opacityTo: 0.05 } },
+            series: [{ name: '完成数', data: series }],
+            xaxis: { categories: labels, labels: { style: { fontSize: '11px' } } },
+            yaxis: { min: 0, max: maxVal, tickAmount: 4, labels: { style: { fontSize: '11px' } } },
+            tooltip: { y: { formatter: function(v) { return v + ' 条'; } } },
+            markers: { size: 4 }
+          };
+          _progressChartInstance = new ApexCharts(chartEl, options);
+          _progressChartInstance.render();
+        })
+        .catch(function() {});
+    };
+
+    window.onProgressDaysChange = function(sel) {
+      loadProgressTrend(parseInt(sel.value));
+    };
+
+    // 点击「今日标注进度」卡片打开趋势图
+    document.getElementById('kpiProgressCard').addEventListener('click', function() {
+      openProgressTrend();
+    });
+
+    // =====================================================================
     // 启动
     // =====================================================================
 
     init();
   </script>
+
+  <!-- 标注进度趋势图弹窗 -->
+  <style>
+    .modal-overlay { display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,.45); z-index:9000; align-items:center; justify-content:center; }
+    .modal-overlay.active { display:flex; }
+    .modal-box { background:#fff; border-radius:10px; padding:24px; width:560px; max-width:95vw; box-shadow:0 8px 32px rgba(0,0,0,.18); }
+    .modal-hd { display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; }
+    .modal-hd-title { font-size:16px; font-weight:600; color:#1a1a1a; }
+    .modal-close { background:none; border:none; font-size:20px; cursor:pointer; color:#666; padding:0; line-height:1; }
+    .modal-close:hover { color:#333; }
+    .modal-days { margin-bottom:12px; }
+    .modal-days select { padding:4px 8px; border:1px solid #d0d7de; border-radius:4px; font-size:13px; }
+  </style>
+  <div class="modal-overlay" id="progressTrendModal">
+    <div class="modal-box">
+      <div class="modal-hd">
+        <span class="modal-hd-title">📈 标注进度趋势（近7天）</span>
+        <button class="modal-close" onclick="closeProgressTrend()">×</button>
+      </div>
+      <div class="modal-days">
+        <select id="progressDaysSel" onchange="onProgressDaysChange(this)">
+          <option value="7">近7天</option>
+          <option value="14">近14天</option>
+          <option value="30">近30天</option>
+        </select>
+      </div>
+      <div id="progressTrendChart"></div>
+    </div>
+  </div>
 </body>
 </html>
