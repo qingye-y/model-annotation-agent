@@ -1856,7 +1856,7 @@
       var checked = document.querySelectorAll('input[name="assignTarget"]:checked');
       if (checked.length === 0) { showToast('请先选择标注员', true); return; }
 
-      var remaining = currentTask ? currentTask.remaining : 0;
+      var remaining = currentFilteredCount || (currentTask ? currentTask.remaining : 0);
       var count = checked.length;
       var base = Math.floor(remaining / count);
       var remainder = remaining % count;
@@ -1881,7 +1881,7 @@
       var checked = document.querySelectorAll('input[name="assignTarget"]:checked');
       if (checked.length === 0) { showToast('请先选择标注员', true); return; }
 
-      var remaining = currentTask ? currentTask.remaining : 0;
+      var remaining = currentFilteredCount || (currentTask ? currentTask.remaining : 0);
       var totalRemaining = 0;
       var rows = [];
       checked.forEach(function(cb) {
@@ -1911,7 +1911,7 @@
     function updateAssignTotal() {
       if (!currentTask) return;
 
-      var remaining = currentTask.remaining;
+      var remaining = currentFilteredCount || currentTask.remaining;
       var total = 0;
       var hasError = false;
       var errorMessages = [];
@@ -1972,8 +1972,8 @@
 
       if (pendingAssign.length === 0) { showToast('请选择至少一个标注员并输入分配数量', true); return; }
 
-      var remaining = currentTask.remaining;
-      if (total > remaining) { showToast('分配总量不能超过剩余待分配量', true); return; }
+      var remaining = currentFilteredCount || currentTask.remaining;
+      if (total > remaining) { showToast('分配总量不能超过剩余待分配量（' + remaining + ' 条）', true); return; }
 
       var details = pendingAssign.map(function(p) {
         var ann = _cachedAnnotators.find(function(a) { return a.username === p.username; });
