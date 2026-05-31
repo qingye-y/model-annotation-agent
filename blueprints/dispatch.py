@@ -2009,3 +2009,53 @@ def api_available_dates():
 
     dates = [{'date': k, 'count': v} for k, v in sorted(date_count_map.items())]
     return jsonify({'success': True, 'dates': dates})
+
+
+# ---------------------------------------------------------------------------
+# API-11: GET /api/dispatch/today-assigned
+# 获取今日从 DispatchLog 统计的分配总量（概览卡片用）
+# ---------------------------------------------------------------------------
+
+@dispatch_bp.route('/api/dispatch/today-assigned', methods=['GET'])
+@login_required
+def api_today_assigned():
+    today_cutoff = bj_today_utc()
+    today_assigned = db.session.query(db.func.sum(DispatchLog.count)).filter(
+        DispatchLog.created_at >= today_cutoff,
+    ).scalar() or 0
+    return jsonify({'success': True, 'today_assigned': today_assigned})
+
+
+# ---------------------------------------------------------------------------
+# API-12: GET /api/dispatch/allocated-trend
+# 获取近 N 天每日分配趋势（趋势图用）
+# ---------------------------------------------------------------------------
+
+@dispatch_bp.route('/api/dispatch/allocated-trend', methods=['GET'])
+@login_required
+def api_allocated_trend():
+    days = int(request.args.get('days', 7))
+    days = min(days, 90)  # 最多90天
+
+    today_cutoff = bj_today_utc()
+    start_date = today_cutoff - timedelta(days=days - 1)
+
+    # 按 created_at 日期分组统计
+    results = db.session.query(
+        db.func.date(DispatchLog.created_at).label('date'),
+        db.func.sum(DispatchLog.count).label('count'),
+    ).filter(
+        DispatchLog.created_at >= start_date,
+    ).group_by(
+        db.func.date(DispatchLog.created_at)
+    ).order_by(db.func.date(DispatchLog.created_at)).all()
+
+    # 补全缺失日期（当天无分配则 count=0）
+    trend_map = {str(r.date): r.count for r in results}
+    trend = []
+    for i in range(days):
+        d = start_date + timedelta(days=i)
+        d_str = d.strftime('%Y-%m-%d')
+        trend.append({'date': d_str, 'count': trend_map.get(d_str, 0)})
+
+    return jsonify({'success': True, 'trend': trend})

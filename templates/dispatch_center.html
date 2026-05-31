@@ -7,6 +7,7 @@
   <link rel="stylesheet" href="/static/common.css">
   <script src="/static/config.js"></script>
   <script src="/static/common.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/apexcharts@3.45.0/dist/apexcharts.min.js"></script>
   <script>
     // 注入当前登录用户的角色，供前端 JS 判断是否为管理员
     var current_user_role = '{{ current_user_role if current_user_role else "unknown" }}';
@@ -233,7 +234,7 @@
         </div>
         <div class="overview-card">
           <div class="overview-card-label">今日已分配任务数</div>
-          <div class="overview-card-value success" id="overviewAllocated">—</div>
+          <div class="overview-card-value success" id="overviewAllocated" style="cursor:pointer;" onclick="openAllocatedTrend()" title="点击查看趋势">—</div>
         </div>
         <div class="overview-card">
           <div class="overview-card-label">涉及实例数</div>
@@ -524,6 +525,27 @@
       <div style="padding:12px 16px;display:flex;justify-content:flex-end;gap:8px;">
         <button class="btn btn-default" onclick="closeDatePicker()">取消</button>
         <button class="btn btn-primary" onclick="confirmDatePicker()">确认</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- v1.0：已分配趋势弹窗 -->
+  <div class="modal-overlay" id="allocatedTrendModal">
+    <div class="modal" style="max-width:680px;">
+      <div class="modal-header">
+        <span class="modal-title">每日分配趋势</span>
+        <button class="modal-close" onclick="closeAllocatedTrend()">×</button>
+      </div>
+      <div class="modal-body" style="padding-bottom:4px;">
+        <div style="display:flex;gap:8px;margin-bottom:12px;">
+          <button class="btn btn-sm btn-primary" id="trendBtn7d" onclick="loadAllocatedTrend(7)">近7天</button>
+          <button class="btn btn-sm btn-default" id="trendBtn30d" onclick="loadAllocatedTrend(30)">近30天</button>
+        </div>
+        <div id="allocatedTrendChart" style="min-height:280px;"></div>
+        <div id="allocatedTrendTotal" style="text-align:center;font-size:13px;color:#666;margin-top:8px;"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-default" onclick="closeAllocatedTrend()">关闭</button>
       </div>
     </div>
   </div>
@@ -873,8 +895,8 @@
       var pool = _cachedTaskPool;
       var annotators = _cachedAnnotators;
 
-      var pending = 0, allocated = 0;
-      pool.forEach(function(t) { pending += t.remaining; allocated += t.assigned; });
+      var pending = 0;
+      pool.forEach(function(t) { pending += t.remaining; });
 
       // 实例去重
       var instanceSet = {};
@@ -883,9 +905,18 @@
       var workers = annotators.filter(function(a) { return a.role === 'annotator' && (a.quota - a.used) > 0; }).length;
 
       document.getElementById('overviewPending').textContent = pending;
-      document.getElementById('overviewAllocated').textContent = allocated;
       document.getElementById('overviewInstances').textContent = Object.keys(instanceSet).length;
       document.getElementById('overviewWorkers').textContent = workers;
+
+      // 从后端 API 获取今日已分配数量（从 DispatchLog 统计，含今天所有分配）
+      fetch('/api/dispatch/today-assigned')
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          document.getElementById('overviewAllocated').textContent = (data.today_assigned || 0);
+        })
+        .catch(function() {
+          document.getElementById('overviewAllocated').textContent = '—';
+        });
     }
 
     // 复选框控制撤回按钮显隐
@@ -2243,6 +2274,70 @@
     // ================================================================
     window.closeModal = function(id) {
       document.getElementById(id).classList.remove('active');
+    };
+
+    // ================================================================
+    // 已分配趋势弹窗（v1.0）
+    // ================================================================
+    var _allocatedTrendChart = null;  // ApexCharts 实例
+    var _currentTrendDays = 7;         // 当前切换天数
+
+    window.openAllocatedTrend = function() {
+      document.getElementById('allocatedTrendModal').classList.add('active');
+      loadAllocatedTrend(_currentTrendDays);
+    };
+
+    window.closeAllocatedTrend = function() {
+      document.getElementById('allocatedTrendModal').classList.remove('active');
+    };
+
+    window.loadAllocatedTrend = function(days) {
+      _currentTrendDays = days;
+
+      // 更新按钮状态
+      document.getElementById('trendBtn7d').className = days === 7 ? 'btn btn-sm btn-primary' : 'btn btn-sm btn-default';
+      document.getElementById('trendBtn30d').className = days === 30 ? 'btn btn-sm btn-primary' : 'btn btn-sm btn-default';
+
+      fetch('/api/dispatch/allocated-trend?days=' + days)
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          var trend = data.trend || [];
+          var labels = trend.map(function(d) {
+            // YYYY-MM-DD → MM/DD
+            return d.date.slice(5);  // '2026-05-25' → '05-25'
+          });
+          var series = trend.map(function(d) { return d.count; });
+          var total = series.reduce ? series.reduce(function(a, b) { return a + b; }, 0) : 0;
+
+          if (_allocatedTrendChart) {
+            _allocatedTrendChart.updateOptions({
+              xaxis: { categories: labels },
+              series: [{ name: '已分配', data: series }],
+            });
+          } else {
+            var chartOpts = {
+              chart: { type: 'line', height: 280, toolbar: { show: false }, zoom: { enabled: false }, animations: { enabled: true, speed: 400 } },
+              series: [{ name: '已分配', data: series }],
+              xaxis: { categories: labels, labels: { style: { fontSize: '11px' } } },
+              yaxis: { labels: { style: { fontSize: '11px' } } },
+              stroke: { curve: 'smooth', width: 2 },
+              colors: ['#22c55e'],
+              fill: { type: 'gradient', gradient: { shade: 'light', type: 'horizontal', shadeIntensity: 0.25, opacityFrom: 0.4, opacityTo: 0, stops: [0, 100] } },
+              markers: { size: 4 },
+              dataLabels: { enabled: false },
+              grid: { borderColor: '#f1f1f1' },
+              tooltip: { x: { show: true }, y: { formatter: function(v) { return v + ' 条'; } } },
+            };
+            _allocatedTrendChart = new ApexCharts(document.getElementById('allocatedTrendChart'), chartOpts);
+            _allocatedTrendChart.render();
+          }
+
+          document.getElementById('allocatedTrendTotal').textContent =
+            '近' + days + '天累计分配 ' + (total || 0) + ' 条';
+        })
+        .catch(function() {
+          document.getElementById('allocatedTrendTotal').textContent = '加载失败，请重试';
+        });
     };
 
     function showToast(msg, isError) {
