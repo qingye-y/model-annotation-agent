@@ -135,71 +135,34 @@
     /* 数字行（双区共用） */
     /* v4.1：stats-raw-row 已删除 */
     /* 标注员 KPI 卡片组 */
-    /* v4.1：五卡片单行水平排列，占满整行 */
-    .stats-unified-area {
+    /* v3.0：三卡片水平排列 */
+    .stats-row {
       display: flex;
       gap: 16px;
-      flex-wrap: nowrap;
-      width: 100%;
-      justify-content: space-between;
+      margin-bottom: 0;
     }
-    .stats-kpi-card {
+    .stat-card {
       flex: 1;
-      min-width: 0;
+      background: #fff;
+      border-radius: 8px;
+      padding: 16px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.08);
       display: flex;
       flex-direction: column;
       gap: 4px;
-      padding: 10px 0;
-      border-right: 1px solid var(--border-light);
-      overflow: hidden; /* 防止内部进度条溢出 */
     }
-    .stats-kpi-card:last-child { border-right: none; }
-    .stats-kpi-label {
-      font-size: 12px;
-      color: var(--text-secondary);
-      white-space: nowrap;
-    }
-    .stats-kpi-value {
+    .stat-main {
       font-size: 22px;
       font-weight: 700;
       color: var(--text-primary);
       line-height: 1.2;
     }
-    .stats-kpi-value.done { color: var(--success); }
-    .stats-kpi-value.warn { color: var(--warning); }
-    .stats-kpi-value.danger { color: var(--danger); }
-    .stats-kpi-sub {
-      font-size: 11px;
-      color: var(--text-muted);
-    }
-    /* 标注员准确率 */
-    .stats-accuracy-block {
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-      min-width: 200px;
-    }
-    .stats-accuracy-label {
+    .stat-main.done { color: var(--success); }
+    .stat-main.warn { color: var(--warning); }
+    .stat-main.danger { color: var(--danger); }
+    .stat-sub {
       font-size: 13px;
       color: var(--text-secondary);
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-    }
-    .stats-accuracy-label .acc-name { font-weight: 500; }
-    .stats-accuracy-label .acc-pct { font-weight: 700; font-size: 14px; color: var(--text-primary); }
-    .stats-accuracy-track {
-      height: 14px;
-      background: #f1f3f4;
-      border-radius: 7px;
-      overflow: hidden;
-      min-width: 160px;
-    }
-    .stats-accuracy-fill {
-      height: 100%;
-      border-radius: 7px;
-      transition: width 0.4s ease;
-      background: var(--primary);
     }
 
     /* 批量操作按钮 */
@@ -1464,37 +1427,27 @@
       </div>
 
 
-      <!-- ========== v4.1 五卡片（单行水平，筛选栏下方） ========== -->
+      <!-- ========== v3.0 三卡片（筛选栏下方，表格上方） ========== -->
       <div class="stats-section" id="detailStats">
-        <div class="stats-unified-area" id="statsUnifiedArea">
-          <div class="stats-kpi-card">
-            <span class="stats-kpi-label">总任务数</span>
-            <span class="stats-kpi-value" id="kpiTotalNum">-</span>
+        <!-- 三卡片行 -->
+        <div class="stats-row">
+          <!-- 卡片1：标注进度 -->
+          <div class="stat-card" id="cardProgress">
+            <div class="stat-main" id="statPending">- 待标注</div>
+            <div class="stat-sub" id="statProgress">-</div>
           </div>
-          <div class="stats-kpi-card">
-            <span class="stats-kpi-label">今日已分配</span>
-            <span class="stats-kpi-value" id="kpiTodayAssigned">-</span>
+          <!-- 卡片2：整体准确率 -->
+          <div class="stat-card" id="cardAccuracy">
+            <div class="stat-main" id="statAccuracy">-</div>
+            <div class="stat-sub" id="statAccuracyDetail">-</div>
           </div>
-          <div class="stats-kpi-card">
-            <span class="stats-kpi-label">待标注</span>
-            <span class="stats-kpi-value warn" id="kpiPendingNum">-</span>
-          </div>
-          <div class="stats-kpi-card" id="kpiAccuracyCard">
-            <span class="stats-kpi-label">整体准确率</span>
-            <span class="stats-kpi-value" id="kpiAccuracyVal">-</span>
-            <div class="stats-accuracy-track" style="margin-top:4px;">
-              <div class="stats-accuracy-fill" id="kpiAccuracyBar" style="width:0%"></div>
-            </div>
-          </div>
-          <div class="stats-kpi-card" id="kpiProgressCard">
-            <span class="stats-kpi-label">今日标注进度</span>
-            <span class="stats-kpi-value done" id="kpiProgressVal">-</span>
-            <div class="stats-accuracy-track" style="margin-top:4px;">
-              <div class="stats-accuracy-fill done" id="kpiProgressBar" style="width:0%"></div>
-            </div>
+          <!-- 卡片3：今日概况 -->
+          <div class="stat-card" id="cardToday">
+            <div class="stat-main" id="statTodayAnnotated">-</div>
+            <div class="stat-sub" id="statTodayDetail">-</div>
           </div>
         </div>
-        <!-- 管理员补充区（合规/违规准确率条） -->
+        <!-- 管理员补充区：合规/违规准确率进度条 -->
         <div class="stats-admin-area" id="statsAdminArea" style="display:none;">
           <div class="stats-admin-bars">
             <div class="stats-admin-bar-item">
@@ -1517,6 +1470,7 @@
             </div>
           </div>
         </div>
+      </div>
       </div>
 
       <!-- 任务列表表格 -->
@@ -1657,10 +1611,6 @@
     // 统一卡片（statsUnifiedArea）对所有角色显示
     // 管理员补充区（合规/违规准确率条）仅 admin 显示
     (function initStatsArea() {
-      // 五卡片始终显示
-      var unified = document.getElementById('statsUnifiedArea');
-      if (unified) { unified.style.display = ''; }
-
       // 管理员：管理区加 active 类（使其 display: flex 生效）
       if (CURRENT_ROLE === 'admin') {
         var admin = document.getElementById('statsAdminArea');
@@ -1739,45 +1689,40 @@
     }
     // v4.1：写入统一5卡片（标注员/管理员共用，单行水平排列）
     // 卡片：总任务数 | 今日已分配 | 待标注 | 整体准确率（含进度条）| 今日标注进度（含进度条）
+    /** v3.0 写入三卡片数据 */
     function _writeStats(target, s, isAnnotator) {
       var fmt = function(v) {
         if (v === null || v === undefined || v === '') return '-';
         return v;
       };
 
-      // 第一行数字卡片
-      document.getElementById('kpiTotalNum').textContent      = fmt(s.total);
-      document.getElementById('kpiTodayAssigned').textContent = fmt(s.today_assigned || 0);
-      document.getElementById('kpiPendingNum').textContent    = fmt(s.pending);
+      // 卡片1：标注进度
+      var pending = fmt(s.pending_tasks);
+      var total   = fmt(s.total_tasks);
+      var progPct = s.progress_percent != null ? s.progress_percent + '%' : '-';
+      document.getElementById('statPending').textContent  = pending + ' 待标注';
+      document.getElementById('statProgress').textContent = '共 ' + total + ' 条，进度 ' + progPct;
 
-      // 第二行动态值
-      // 修复：accuracy=null 时 null*100=NaN，isNaN 判断兜底
-      var accVal = (s.accuracy != null && !isNaN(s.accuracy)) ? (s.accuracy * 100) : null;
-      var accPct = accVal !== null ? accVal.toFixed(1) + '%' : '-';
-      var accW   = accVal !== null ? accVal.toFixed(1) : '0';
-      document.getElementById('kpiAccuracyVal').textContent = accPct;
-      document.getElementById('kpiAccuracyBar').style.width = accW + '%';
+      // 卡片2：整体准确率
+      var accVal = s.overall_accuracy != null ? s.overall_accuracy + '%' : '-';
+      var correct = fmt(s.correct_count);
+      var error   = fmt(s.error_count);
+      document.getElementById('statAccuracy').textContent         = accVal;
+      document.getElementById('statAccuracyDetail').textContent    = '正确 ' + correct + ' / 错误 ' + error;
 
-      // 进度：统一用批次完成度（total - pending），语义比"今日个人配额完成度"更直观
-      var progVal, progW;
-      if (s.total > 0 && s.pending != null) {
-        var completedEst = s.total - (s.pending || 0);
-        var progEst = Math.round(completedEst / s.total * 100 * 10) / 10;
-        progVal = progEst + '%';
-        progW   = Math.min(progEst, 100).toFixed(1);
-      } else {
-        progVal = '-';
-        progW   = '0';
-      }
-      document.getElementById('kpiProgressVal').textContent = progVal;
-      document.getElementById('kpiProgressBar').style.width = progW + '%';
+      // 卡片3：今日概况
+      var todayAnn = fmt(s.today_annotated || 0);
+      var todayAsg = fmt(s.today_assigned || 0);
+      var todayCnt = fmt(s.today_annotator_count || 0);
+      document.getElementById('statTodayAnnotated').textContent = '标注 ' + todayAnn + ' 条';
+      document.getElementById('statTodayDetail').textContent    = '分配 ' + todayAsg + ' 条，' + todayCnt + ' 人标注中';
 
-      // 管理员补充区：合规/违规准确率条
+      // 管理员补充区：合规/违规准确率条（已返回百分比格式，直接使用）
       if (!isAnnotator) {
-        var cpPct = s.compliant_accuracy != null ? (s.compliant_accuracy * 100).toFixed(1) + '%' : '-';
-        var cpW   = s.compliant_accuracy != null ? (s.compliant_accuracy * 100).toFixed(1) : '0';
-        var vpPct = s.non_compliant_accuracy != null ? (s.non_compliant_accuracy * 100).toFixed(1) + '%' : '-';
-        var vpW   = s.non_compliant_accuracy != null ? (s.non_compliant_accuracy * 100).toFixed(1) : '0';
+        var cpPct = s.compliant_accuracy != null ? s.compliant_accuracy + '%' : '-';
+        var cpW   = s.compliant_accuracy != null ? s.compliant_accuracy : '0';
+        var vpPct = s.non_compliant_accuracy != null ? s.non_compliant_accuracy + '%' : '-';
+        var vpW   = s.non_compliant_accuracy != null ? s.non_compliant_accuracy : '0';
         document.getElementById('adminAccComplianceNum').textContent = cpPct;
         document.getElementById('adminAccComplianceBar').style.width = cpW + '%';
         document.getElementById('adminAccViolationNum').textContent  = vpPct;
@@ -1809,17 +1754,21 @@
       var violRate    = (violCorrect + violError) > 0 ? (violError / (violCorrect + violError)) : null;
 
       // 构造与后端一致的字段结构（估算值，用于 API 返回前的瞬间）
+      var completed = annotated.length;
       var fakeStats = {
-        total: total,
-        pending: pending,
-        annotated: annotated.length,
-        correct: correct,
-        error: error,
-        ignore: ignore,
-        accuracy: overallRate,
-        compliant_accuracy: compRate,
-        non_compliant_accuracy: violRate,
+        total_tasks: total,
+        pending_tasks: pending,
+        completed_tasks: completed,
+        progress_percent: total > 0 ? Math.round(completed / total * 100 * 10) / 10 : null,
+        correct_count: correct,
+        error_count: error,
+        ignore_count: ignore,
+        overall_accuracy: overallRate != null ? Math.round(overallRate * 100 * 10) / 10 : null,
+        compliant_accuracy: compRate != null ? Math.round(compRate * 100 * 10) / 10 : null,
+        non_compliant_accuracy: violRate != null ? Math.round(violRate * 100 * 10) / 10 : null,
+        today_annotated: 0,
         today_assigned: 0,
+        today_annotator_count: 0,
         today_remaining: 0,
         today_completed: 0,
         today_accuracy: null,

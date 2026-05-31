@@ -1267,13 +1267,42 @@ def api_annotation_stats():
     viol_effective = viol_correct + viol_error
     non_compliant_accuracy = round(viol_correct / viol_effective, 4) if viol_effective > 0 else None
 
-    # 今日指标（仅标注员有意义，管理员返回 null）
+    # 今日指标（标注员视角：个人数据；管理员视角：全局数据）
     today_assigned = 0
     today_remaining = 0
     today_completed = 0
     today_accuracy = None
     today_progress = None
-    if current_user.role == 'annotator':
+    today_annotator_count = 0  # 管理员用：今日参与标注人数
+    if current_user.role == 'admin':
+        # 全局今日标注统计
+        from datetime import timedelta
+        bj_today = (datetime.utcnow() + timedelta(hours=8)).date()
+        bj_today_start_utc = datetime.combine(bj_today, datetime.min.time()) - timedelta(hours=8)
+        bj_today_end_utc = datetime.combine(bj_today, datetime.max.time()) - timedelta(hours=8)
+
+        # 今日分配总数（所有批次）
+        today_assigned = db.session.query(db.func.sum(DispatchLog.count)).filter(
+            DispatchLog.created_at >= bj_today_start_utc,
+            DispatchLog.created_at <= bj_today_end_utc,
+        ).scalar() or 0
+
+        # 今日提交标注总数 + 参与人数
+        today_ann_q = db.session.query(Annotation).filter(
+            Annotation.is_submitted == True,
+            Annotation.created_at >= bj_today_start_utc,
+            Annotation.created_at <= bj_today_end_utc,
+        )
+        today_annotated = today_ann_q.count()
+        today_annotator_count = db.session.query(
+            db.func.count(db.distinct(Annotation.annotator_id))
+        ).filter(
+            Annotation.is_submitted == True,
+            Annotation.created_at >= bj_today_start_utc,
+            Annotation.created_at <= bj_today_end_utc,
+        ).scalar() or 0
+
+    elif current_user.role == 'annotator':
         from datetime import timedelta
         bj_today = (datetime.utcnow() + timedelta(hours=8)).date()
         bj_today_start_utc = datetime.combine(bj_today, datetime.min.time()) - timedelta(hours=8)
@@ -1299,19 +1328,32 @@ def api_annotation_stats():
             if (today_correct + today_error) > 0 else None
         today_progress = round(today_completed / quota * 100, 1) if quota > 0 else None
 
+    # progress_percent：批次完成度百分比
+    progress_percent = round(annotated / total * 100, 1) if total > 0 else None
+
+    # today_annotated：管理员用全局今日标注数（标注员时沿用个人 today_completed）
+    if current_user.role == 'admin':
+        today_annotated = today_annotated  # 已在 admin 分支赋值
+    else:
+        today_annotated = today_completed  # 标注员：个人今日完成数
+
     return jsonify({
         'success': True,
-        'total': total,
-        'pending': pending,
-        'annotated': annotated,
-        'correct': correct,
-        'error': error,
-        'ignore': ignore,
-        'accuracy': accuracy,
-        'compliant_accuracy': compliant_accuracy,
-        'non_compliant_accuracy': non_compliant_accuracy,
-        # 今日指标
-        'today_assigned': today_assigned,
+        # v3.0 重命名 + 新增字段
+        'total_tasks': total,
+        'pending_tasks': pending,
+        'completed_tasks': annotated,
+        'progress_percent': progress_percent,
+        'correct_count': correct,
+        'error_count': error,
+        'ignore_count': ignore,
+        'overall_accuracy': round(accuracy * 100, 1) if accuracy is not None else None,  # 小数→百分比
+        'compliant_accuracy': round(compliant_accuracy * 100, 1) if compliant_accuracy is not None else None,
+        'non_compliant_accuracy': round(non_compliant_accuracy * 100, 1) if non_compliant_accuracy is not None else None,
+        # 今日指标（v3.0）
+        'today_annotated': today_annotated,      # 今日标注总数
+        'today_assigned': today_assigned,        # 今日分配总数
+        'today_annotator_count': today_annotator_count,  # 今日参与人数（管理员）
         'today_remaining': today_remaining,
         'today_completed': today_completed,
         'today_accuracy': today_accuracy,
