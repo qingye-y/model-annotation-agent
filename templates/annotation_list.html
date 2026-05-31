@@ -1236,24 +1236,6 @@
     .pg-btn:hover:not(:disabled) { background: var(--primary); border-color: var(--primary); color: #fff; }
     .pg-btn:disabled { opacity: 0.4; cursor: not-allowed; }
     .pg-info { font-size: 13px; color: var(--text-secondary); padding: 0 12px; }
-    /* 批次卡片"你的份额"徽章 */
-    .my-share-badge {
-      display: inline-block;
-      margin-left: 6px;
-      padding: 1px 6px;
-      font-size: 11px;
-      color: #0969da;
-      background: #ddf4ff;
-      border: 1px solid #54aeff;
-      border-radius: 10px;
-      vertical-align: middle;
-      font-weight: 500;
-    }
-    .my-share-badge.none {
-      color: #6e7781;
-      background: #f3f4f6;
-      border-color: #d0d7de;
-    }
 
   </style>
 </head>
@@ -1395,35 +1377,33 @@
 
     <!-- ========== 视图一：任务列表（v2.0 新增） ========== -->
     <div class="task-group-view active" id="taskGroupView">
-      <!-- 任务筛选栏（v1.0：规则/实例标签联动 + 批次号） -->
-      <div style="padding:12px 16px; background:#f9f9f9; border-radius:8px; margin-bottom:12px;">
-        <!-- 规则标签行 -->
-        <div class="filter-tags-row" id="ruleTagsRow">
-          <span class="filter-tag-label">规则：</span>
+      <!-- 任务筛选栏（v2.0：两行布局，无背景色，底部边框） -->
+      <div class="filter-bar">
+        <!-- 第一行：规则标签 + 分隔线 + 实例标签 -->
+        <div class="filter-bar-row">
+          <span class="filter-bar-label">规则</span>
           <div class="filter-tags" id="ruleTags"></div>
-        </div>
-        <!-- 实例标签行 -->
-        <div class="filter-tags-row" id="instanceTagsRow">
-          <span class="filter-tag-label">实例：</span>
+          <span class="filter-bar-divider">|</span>
+          <span class="filter-bar-label">实例</span>
           <div class="filter-tags" id="instanceTags"></div>
         </div>
-        <!-- 状态 + 批次号 + 刷新 -->
-        <div style="display:flex; align-items:center; gap:16px; margin-top:10px;">
-          <div class="filter-item">
-            <select id="tgFilterStatus" onchange="onFilterChange()" style="min-width:120px;">
+        <!-- 第二行：状态下拉 + 批次号 + 标注人下拉（管理员） + 重置 -->
+        <div class="filter-bar-row filter-bar-row-bottom">
+          <div class="filter-bar-controls">
+            <select id="tgFilterStatus" onchange="onFilterChange()" class="filter-ctrl-select">
               <option value="">全部状态</option>
               <option value="pending">待标注</option>
               <option value="correct">正确</option>
               <option value="error">错误</option>
               <option value="ignore">忽略</option>
             </select>
+            <input type="text" id="tgFilterBatchNo" class="filter-ctrl-input" placeholder="批次号"
+                   onkeydown="if(event.key==='Enter')onFilterChange()">
+            <select id="tgFilterAnnotator" onchange="onFilterChange()" class="filter-ctrl-select" style="display:none;">
+              <option value="">全部标注人</option>
+            </select>
           </div>
-          <div class="filter-item">
-            <input type="text" id="tgFilterBatchNo" placeholder="输入批次号"
-                   onkeydown="if(event.key==='Enter')onFilterChange()"
-                   style="width:180px; padding:5px 10px; border:1px solid #ddd; border-radius:4px; font-size:13px;">
-          </div>
-          <button class="btn btn-primary btn-sm" onclick="onFilterChange()">刷新</button>
+          <button class="filter-reset-btn" onclick="resetAllFilters()">重置</button>
         </div>
       </div>
 
@@ -1884,6 +1864,12 @@
         loadTaskGroups(1);
       }
 
+      // v2.0：管理员显示标注人筛选下拉
+      if (CURRENT_ROLE === 'admin') {
+        var annotatorSel = document.getElementById('tgFilterAnnotator');
+        if (annotatorSel) annotatorSel.style.display = '';
+      }
+
       // v1.0：明细页 URL 参数预填（instance / check_result）
       if (urlInstance) {
         var instSel = document.getElementById('filterInstance');
@@ -2028,7 +2014,7 @@
           tgAll = res.items || [];
           tgTotal = res.total || 0;
 
-          // ---- 客户端叠加过滤：状态 + 分配人 ----
+          // ---- 客户端叠加过滤：状态 + 分配人（标注人）----
           var filtered = tgAll;
           // 状态过滤（pending / in_progress / completed）
           if (tgFilterStatus) {
@@ -2039,26 +2025,27 @@
               return true;
             });
           }
-          // 分配人过滤
-          if (tgFilterAssignee) {
-            filtered = filtered.filter(function(g) { return g.admin_name === tgFilterAssignee; });
+          // 标注人过滤（前端叠加过滤）
+          var annotatorVal = (document.getElementById('tgFilterAnnotator') || {}).value || '';
+          if (annotatorVal) {
+            filtered = filtered.filter(function(g) { return g.annotator === annotatorVal; });
           }
 
           renderTaskGroupTable(filtered);
           renderTaskGroupStats(filtered);
           renderTaskGroupPagination();
-          // v2.0：从当前页数据中提取唯一的规则名、实例编码、分配人，填充任务组筛选下拉
+          // v2.0：从当前数据中提取唯一的规则名、实例编码、标注人，填充筛选下拉
           var ruleSet = {};
           var instSet = {};
-          var assigneeSet = {};
+          var annotatorSet = {};
           (tgAll || []).forEach(function(g) {
             if (g.rule_name) ruleSet[g.rule_name] = true;
             if (g.instance_code) instSet[g.instance_code] = true;
-            if (g.admin_name) assigneeSet[g.admin_name] = true;
+            if (g.annotator) annotatorSet[g.annotator] = true;
           });
           var ruleSel = document.getElementById('tgFilterRule');
           var instSel = document.getElementById('tgFilterInstance');
-          var assigneeSel = document.getElementById('tgFilterAssignee');
+          var annotatorSel = document.getElementById('tgFilterAnnotator');
           if (ruleSel) {
             var curRule = ruleSel.value;
             ruleSel.innerHTML = '<option value="">全部</option>';
@@ -2076,13 +2063,14 @@
             });
             instSel.value = curInst;
           }
-          if (assigneeSel) {
-            var curAssignee = assigneeSel.value;
-            assigneeSel.innerHTML = '<option value="">全部</option>';
-            Object.keys(assigneeSet).sort().forEach(function(a) {
-              assigneeSel.innerHTML += '<option value="' + a + '">' + a + '</option>';
+          if (annotatorSel && annotatorSel.style.display !== 'none') {
+            // 仅当标注人下拉可见时（管理员），才从数据中填充
+            var curAnnotator = annotatorSel.value;
+            annotatorSel.innerHTML = '<option value="">全部标注人</option>';
+            Object.keys(annotatorSet).sort().forEach(function(a) {
+              annotatorSel.innerHTML += '<option value="' + a + '">' + a + '</option>';
             });
-            assigneeSel.value = curAssignee;
+            annotatorSel.value = curAnnotator;
           }
           // 默认显示任务列表视图
           switchToTaskGroupView();
@@ -2124,16 +2112,12 @@
       items.forEach(function(g) {
         var progress = g.total_count > 0 ? Math.round((g.annotated_count / g.total_count) * 100) : 0;
         var taskDateStr = g.assign_time ? g.assign_time.substring(0, 10) : (g.data_date ? g.data_date.substring(0, 10) : '-');
-        var myShare = g.my_pending_count || 0;
-        var myShareBadge = myShare > 0
-          ? '<span class="my-share-badge">' + myShare + ' 条</span>'
-          : '<span class="my-share-badge none">-</span>';
         var enterBtn = '<button class="btn btn-primary btn-sm" onclick="enterTaskGroup(\'' + (g.task_code || '') + '\', \'' + (g.dispatch_batch_no || '') + '\', \'' + encodeURIComponent(g.rule_name || '') + '\', \'' + (g.data_date || '') + '\')">进入标注</button>';
         html += '<tr>' +
           '<td><span class="task-code">' + (g.dispatch_batch_no || g.task_code || '-') + '</span></td>' +
           '<td>' + (g.rule_name || '-') + '</td>' +
           '<td>' + taskDateStr + '</td>' +
-          '<td class="stat-num">' + (g.total_count || 0) + ' ' + myShareBadge + '</td>' +
+          '<td class="stat-num">' + (g.total_count || 0) + '</td>' +
           '<td class="stat-num" style="' + accColor(g.overall_accuracy) + '">' + (g.overall_accuracy || 0) + '%</td>' +
           '<td class="stat-num">' + (g.compliant_total || 0) + '</td>' +
           '<td class="stat-num" style="' + accColor(g.compliant_accuracy) + '">' + (g.compliant_accuracy || 0) + '%</td>' +
@@ -2321,13 +2305,33 @@
 
     /** 筛选条件变更，统一触发加载（明细页调用后端 API） */
     function onFilterChange() {
+      var annotatorVal = (document.getElementById('tgFilterAnnotator') || {}).value || '';
       var params = {
         rule_name: selectedRule,
         instance: selectedInstance,
         check_result: (document.getElementById('tgFilterStatus') || {}).value || '',
-        dispatch_batch_no: (document.getElementById('tgFilterBatchNo') || {}).value.trim() || ''
+        dispatch_batch_no: (document.getElementById('tgFilterBatchNo') || {}).value.trim() || '',
+        annotator: annotatorVal
       };
       loadTaskGroups(1, params);
+    }
+
+    /** 重置所有筛选条件 */
+    function resetAllFilters() {
+      // 重置标签选中
+      selectedRule = '';
+      selectedInstance = '';
+      document.querySelectorAll('#ruleTags .filter-tag').forEach(function(b) { b.classList.remove('active'); });
+      document.querySelectorAll('#instanceTags .filter-tag').forEach(function(b) { b.classList.remove('active'); });
+      // 重置控件
+      var s = document.getElementById('tgFilterStatus');
+      if (s) s.value = '';
+      var b = document.getElementById('tgFilterBatchNo');
+      if (b) b.value = '';
+      var a = document.getElementById('tgFilterAnnotator');
+      if (a) a.value = '';
+      // 重新加载
+      loadTaskGroups(1, {});
     }
 
     /** 明细页筛选变更：调用后端 API，保留批次上下文以防分页失效；同步刷新统计 */

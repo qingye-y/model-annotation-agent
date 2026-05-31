@@ -1051,21 +1051,34 @@ a:hover {
   border-left: 3px solid var(--primary, #4a90d9);
 }
 
-/* ========== 标签按钮组样式（v1.0：标注任务筛选优化） ========== */
-.filter-tags-row {
+/* ========== 筛选栏样式（v2.0：两行布局，无背景色） ========== */
+.filter-bar {
+  border-bottom: 1px solid #e5e7eb;
+  padding-bottom: 12px;
+  margin-bottom: 12px;
+}
+.filter-bar-row {
   display: flex;
   align-items: center;
-  gap: 0;
   flex-wrap: wrap;
+  gap: 8px;
   margin-bottom: 8px;
 }
-.filter-tag-label {
+.filter-bar-row:last-child {
+  margin-bottom: 0;
+}
+.filter-bar-label {
   font-size: 13px;
-  color: #555;
+  color: #374151;
   font-weight: 500;
-  min-width: 36px;
-  margin-right: 8px;
+  min-width: 32px;
   flex-shrink: 0;
+}
+.filter-bar-divider {
+  color: #d1d5db;
+  font-size: 14px;
+  margin: 0 4px;
+  user-select: none;
 }
 .filter-tags {
   display: flex;
@@ -1078,9 +1091,9 @@ a:hover {
   align-items: center;
   padding: 3px 12px;
   border-radius: 16px;
-  border: 1px solid #d9d9d9;
+  border: 1px solid #d1d5db;
   background: #fff;
-  color: #555;
+  color: #4b5563;
   font-size: 13px;
   cursor: pointer;
   transition: all 0.15s ease;
@@ -1100,4 +1113,52 @@ a:hover {
 .filter-tag.active:hover {
   background: var(--primary-hover, #3d5ce0);
   border-color: var(--primary-hover, #3d5ce0);
+}
+/* 第二行控制区 */
+.filter-bar-row-bottom {
+  justify-content: space-between;
+  gap: 12px;
+}
+.filter-bar-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.filter-ctrl-select,
+.filter-ctrl-input {
+  height: 34px;
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  padding: 0 10px;
+  font-size: 13px;
+  color: #374151;
+  background: #fff;
+  outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.filter-ctrl-select:focus,
+.filter-ctrl-input:focus {
+  border-color: #4f6ef7;
+  box-shadow: 0 0 0 2px rgba(79, 110, 247, 0.12);
+}
+.filter-ctrl-input::placeholder {
+  color: #9ca3af;
+}
+.filter-reset-btn {
+  height: 34px;
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  background: #fff;
+  color: #6b7280;
+  font-size: 13px;
+  padding: 0 16px;
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.filter-reset-btn:hover {
+  border-color: #9ca3af;
+  color: #374151;
 }

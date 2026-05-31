@@ -875,9 +875,13 @@ def api_my_task_groups():
     if current_user.role not in ('annotator', 'admin'):
         return jsonify({'success': False, 'error': '权限不足'}), 403
 
-    # 管理员查看所有；标注员只看自己的
+    # 管理员查看所有（可按标注人筛选）；标注员只看自己的
+    annotator_filter_arg = request.args.get('annotator', '').strip()
     if current_user.role == 'admin':
-        annotator_filter = []
+        if annotator_filter_arg:
+            annotator_filter = [RawData.annotator == annotator_filter_arg]
+        else:
+            annotator_filter = []
     else:
         annotator_filter = [RawData.annotator == current_user.username]
 
@@ -1073,6 +1077,7 @@ def api_my_task_groups():
             'admin_name': admin_name,
             'assign_time': assign_time,
             'dispatch_batch_no': g['dispatch_batch_no'],
+            'annotator': g.get('annotator', ''),  # 该批次主要标注人（用于管理员筛选）
             'my_pending_count': g.get('my_pending_count', 0),  # 当前用户在该批次的 pending 条数（进入标注时你会看到）
         })
 
