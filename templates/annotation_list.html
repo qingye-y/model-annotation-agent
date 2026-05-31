@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>标注任务</title>
   <link rel="icon" href="data:,">
+  <link rel="icon" href="data:,">
   <link rel="stylesheet" href="/static/common.css">
   <script src="/static/config.js"></script>
   <script src="/static/common.js"></script>
@@ -3035,10 +3036,9 @@
       loadProgressTrend(parseInt(sel.value));
     };
 
-    // 点击「今日标注进度」卡片打开趋势图
-    document.getElementById('kpiProgressCard').addEventListener('click', function() {
-      openProgressTrend();
-    });
+    // 点击「今日概况」卡片打开趋势图（v3.0：kpiProgressCard → cardToday）
+    var cardToday = document.getElementById('cardToday');
+    if (cardToday) { cardToday.style.cursor = 'pointer'; cardToday.addEventListener('click', function() { openProgressTrend(); }); }
 
     // =====================================================================
     // 启动
